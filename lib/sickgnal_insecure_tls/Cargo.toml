@@ -1,0 +1,9 @@
+[package]
+name = "sickgnal_insecure_tls"
+version = "0.1.0"
+edition = "2024"
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+futures = "0.3.31"
