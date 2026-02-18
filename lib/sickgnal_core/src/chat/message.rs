@@ -73,11 +73,11 @@ pub enum ControlMessage {
 // endregion: Struct definitions
 
 impl ContentMessage {
-    pub fn new_text(content: String, reply_to: Option<Uuid>) -> Self {
+    pub fn new_text(content: impl Into<String>, reply_to: Option<Uuid>) -> Self {
         ContentMessage { 
             id: Uuid::new_v4(), 
             reply_to,
-            content: Content::Text(content) 
+            content: Content::Text(content.into()) 
         }
     }
 }
@@ -85,7 +85,7 @@ impl ContentMessage {
 impl ChatMessage {
 
     /// Create a new text message with an optional reply id
-    pub fn new_text_reply(conversation_id: Uuid, message: String, reply_to: Option<Uuid>) -> Self {
+    pub fn new_text_reply(conversation_id: Uuid, message: impl Into<String>, reply_to: Option<Uuid>) -> Self {
         ChatMessage { 
             issued_at: Utc::now(),
             conversation_id,
@@ -96,19 +96,19 @@ impl ChatMessage {
     }
 
     /// Create a new text message in a conversation
-    pub fn new_text(conversation_id: Uuid, message: String) -> Self {
+    pub fn new_text(conversation_id: Uuid, message: impl Into<String>) -> Self {
         Self::new_text_reply(conversation_id, message, None)
     }
 
     /// Create a new control message to edit a text message
-    pub fn new_edit_text(conversation_id: Uuid, message_id: Uuid, new_content: String) -> Self {
+    pub fn new_edit_text(conversation_id: Uuid, message_id: Uuid, new_content: impl Into<String>) -> Self {
         ChatMessage { 
             issued_at: Utc::now(),
             conversation_id,
             kind: ChatMessageKind::Ctrl(
                 ControlMessage::EditMsg { 
                     id: message_id,
-                    new_content: Content::Text(new_content),
+                    new_content: Content::Text(new_content.into()),
                 }
             )
         }
@@ -130,7 +130,7 @@ impl ChatMessage {
     /// Create a new OPEN_CONV message with an optional conversation id and initial text message
     /// 
     /// Generates a new conversation id if `conversation_id` is None.
-    pub fn new_open_conv_with_id(conversation_id: Option<Uuid>, initial_message: Option<String>) -> Self {
+    pub fn new_open_conv_with_id(conversation_id: Option<Uuid>, initial_message: Option<impl Into<String>>) -> Self {
         
         let conversation_id = match conversation_id {
             Some(id) => id,
