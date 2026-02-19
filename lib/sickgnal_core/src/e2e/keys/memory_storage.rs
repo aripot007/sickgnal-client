@@ -11,18 +11,18 @@ use std::collections::HashMap;
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::e2e::keys::{EphemeralKeyPair, KeyPair, KeyStorageError, SymetricKey, X25519Key};
+use crate::e2e::keys::{EphemeralSecretKey, IdentityKeyPair, PublicIdentityKeys, SymetricKey, X25519Secret, storage_backend::KeyStorageError};
 
-use super::KeyStorageBackend;
+use super::storage_backend::KeyStorageBackend;
 
 /// A simple, non-persistent, in-memory [`KeyStorageBackend`]
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct MemoryKeyStorage {
-    identity_keypair: Option<KeyPair>,
-    midterm_keypair: Option<KeyPair>,
-    ephemeral_keypairs: HashMap<Uuid, KeyPair>,
+    identity_keypair: Option<IdentityKeyPair>,
+    midterm_key: Option<X25519Secret>,
+    ephemeral_keys: HashMap<Uuid, X25519Secret>,
     conversation_keys: HashMap<Uuid, SymetricKey>,
-    user_public_keys: HashMap<Uuid, X25519Key>,
+    user_public_keys: HashMap<Uuid, PublicIdentityKeys>,
 }
 
 #[derive(Debug, Error)]
@@ -47,8 +47,8 @@ impl MemoryKeyStorage {
     pub fn new() -> Self {
         Self {
             identity_keypair: None,
-            midterm_keypair: None,
-            ephemeral_keypairs: HashMap::new(),
+            midterm_key: None,
+            ephemeral_keys: HashMap::new(),
             conversation_keys: HashMap::new(),
             user_public_keys: HashMap::new(),
         }
@@ -57,97 +57,97 @@ impl MemoryKeyStorage {
 
 impl KeyStorageBackend for MemoryKeyStorage {
 
-    fn identity_keypair(&self) -> Result<&super::KeyPair, KeyStorageError> {
+    fn identity_keypair(&self) -> Result<&IdentityKeyPair, KeyStorageError> {
         self.identity_keypair.as_ref().ok_or(Error::NoKey.into())
     }
 
-    fn identity_keypair_opt(&self) -> Result<Option<&KeyPair>, KeyStorageError> {
+    fn identity_keypair_opt(&self) -> Result<Option<&IdentityKeyPair>, KeyStorageError> {
         Ok(self.identity_keypair.as_ref())
     }
 
-    fn set_identity_keypair(&mut self, identity_keypair: super::KeyPair) -> Result<(), KeyStorageError> {
+    fn set_identity_keypair(&mut self, identity_keypair: IdentityKeyPair) -> Result<(), KeyStorageError> {
         self.identity_keypair = Some(identity_keypair);
         Ok(())
     }
 
-    fn midterm_keypair(&self) -> Result<&super::KeyPair, KeyStorageError> {
-        self.midterm_keypair.as_ref().ok_or(Error::NoKey.into())
+    fn midterm_key(&self) -> Result<&X25519Secret, KeyStorageError> {
+        self.midterm_key.as_ref().ok_or(Error::NoKey.into())
     }
 
-    fn midterm_keypair_opt(&self) -> Result<Option<&KeyPair>, KeyStorageError> {
-        Ok(self.midterm_keypair.as_ref())
+    fn midterm_key_opt(&self) -> Result<Option<&X25519Secret>, KeyStorageError> {
+        Ok(self.midterm_key.as_ref())
     }
 
 
-    fn set_midterm_keypair(&mut self, midterm_keypair: super::KeyPair) -> Result<(), KeyStorageError> {
-        self.midterm_keypair = Some(midterm_keypair);
+    fn set_midterm_key(&mut self, midterm_key: X25519Secret) -> Result<(), KeyStorageError> {
+        self.midterm_key = Some(midterm_key);
         Ok(())
     }
 
-    fn ephemeral_keypair(&self, id: &uuid::Uuid) -> Result<Option<&super::KeyPair>, KeyStorageError> {
-        Ok(self.ephemeral_keypairs.get(id))
+    fn ephemeral_key(&self, id: &uuid::Uuid) -> Result<Option<&X25519Secret>, KeyStorageError> {
+        Ok(self.ephemeral_keys.get(id))
     }
 
-    fn pop_ephemeral_keypair(&mut self, id: &uuid::Uuid) -> Result<Option<super::KeyPair>, KeyStorageError> {
-        Ok(self.ephemeral_keypairs.remove(id))
+    fn pop_ephemeral_key(&mut self, id: &uuid::Uuid) -> Result<Option<X25519Secret>, KeyStorageError> {
+        Ok(self.ephemeral_keys.remove(id))
     }
 
     fn available_ephemeral_keys(&self) -> Result<impl Iterator<Item = &uuid::Uuid>, KeyStorageError> {
-        Ok(self.ephemeral_keypairs.keys())
+        Ok(self.ephemeral_keys.keys())
     }
 
-    fn save_ephemeral_keypair(&mut self, keypair: super::EphemeralKeyPair) -> Result<(), KeyStorageError> {
+    fn save_ephemeral_key(&mut self, key: EphemeralSecretKey) -> Result<(), KeyStorageError> {
         
-        let id = keypair.id;
-        let keypair = keypair.keypair;
+        let id = key.id;
+        let keypair = key.secret;
 
-        if self.ephemeral_keypairs.contains_key(&id) {
+        if self.ephemeral_keys.contains_key(&id) {
             return Err(Error::DuplicateId.into());
         }
-        self.ephemeral_keypairs.insert(id, keypair);
+        self.ephemeral_keys.insert(id, keypair);
         
         Ok(())
     }
 
-    fn save_many_ephemeral_keypairs(&mut self, keypairs: impl Iterator<Item = super::EphemeralKeyPair>) -> Result<(), KeyStorageError> {
+    fn save_many_ephemeral_keys(&mut self, keypairs: impl Iterator<Item = EphemeralSecretKey>) -> Result<(), KeyStorageError> {
         
         for keypair in keypairs {
-            self.save_ephemeral_keypair(keypair)?;
+            self.save_ephemeral_key(keypair)?;
         }
 
         Ok(())
     }
 
-    fn add_ephemeral_keypair(&mut self, keypair: super::KeyPair) -> Result<uuid::Uuid, KeyStorageError> {
+    fn add_ephemeral_key(&mut self, key: X25519Secret) -> Result<uuid::Uuid, KeyStorageError> {
         
         let id = Uuid::new_v4();
 
-        self.save_ephemeral_keypair(EphemeralKeyPair { id, keypair})?;
+        self.save_ephemeral_key(EphemeralSecretKey { id, secret: key})?;
 
         Ok(id)
     }
 
-    fn add_many_ephemeral_keypair(&mut self, keypairs: impl Iterator<Item = super::KeyPair>) -> Result<impl Iterator<Item = uuid::Uuid>, KeyStorageError> {
+    fn add_many_ephemeral_key(&mut self, keypairs: impl Iterator<Item = X25519Secret>) -> Result<impl Iterator<Item = uuid::Uuid>, KeyStorageError> {
         
         let mut ids = Vec::new();
         
         for keypair in keypairs {
-            let id = self.add_ephemeral_keypair(keypair)?;
+            let id = self.add_ephemeral_key(keypair)?;
             ids.push(id);
         }
 
         Ok(ids.into_iter())
     }
 
-    fn delete_ephemeral_keypair(&mut self, id: Uuid) -> Result<(), KeyStorageError> {
-        self.ephemeral_keypairs.remove(&id);
+    fn delete_ephemeral_key(&mut self, id: Uuid) -> Result<(), KeyStorageError> {
+        self.ephemeral_keys.remove(&id);
         Ok(())
     }
 
-    fn delete_many_ephemeral_keypair(&mut self, ids: impl Iterator<Item = uuid::Uuid>) -> Result<(), KeyStorageError> {
+    fn delete_many_ephemeral_key(&mut self, ids: impl Iterator<Item = uuid::Uuid>) -> Result<(), KeyStorageError> {
         
         for id in ids {
-            self.ephemeral_keypairs.remove(&id);
+            self.ephemeral_keys.remove(&id);
         }
         Ok(())
     }
@@ -157,13 +157,13 @@ impl KeyStorageBackend for MemoryKeyStorage {
         Ok(())
     }
 
-    fn clear_midterm_keypair(&mut self) -> Result<(), KeyStorageError> {
-        self.midterm_keypair = None;
+    fn clear_midterm_key(&mut self) -> Result<(), KeyStorageError> {
+        self.midterm_key = None;
         Ok(())
     }
 
-    fn clear_ephemeral_keypairs(&mut self) -> Result<(), KeyStorageError> {
-        self.ephemeral_keypairs.clear();
+    fn clear_ephemeral_keys(&mut self) -> Result<(), KeyStorageError> {
+        self.ephemeral_keys.clear();
         Ok(())
     }
 
@@ -191,16 +191,16 @@ impl KeyStorageBackend for MemoryKeyStorage {
         Ok(())
     }
 
-    fn user_public_key(&self, user_id: &uuid::Uuid) -> Result<Option<&super::X25519Key>, KeyStorageError> {
+    fn user_public_keys(&self, user_id: &uuid::Uuid) -> Result<Option<&PublicIdentityKeys>, KeyStorageError> {
         Ok(self.user_public_keys.get(user_id))
     }
 
-    fn set_user_public_key(&mut self, user_id: uuid::Uuid, key: super::X25519Key) -> Result<(), KeyStorageError> {
+    fn set_user_public_keys(&mut self, user_id: uuid::Uuid, key: PublicIdentityKeys) -> Result<(), KeyStorageError> {
         self.user_public_keys.insert(user_id, key);
         Ok(())
     }
 
-    fn delete_user_public_key(&mut self, user_id: &uuid::Uuid) -> Result<(), KeyStorageError> {
+    fn delete_user_public_keys(&mut self, user_id: &uuid::Uuid) -> Result<(), KeyStorageError> {
         self.user_public_keys.remove(user_id);
         Ok(())
     }

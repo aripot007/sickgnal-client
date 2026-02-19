@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::e2e::keys::PublicIdentityKeys;
+
 // region:    Struct definition
 
 /// E2E Message type
@@ -54,8 +56,8 @@ pub enum E2EMessage {
     /// Account creation message
     #[serde(rename = "128")]
     CreateAccount {
-        #[serde(rename = "ik", with="base64json")]
-        identity_key: Vec<u8>,
+        #[serde(rename = "ik")]
+        identity_key: PublicIdentityKeys,
 
         username: String,
 
@@ -310,8 +312,8 @@ pub enum ErrorCode {
 pub struct PreKeyBundle {
     
     /// Public identity key of the correspondant
-    #[serde(rename = "ik", with="base64json")]
-    pub identity_key: Vec<u8>,
+    #[serde(rename = "ik")]
+    pub identity_keys: PublicIdentityKeys,
 
     /// Signed mid-term prekey of the correspondant
     #[serde(rename = "pk", with="base64json")]
@@ -354,8 +356,8 @@ pub struct KeyExchangeData {
     /// Public identity key of the sender
     /// 
     /// Used in extended Diffie-Hellman key exchange.
-    #[serde(rename = "ik", with="base64json")]
-    pub identity_key: Vec<u8>,
+    #[serde(rename = "ik")]
+    pub identity_key: PublicIdentityKeys,
 
     /// Ephemeral prekey of the sender
     /// 
