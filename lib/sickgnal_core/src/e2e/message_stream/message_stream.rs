@@ -8,10 +8,10 @@ use crate::e2e::message::E2EMessage;
 pub trait E2EMessageStream {
     
     /// Send an E2E message
-    async fn send(&mut self, message: E2EMessage) -> impl Future<Output = Result<(), MessageStreamError>> + Send;
+    async fn send(&mut self, message: E2EMessage) -> Result<(), MessageStreamError>;
 
     /// Receive an E2E message
-    async fn receive(&mut self) -> impl Future<Output = Result<E2EMessage, MessageStreamError>> + Send;
+    async fn receive(&mut self) -> Result<E2EMessage, MessageStreamError>;
 }
 
 /// Error that can occur in message streams (eg I/O errors)
