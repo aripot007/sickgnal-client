@@ -1,10 +1,9 @@
 //! Context for the E2E protocol
 //! 
 
-use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::e2e::{client::Error, keys::KeyStorageBackend, message::E2EMessage};
+use crate::e2e::{client::{Error, message_stream::E2EMessageStream}, keys::KeyStorageBackend};
 
 // region:    Struct definition
 
@@ -28,18 +27,6 @@ pub struct E2EClient<Storage: KeyStorageBackend, MsgStream: E2EMessageStream> {
 
     /// If `true`, the client is in instant relay mode
     instant_relay_mode: bool,
-}
-
-/// Trait for sending and receiving E2E Messages
-#[async_trait]
-pub trait E2EMessageStream {
-    type Error: std::error::Error;
-    
-    /// Send an E2E message
-    async fn send(&mut self, message: E2EMessage) -> impl Future<Output = Result<(), Self::Error>> + Send;
-
-    /// Receive an E2E message
-    async fn receive(&mut self) -> impl Future<Output = Result<E2EMessage, Self::Error>> + Send;
 }
 
 // endregion: Struct definition
