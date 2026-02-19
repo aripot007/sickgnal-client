@@ -54,7 +54,10 @@ impl<Storage: KeyStorageBackend, MsgStream: E2EMessageStream> E2EClient<Storage,
     /// Create a new client with the given username
     /// 
     /// Generates the identity key if it does not exist
-    pub fn create(username: String, key_storage: Storage, msg_stream: MsgStream) -> Result<Self, Error<Storage, MsgStream>> {
+    pub fn create(username: String, key_storage: Storage, msg_stream: MsgStream) -> Result<Self, Error> {
+        
+        let idk = key_storage.identity_keypair().map_err(Error::StorageBackendError);
+        
         todo!()
     }
 
