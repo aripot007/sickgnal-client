@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::e2e::keys::{EphemeralKeyPair, Key, KeyPair, KeyStorageError};
+use crate::e2e::keys::{EphemeralKeyPair, KeyPair, KeyStorageError, SymetricKey, X25519Key};
 
 use super::KeyStorageBackend;
 
@@ -21,8 +21,8 @@ pub struct MemoryKeyStorage {
     identity_keypair: Option<KeyPair>,
     midterm_keypair: Option<KeyPair>,
     ephemeral_keypairs: HashMap<Uuid, KeyPair>,
-    conversation_keys: HashMap<Uuid, Key>,
-    user_public_keys: HashMap<Uuid, Key>,
+    conversation_keys: HashMap<Uuid, SymetricKey>,
+    user_public_keys: HashMap<Uuid, X25519Key>,
 }
 
 #[derive(Debug, Error)]
@@ -177,11 +177,11 @@ impl KeyStorageBackend for MemoryKeyStorage {
         Ok(())
     }
 
-    fn conversation_key(&self, conversation_id: &uuid::Uuid) -> Result<Option<&super::Key>, KeyStorageError> {
+    fn conversation_key(&self, conversation_id: &uuid::Uuid) -> Result<Option<&super::SymetricKey>, KeyStorageError> {
         Ok(self.conversation_keys.get(conversation_id))
     }
 
-    fn add_conversation_key(&mut self, conversation_id: uuid::Uuid, key: super::Key) -> Result<(), KeyStorageError> {
+    fn add_conversation_key(&mut self, conversation_id: uuid::Uuid, key: super::SymetricKey) -> Result<(), KeyStorageError> {
         self.conversation_keys.insert(conversation_id, key);
         Ok(())
     }
@@ -191,11 +191,11 @@ impl KeyStorageBackend for MemoryKeyStorage {
         Ok(())
     }
 
-    fn user_public_key(&self, user_id: &uuid::Uuid) -> Result<Option<&super::Key>, KeyStorageError> {
+    fn user_public_key(&self, user_id: &uuid::Uuid) -> Result<Option<&super::X25519Key>, KeyStorageError> {
         Ok(self.user_public_keys.get(user_id))
     }
 
-    fn set_user_public_key(&mut self, user_id: uuid::Uuid, key: super::Key) -> Result<(), KeyStorageError> {
+    fn set_user_public_key(&mut self, user_id: uuid::Uuid, key: super::X25519Key) -> Result<(), KeyStorageError> {
         self.user_public_keys.insert(user_id, key);
         Ok(())
     }

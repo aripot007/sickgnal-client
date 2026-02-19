@@ -6,15 +6,18 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-/// Represents a cryptographic key
-pub type Key = Vec<u8>;
+/// Represents a 32-byte curve25519 cryptographic key
+pub type X25519Key = [u8; 32];
+
+/// Represents a 32-byte ChaCha20Poly1305 encryption key
+pub type SymetricKey = [u8; 32];
 
 // FIXME: Custom debug implementation to hide private key
-/// An asymetric key pair
+/// A x25519 key pair
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct KeyPair {
-    private_key: Key,
-    public_key: Key,
+    private_key: X25519Key,
+    public_key: X25519Key,
 }
 
 /// An ephemeral keypair with its id
@@ -107,10 +110,10 @@ pub trait KeyStorageBackend {
 
     // Conversation keys
     /// Get the session key of a conversation
-    fn conversation_key(&self, conversation_id: &Uuid) -> Result<Option<&Key>, KeyStorageError>;
+    fn conversation_key(&self, conversation_id: &Uuid) -> Result<Option<&SymetricKey>, KeyStorageError>;
     
     /// Add a conversation key
-    fn add_conversation_key(&mut self, conversation_id: Uuid, key: Key) -> Result<(), KeyStorageError>;
+    fn add_conversation_key(&mut self, conversation_id: Uuid, key: SymetricKey) -> Result<(), KeyStorageError>;
 
     /// Delete a conversation key
     fn delete_conversation_key(&mut self, conversation_id: &Uuid) -> Result<(), KeyStorageError>;
@@ -118,10 +121,10 @@ pub trait KeyStorageBackend {
 
     // Public user keys
     /// Get the public key of a user
-    fn user_public_key(&self, user_id: &Uuid) -> Result<Option<&Key>, KeyStorageError>;
+    fn user_public_key(&self, user_id: &Uuid) -> Result<Option<&X25519Key>, KeyStorageError>;
 
     /// Set the public key of a user
-    fn set_user_public_key(&mut self, user_id: Uuid, key: Key) -> Result<(), KeyStorageError>;
+    fn set_user_public_key(&mut self, user_id: Uuid, key: X25519Key) -> Result<(), KeyStorageError>;
 
     /// Delete the public key of a user
     fn delete_user_public_key(&mut self, user_id: &Uuid) -> Result<(), KeyStorageError>;
