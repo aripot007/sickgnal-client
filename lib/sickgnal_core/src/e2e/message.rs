@@ -1,3 +1,4 @@
+use ed25519_dalek::Signature;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
@@ -5,6 +6,12 @@ use uuid::Uuid;
 use crate::e2e::keys::PublicIdentityKeys;
 
 // region:    Struct definition
+
+/// The number of bytes in a XChaCha20Poly1305 Nonce
+const NONCE_BYTES: usize = 24;
+
+/// A nonce that can be used with XChaCha20Poly1305
+pub type Nonce = [u8; NONCE_BYTES];
 
 /// E2E Message type
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,8 +69,8 @@ pub enum E2EMessage {
         username: String,
 
         /// Signature of the username with the identity key
-        #[serde(rename = "sig", with="base64json")]
-        signature: Vec<u8>,
+        #[serde(rename = "sig", with = "base64signature")]
+        signature: Signature,
     },
 
     /// Message with an authentication token
@@ -93,8 +100,8 @@ pub enum E2EMessage {
     #[serde(rename = "131")]
     AuthChallenge {
         /// The challenge Nonce to sign
-        #[serde(with="base64json")]
-        chall: Vec<u8>, 
+        #[serde(with="base64nonce")]
+        chall: Nonce, 
     },
 
     /// Signature response to the server [`AuthChallenge`]
@@ -103,12 +110,12 @@ pub enum E2EMessage {
     #[serde(rename = "132")]
     AuthChallengeSolve {
         /// Original challenge
-        #[serde(with="base64json")]
-        chall: Vec<u8>,
+        #[serde(with="base64nonce")]
+        chall: Nonce,
 
         /// Signature of `SHA512(chall) || username` with the identity key
-        #[serde(with="base64json")]
-        solve: Vec<u8>,
+        #[serde(with = "base64signature")]
+        solve: Signature,
     },
 
     // Key management
@@ -316,12 +323,12 @@ pub struct PreKeyBundle {
     pub identity_keys: PublicIdentityKeys,
 
     /// Signed mid-term prekey of the correspondant
-    #[serde(rename = "pk", with="base64json")]
-    pub midterm_prekey: Vec<u8>,
+    #[serde(rename = "pk", with="base64x25519key")]
+    pub midterm_prekey: x25519_dalek::PublicKey,
 
     /// Mid-term prekey signature
-    #[serde(rename = "pksig", with="base64json")]
-    pub midterm_prekey_signature: Vec<u8>,
+    #[serde(rename = "pksig", with="base64signature")]
+    pub midterm_prekey_signature: Signature,
 
     /// Optional ephemeral prekey
     #[serde(rename = "ek")]
@@ -334,19 +341,19 @@ pub struct EphemeralKey {
     pub id: Uuid,
 
     /// Public ephemeral prekey
-    #[serde(rename = "ek", with="base64json")]
-    pub public_key: Vec<u8>,
+    #[serde(rename = "ek", with="base64x25519key")]
+    pub key: x25519_dalek::PublicKey,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedPreKey {
     /// Public prekey
-    #[serde(with="base64json")]
-    key: Vec<u8>,
+    #[serde(with="base64x25519key")]
+    key: x25519_dalek::PublicKey,
 
     /// Signature of the public prekey with the identity key
-    #[serde(rename = "sig", with="base64json")]
-    signature: Vec<u8>
+    #[serde(rename = "sig", with="base64signature")]
+    signature: Signature,
 }
 
 /// Key exchange information sent in initial conversation messages
@@ -359,11 +366,11 @@ pub struct KeyExchangeData {
     #[serde(rename = "ik")]
     pub identity_key: PublicIdentityKeys,
 
-    /// Ephemeral prekey of the sender
+    /// Ephemeral public prekey of the sender
     /// 
     /// Used in extended Diffie-Hellman key exchange.
-    #[serde(rename = "ek", with="base64json")]
-    pub ephemeral_prekey: Vec<u8>,
+    #[serde(rename = "ek", with="base64x25519key")]
+    pub ephemeral_prekey: x25519_dalek::PublicKey,
 
     /// Ephemeral prekey id of the recipient key used, if any
     #[serde(rename = "kid")]
@@ -378,8 +385,8 @@ pub struct KeyExchangeData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessageCiphertext {
     /// Nonce used for message encryption
-    #[serde(with="base64json")]
-    pub nonce: Vec<u8>,
+    #[serde(with="base64nonce")]
+    pub nonce: Nonce,
 
     /// Message ciphertext
     #[serde(with="base64json")]
@@ -404,6 +411,67 @@ mod base64json {
         let base64 = String::deserialize(d)?;
         general_purpose::STANDARD.decode(base64.as_bytes())
             .map_err(|e| serde::de::Error::custom(e))
+    } 
+}
+
+/// Serialize and deserialize x25519 public keys as base64 strings
+mod base64x25519key {
+    use serde::{Deserializer};
+
+    pub use super::base64json::serialize;
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<x25519_dalek::PublicKey, D::Error> {
+        let bytes: Vec<u8> = super::base64json::deserialize(d)?;
+    
+        if bytes.len() != 32 {
+            return Err(serde::de::Error::invalid_length(bytes.len(), &"32 bytes"));
+        }
+
+        let bytes: [u8; 32] = bytes.try_into().expect("conversion to array failed");
+
+        Ok(x25519_dalek::PublicKey::from(bytes))
+    } 
+}
+
+/// Serialize and deserialize 24 byte nonces as base64 strings
+mod base64nonce {
+    use serde::{Deserializer};
+
+    use crate::e2e::message::{NONCE_BYTES, Nonce};
+
+    pub use super::base64json::serialize;
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Nonce, D::Error> {
+        let bytes: Vec<u8> = super::base64json::deserialize(d)?;
+    
+        if bytes.len() != NONCE_BYTES {
+            return Err(serde::de::Error::invalid_length(bytes.len(), &"24 bytes"));
+        }
+
+        let nonce: Nonce = bytes.try_into().expect("conversion to array failed");
+        Ok(nonce)
+    } 
+}
+
+/// Serialize and deserialize signature
+mod base64signature {
+    use ed25519_dalek::{Signature, ed25519};
+    use serde::{Serializer, Deserializer};
+
+    pub fn serialize<S: Serializer>(v: &ed25519::Signature, s: S) -> Result<S::Ok, S::Error> {
+        super::base64json::serialize(v.to_bytes(), s)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<ed25519::Signature, D::Error> {
+        let bytes: Vec<u8> = super::base64json::deserialize(d)?;
+
+        if bytes.len() != Signature::BYTE_SIZE {
+            return Err(serde::de::Error::invalid_length(bytes.len(), &"64 bytes"));
+        }
+
+        let bytes: [u8; Signature::BYTE_SIZE] = bytes.try_into().expect("conversion to array failed");
+
+        Ok(ed25519::Signature::from_bytes(&bytes))
     } 
 }
 
