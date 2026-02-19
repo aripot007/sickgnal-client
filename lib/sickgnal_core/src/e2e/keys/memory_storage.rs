@@ -32,6 +32,25 @@ pub enum Error {
     DuplicateId,
 }
 
+impl MemoryKeyStorage {
+
+    pub fn new() -> Self {
+        Self {
+            identity_keypair: None,
+            midterm_keypair: None,
+            ephemeral_keypairs: HashMap::new(),
+            conversation_keys: HashMap::new(),
+            user_public_keys: HashMap::new(),
+        }
+    }
+}
+
+impl Default for MemoryKeyStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KeyStorageBackend for MemoryKeyStorage {
     type Error = Error;
 
