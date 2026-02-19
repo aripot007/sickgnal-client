@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use uuid::Uuid;
 
 // region:    Struct definition
@@ -261,38 +262,46 @@ pub enum E2EMessage {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Error)]
 #[repr(u8)]
 pub enum ErrorCode {
     /// Invalid message format
     /// 
     /// Usually terminates the connection.
+    #[error("Invalid message format")]
     InvalidMessage = 0,
 
     /// Message understood but not accepted by the other party
     /// 
     /// May terminate the connection
+    #[error("Message type not accepted")]
     MessageTypeNotAccepted = 1,
 
     /// Missing or invalid token, or invalid challenge response
     /// 
     /// Keeps the connection open, but the clients needs to renew
     /// authentication
+    #[error("Invalid authentication")]
     InvalidAuthentication = 2,
 
     /// Username already taken
+    #[error("Username already taken")]
     UsernameUnavailable = 10,
 
     /// Username or user id not found
+    #[error("User not found")]
     UserNotFound = 11,
 
     /// Prekey storage limit reached
+    #[error("Prekey storage limit reached")]
     PreKeyLimit = 20,
 
     /// No prekey available for the requested user
+    #[error("No available prekey")]
     NoAvailableKey = 21,
 
     /// Internal server error
+    #[error("Internal server error")]
     InternalError = 255,
 }
 
