@@ -15,6 +15,7 @@ pub struct KeyPair {
 }
 
 /// An ephemeral keypair with its id
+#[derive(Clone, Serialize, Deserialize)]
 pub struct EphemeralKeyPair {
     pub id: Uuid,
     pub keypair: KeyPair,
