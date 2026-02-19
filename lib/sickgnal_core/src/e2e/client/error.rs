@@ -3,7 +3,7 @@
 
 use thiserror::Error;
 
-use crate::e2e::{self, client::message_stream::MessageStreamError, keys::KeyStorageError};
+use crate::e2e::{self, message_stream::MessageStreamError, keys::KeyStorageError};
 
 /// An E2E Client error
 #[derive(Error, Debug)]

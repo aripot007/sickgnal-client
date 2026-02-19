@@ -3,7 +3,7 @@
 
 use uuid::Uuid;
 
-use crate::e2e::{client::{Error, message_stream::E2EMessageStream}, keys::KeyStorageBackend};
+use crate::e2e::{message_stream::E2EMessageStream, client::Error, keys::KeyStorageBackend};
 
 // region:    Struct definition
 
