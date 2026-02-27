@@ -27,7 +27,7 @@ pub fn main() {
         msg_ciphertext: ChatMessageCiphertext {
             nonce: nonce.into(),
             key_id: Uuid::new_v4(),
-            msg: cipher.try_into().unwrap(),
+            msg: cipher,
         },
     };
 
