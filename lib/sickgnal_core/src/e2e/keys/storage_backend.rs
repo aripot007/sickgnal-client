@@ -84,16 +84,15 @@ pub trait KeyStorageBackend {
         Ok(())
     }
 
-    // Conversation keys
-    /// Get the session key of a conversation
-    fn conversation_key(&self, conversation_id: &Uuid) -> Result<Option<&SymetricKey>, KeyStorageError>;
+    // session keys
+    /// Get the session for a correspondant
+    fn session_key(&self, user: Uuid, key_id: Uuid) -> Result<Option<&SymetricKey>, KeyStorageError>;
     
-    /// Add a conversation key
-    fn add_conversation_key(&mut self, conversation_id: Uuid, key: SymetricKey) -> Result<(), KeyStorageError>;
+    /// Add a session key
+    fn add_session_key(&mut self, user: Uuid, session_id: Uuid, key: SymetricKey) -> Result<(), KeyStorageError>;
 
-    /// Delete a conversation key
-    fn delete_conversation_key(&mut self, conversation_id: &Uuid) -> Result<(), KeyStorageError>;
-
+    /// Delete a session key
+    fn delete_session_key(&mut self, user: Uuid, session_id: Uuid) -> Result<(), KeyStorageError>;
 
     // Public user keys
     /// Get the public key of a user

@@ -21,7 +21,7 @@ pub struct MemoryKeyStorage {
     identity_keypair: Option<IdentityKeyPair>,
     midterm_key: Option<X25519Secret>,
     ephemeral_keys: HashMap<Uuid, X25519Secret>,
-    conversation_keys: HashMap<Uuid, SymetricKey>,
+    session_keys: HashMap<(Uuid, Uuid), SymetricKey>,
     user_public_keys: HashMap<Uuid, PublicIdentityKeys>,
 }
 
@@ -49,7 +49,7 @@ impl MemoryKeyStorage {
             identity_keypair: None,
             midterm_key: None,
             ephemeral_keys: HashMap::new(),
-            conversation_keys: HashMap::new(),
+            session_keys: HashMap::new(),
             user_public_keys: HashMap::new(),
         }
     }
@@ -168,7 +168,7 @@ impl KeyStorageBackend for MemoryKeyStorage {
     }
 
     fn clear_conversation_keys(&mut self) -> Result<(), KeyStorageError> {
-        self.conversation_keys.clear();
+        self.session_keys.clear();
         Ok(())
     }
 
@@ -177,21 +177,21 @@ impl KeyStorageBackend for MemoryKeyStorage {
         Ok(())
     }
 
-    fn conversation_key(&self, conversation_id: &uuid::Uuid) -> Result<Option<&super::SymetricKey>, KeyStorageError> {
-        Ok(self.conversation_keys.get(conversation_id))
+    fn session_key(&self, user: Uuid, key_id: Uuid) -> Result<Option<&super::SymetricKey>, KeyStorageError> {
+        Ok(self.session_keys.get(&(user, key_id)))
     }
 
-    fn add_conversation_key(&mut self, conversation_id: uuid::Uuid, key: super::SymetricKey) -> Result<(), KeyStorageError> {
-        self.conversation_keys.insert(conversation_id, key);
+    fn add_session_key(&mut self, user: Uuid, key_id: Uuid, key: super::SymetricKey) -> Result<(), KeyStorageError> {
+        self.session_keys.insert((user, key_id), key);
         Ok(())
     }
 
-    fn delete_conversation_key(&mut self, conversation_id: &uuid::Uuid) -> Result<(), KeyStorageError> {
-        self.conversation_keys.remove(conversation_id);
+    fn delete_session_key(&mut self, user: Uuid, key_id: Uuid) -> Result<(), KeyStorageError> {
+        self.session_keys.remove(&(user, key_id));
         Ok(())
     }
 
-    fn user_public_keys(&self, user_id: &uuid::Uuid) -> Result<Option<&PublicIdentityKeys>, KeyStorageError> {
+    fn user_public_keys(&self, user_id: &Uuid) -> Result<Option<&PublicIdentityKeys>, KeyStorageError> {
         Ok(self.user_public_keys.get(user_id))
     }
 

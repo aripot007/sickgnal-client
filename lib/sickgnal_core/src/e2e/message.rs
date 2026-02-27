@@ -376,6 +376,14 @@ pub struct KeyExchangeData {
     #[serde(rename = "kid")]
     pub recipient_prekey_id: Option<Uuid>,
 
+    /// Initial sending key id of the sender
+    #[serde(rename = "i")]
+    pub send_key_id: Uuid,
+
+    /// Initial receiving key id of the sender
+    #[serde(rename = "j")]
+    pub receive_key_id: Uuid,
+
     /// Initial message ciphertext
     #[serde(flatten)]
     pub msg_ciphertext: ChatMessageCiphertext
@@ -387,6 +395,10 @@ pub struct ChatMessageCiphertext {
     /// Nonce used for message encryption
     #[serde(with="base64nonce")]
     pub nonce: Nonce,
+
+    /// Id of the key used to encrypt the message
+    #[serde(rename = "kid")]
+    pub key_id: Uuid,
 
     /// Message ciphertext
     #[serde(with="base64json")]
