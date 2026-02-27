@@ -1,9 +1,9 @@
-use ed25519_dalek::Signature;
+use ed25519_dalek::{Signature, Signer};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::e2e::keys::PublicIdentityKeys;
+use crate::e2e::keys::{IdentityKeyPair, PublicIdentityKeys};
 
 // region:    Struct definition
 
@@ -161,8 +161,6 @@ pub enum E2EMessage {
     /// Sent in response to [`E2EMessage::PreKeyStatusRequest`]
     #[serde(rename = "136")]
     PreKeyStatus {
-        /// Number of uploaded keys
-        count: u64,
 
         /// Maximum number of uploadable keys
         limit: u64,
@@ -264,6 +262,9 @@ pub enum E2EMessage {
     #[serde(rename = "181")]
     DisableInstantRelay,
 
+    #[serde(rename = "254")]
+    Ok,
+
     // Errors
     #[serde(rename = "255")]
     Error {
@@ -349,11 +350,11 @@ pub struct EphemeralKey {
 pub struct SignedPreKey {
     /// Public prekey
     #[serde(with="base64x25519key")]
-    key: x25519_dalek::PublicKey,
+    pub key: x25519_dalek::PublicKey,
 
     /// Signature of the public prekey with the identity key
     #[serde(rename = "sig", with="base64signature")]
-    signature: Signature,
+    pub signature: Signature,
 }
 
 /// Key exchange information sent in initial conversation messages
@@ -406,6 +407,44 @@ pub struct ChatMessageCiphertext {
 }
 
 // endregion: Struct definition
+
+// region:    Constructors
+
+impl E2EMessage {
+
+    /// Create an account
+    pub fn create_account(identity_keys: &IdentityKeyPair, username: String) -> Self {
+
+        let username_sig = identity_keys.ed25519_key.sign(username.as_bytes());
+
+        E2EMessage::CreateAccount { 
+            identity_key: identity_keys.public_keys(), 
+            username, 
+            signature: username_sig,
+        }
+    }
+
+    /// Set the authentication token in the message, if there is a field for it.
+    pub fn set_token(&mut self, new_token: String) {
+        match self {
+            E2EMessage::PreKeyUpload { token, .. }
+            | E2EMessage::PreKeyDelete { token, .. }
+            | E2EMessage::PreKeyStatusRequest { token }
+            | E2EMessage::PreKeyBundleRequest { token, .. }
+            | E2EMessage::UserProfileByUsername { token, .. }
+            | E2EMessage::UserProfileById { token, .. }
+            | E2EMessage::SendInitialMessage { token, .. }
+            | E2EMessage::SendMessage { token, .. }
+            | E2EMessage::GetInitialMessages { token, .. }
+            | E2EMessage::GetMessages { token, .. }
+            | E2EMessage::EnableInstantRelay { token } => *token = new_token,
+            _ => (),
+        }
+    }
+
+}
+
+// endregion: Constructors
 
 // region:    Utils base64 serialization/deserialization
 

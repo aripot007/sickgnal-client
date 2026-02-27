@@ -8,6 +8,9 @@ pub use storage_backend::*;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use x25519_dalek::PublicKey;
+
+use crate::e2e::message::EphemeralKey;
 
 // region:    Struct definitions
 
@@ -20,22 +23,22 @@ pub type SymetricKey = [u8; 32];
 /// Represent identity keys (x25519 and Ed25519 keys)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IdentityKeyPair {
-    x25519_secret: X25519Secret,
-    ed25519_key: ed25519_dalek::SigningKey,
+    pub(crate) x25519_secret: X25519Secret,
+    pub(crate) ed25519_key: ed25519_dalek::SigningKey,
 }
 
 /// Represents the public identity keys of a user (x25519 and Ed25519 keys)
 #[derive(Clone, Debug)]
 pub struct PublicIdentityKeys {
-    x25519: x25519_dalek::PublicKey,
-    ed25519: ed25519_dalek::VerifyingKey,
+    pub x25519: x25519_dalek::PublicKey,
+    pub ed25519: ed25519_dalek::VerifyingKey,
 }
 
 /// An ephemeral x25519 keypair with its id
 #[derive(Clone, Serialize, Deserialize)]
 pub struct EphemeralSecretKey {
     pub id: Uuid,
-    pub secret: X25519Secret,
+    pub(crate) secret: X25519Secret,
 }
 
 // endregion: Struct definitions
@@ -60,6 +63,25 @@ impl IdentityKeyPair {
         PublicIdentityKeys {
             x25519: x25519_dalek::PublicKey::from(&self.x25519_secret),
             ed25519: self.ed25519_key.verifying_key(),
+        }
+    }
+}
+
+impl EphemeralSecretKey {
+    /// Generate a new random ephemeral secret key
+    pub fn new_from_rng<T: RngCore + CryptoRng>(csprng: T) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            secret: X25519Secret::random_from_rng(csprng),
+        }
+    }
+}
+
+impl From<&EphemeralSecretKey> for EphemeralKey {
+    fn from(value: &EphemeralSecretKey) -> Self {
+        Self {
+            id: value.id,
+            key: PublicKey::from(&value.secret),
         }
     }
 }
