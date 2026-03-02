@@ -80,8 +80,8 @@ pub trait KeyStorageBackend {
     /// Delete all ephemeral keypairs
     fn clear_ephemeral_keys(&mut self) -> Result<(), KeyStorageError>;
 
-    /// Delete all conversation keys
-    fn clear_conversation_keys(&mut self) -> Result<(), KeyStorageError>;
+    /// Delete all session keys
+    fn clear_session_keys(&mut self) -> Result<(), KeyStorageError>;
 
     /// Delete all user public keys
     fn clear_user_public_keys(&mut self) -> Result<(), KeyStorageError>;
@@ -91,7 +91,7 @@ pub trait KeyStorageBackend {
         self.clear_identity_keypair()?;
         self.clear_midterm_key()?;
         self.clear_ephemeral_keys()?;
-        self.clear_conversation_keys()?;
+        self.clear_session_keys()?;
         self.clear_user_public_keys()?;
         Ok(())
     }

@@ -184,7 +184,7 @@ impl KeyStorageBackend for MemoryKeyStorage {
         Ok(())
     }
 
-    fn clear_conversation_keys(&mut self) -> Result<(), KeyStorageError> {
+    fn clear_session_keys(&mut self) -> Result<(), KeyStorageError> {
         self.session_keys.clear();
         Ok(())
     }
