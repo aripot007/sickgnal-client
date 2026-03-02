@@ -236,7 +236,23 @@ impl KeyStorageBackend for MemoryKeyStorage {
         current_sending_key: &Uuid,
         current_receiving_key: &Uuid,
     ) -> Result<(), KeyStorageError> {
-        todo!()
+        if let Some(keys) = self.session_keys.get_mut(user) {
+            // Get the current keys to insert them back
+            let snd_key = keys.remove(current_sending_key);
+            let rcv_key = keys.remove(current_receiving_key);
+
+            keys.clear();
+
+            // Insert back the current keys
+            if let Some(key) = snd_key {
+                keys.insert(*current_sending_key, key);
+            }
+            if let Some(key) = rcv_key {
+                keys.insert(*current_receiving_key, key);
+            }
+        }
+
+        Ok(())
     }
 
     fn user_public_keys(
