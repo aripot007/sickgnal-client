@@ -27,7 +27,7 @@ pub struct MemoryKeyStorage {
     identity_keypair: Option<IdentityKeyPair>,
     midterm_key: Option<X25519Secret>,
     ephemeral_keys: HashMap<Uuid, X25519Secret>,
-    session_keys: HashMap<(Uuid, Uuid), SymetricKey>,
+    session_keys: HashMap<Uuid, HashMap<Uuid, SymetricKey>>,
     user_public_keys: HashMap<Uuid, PublicIdentityKeys>,
     sessions: HashMap<Uuid, E2ESession>,
 }
@@ -199,7 +199,11 @@ impl KeyStorageBackend for MemoryKeyStorage {
         user: Uuid,
         key_id: Uuid,
     ) -> Result<Option<&super::SymetricKey>, KeyStorageError> {
-        Ok(self.session_keys.get(&(user, key_id)))
+        if let Some(keys) = self.session_keys.get(&user) {
+            return Ok(keys.get(&key_id));
+        }
+
+        Ok(None)
     }
 
     fn add_session_key(
@@ -208,12 +212,21 @@ impl KeyStorageBackend for MemoryKeyStorage {
         key_id: Uuid,
         key: super::SymetricKey,
     ) -> Result<(), KeyStorageError> {
-        self.session_keys.insert((user, key_id), key);
+        if let Some(keys) = self.session_keys.get_mut(&user) {
+            keys.insert(key_id, key);
+        } else {
+            let keys = HashMap::from([(key_id, key)]);
+            self.session_keys.insert(user, keys);
+        }
+
         Ok(())
     }
 
     fn delete_session_key(&mut self, user: Uuid, key_id: Uuid) -> Result<(), KeyStorageError> {
-        self.session_keys.remove(&(user, key_id));
+        if let Some(keys) = self.session_keys.get_mut(&user) {
+            keys.remove(&key_id);
+        }
+
         Ok(())
     }
 
