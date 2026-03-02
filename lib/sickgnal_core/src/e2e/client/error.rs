@@ -1,10 +1,10 @@
 //! E2E Client errors
-//! 
+//!
 
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::e2e::{self, message_stream::MessageStreamError, keys::KeyStorageError};
+use crate::e2e::{self, keys::KeyStorageError, message_stream::MessageStreamError};
 
 /// An E2E Client error
 #[derive(Error, Debug)]
@@ -27,5 +27,5 @@ pub enum Error {
     NoSuchPrekey(Uuid),
 
     #[error("Could not decrypt payload : {0}")]
-    DecryptionError(#[from] e2e::message::encrypted_payload::Error)
+    DecryptionError(#[from] e2e::message::encrypted_payload::Error),
 }

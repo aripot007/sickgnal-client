@@ -1,11 +1,13 @@
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::e2e::{client::session::E2ESession, keys::{EphemeralSecretKey, IdentityKeyPair, PublicIdentityKeys, SymetricKey, X25519Secret}};
+use crate::e2e::{
+    client::session::E2ESession,
+    keys::{EphemeralSecretKey, IdentityKeyPair, PublicIdentityKeys, SymetricKey, X25519Secret},
+};
 
 /// A trait for anything that can store keys
 pub trait KeyStorageBackend {
-
     // Identity and mid-term keys
 
     /// Get the identity keypair
@@ -15,7 +17,10 @@ pub trait KeyStorageBackend {
     fn identity_keypair_opt(&self) -> Result<Option<&IdentityKeyPair>, KeyStorageError>;
 
     /// Set the identity keypair
-    fn set_identity_keypair(&mut self, identity_keypair: IdentityKeyPair) -> Result<(), KeyStorageError>;
+    fn set_identity_keypair(
+        &mut self,
+        identity_keypair: IdentityKeyPair,
+    ) -> Result<(), KeyStorageError>;
 
     /// Get the midterm keypair
     fn midterm_key(&self) -> Result<&X25519Secret, KeyStorageError>;
@@ -25,7 +30,6 @@ pub trait KeyStorageBackend {
 
     /// Set the midterm keypair
     fn set_midterm_key(&mut self, midterm_key: X25519Secret) -> Result<(), KeyStorageError>;
-
 
     // Ephemeral keys
 
@@ -42,20 +46,28 @@ pub trait KeyStorageBackend {
     fn save_ephemeral_key(&mut self, keypair: EphemeralSecretKey) -> Result<(), KeyStorageError>;
 
     /// Save many new ephemeral keypairs
-    fn save_many_ephemeral_keys(&mut self, keypairs: impl Iterator<Item = EphemeralSecretKey>) -> Result<(), KeyStorageError>;
+    fn save_many_ephemeral_keys(
+        &mut self,
+        keypairs: impl Iterator<Item = EphemeralSecretKey>,
+    ) -> Result<(), KeyStorageError>;
 
     /// Add a new ephemeral keypair and return its generated id
     fn add_ephemeral_key(&mut self, keypair: X25519Secret) -> Result<Uuid, KeyStorageError>;
 
     /// Add many new ephemeral keypairs and return their generated id
-    fn add_many_ephemeral_key(&mut self, keypairs: impl Iterator<Item = X25519Secret>) -> Result<impl Iterator<Item = Uuid>, KeyStorageError>;
+    fn add_many_ephemeral_key(
+        &mut self,
+        keypairs: impl Iterator<Item = X25519Secret>,
+    ) -> Result<impl Iterator<Item = Uuid>, KeyStorageError>;
 
     /// Delete an ephemeral keypair
     fn delete_ephemeral_key(&mut self, id: Uuid) -> Result<(), KeyStorageError>;
 
     /// Delete many ephemeral keypairs
-    fn delete_many_ephemeral_key(&mut self, ids: impl Iterator<Item = Uuid>) -> Result<(), KeyStorageError>;
-
+    fn delete_many_ephemeral_key(
+        &mut self,
+        ids: impl Iterator<Item = Uuid>,
+    ) -> Result<(), KeyStorageError>;
 
     // Clear
 
@@ -86,29 +98,44 @@ pub trait KeyStorageBackend {
 
     // session keys
     /// Get the session for a correspondant
-    fn session_key(&self, user: Uuid, key_id: Uuid) -> Result<Option<&SymetricKey>, KeyStorageError>;
-    
+    fn session_key(
+        &self,
+        user: Uuid,
+        key_id: Uuid,
+    ) -> Result<Option<&SymetricKey>, KeyStorageError>;
+
     /// Add a session key
-    fn add_session_key(&mut self, user: Uuid, key_id: Uuid, key: SymetricKey) -> Result<(), KeyStorageError>;
+    fn add_session_key(
+        &mut self,
+        user: Uuid,
+        key_id: Uuid,
+        key: SymetricKey,
+    ) -> Result<(), KeyStorageError>;
 
     /// Delete a session key
     fn delete_session_key(&mut self, user: Uuid, key_id: Uuid) -> Result<(), KeyStorageError>;
 
     // Public user keys
     /// Get the public key of a user
-    fn user_public_keys(&self, user_id: &Uuid) -> Result<Option<&PublicIdentityKeys>, KeyStorageError>;
+    fn user_public_keys(
+        &self,
+        user_id: &Uuid,
+    ) -> Result<Option<&PublicIdentityKeys>, KeyStorageError>;
 
     /// Set the public key of a user
-    fn set_user_public_keys(&mut self, user_id: Uuid, keys: PublicIdentityKeys) -> Result<(), KeyStorageError>;
+    fn set_user_public_keys(
+        &mut self,
+        user_id: Uuid,
+        keys: PublicIdentityKeys,
+    ) -> Result<(), KeyStorageError>;
 
     /// Delete the public key of a user
     fn delete_user_public_keys(&mut self, user_id: &Uuid) -> Result<(), KeyStorageError>;
 
-
     // Session management
 
     /// Load the session with the given user
-    /// 
+    ///
     /// Returns [`None`] if no session is currently open with the other user
     fn load_session(&mut self, user_id: &Uuid) -> Result<Option<E2ESession>, KeyStorageError>;
 
@@ -119,14 +146,14 @@ pub trait KeyStorageBackend {
     fn save_session(&mut self, session: &E2ESession) -> Result<(), KeyStorageError>;
 
     /// Save multiple sessions
-    /// 
+    ///
     /// Default implementation loops over sessions calling [`Self::save_session`], but this
     /// can be overriden when bulk-saving optimizations are available
     fn save_many_sessions(&mut self, sessions: &[&E2ESession]) -> Result<(), KeyStorageError> {
         for s in sessions {
             self.save_session(s)?;
         }
-        
+
         Ok(())
     }
 
@@ -140,7 +167,6 @@ pub trait KeyStorageBackend {
 #[derive(Debug, Error)]
 #[error(transparent)]
 pub struct KeyStorageError(#[from] Box<dyn std::error::Error + Send + Sync + 'static>);
-
 
 impl KeyStorageError {
     pub fn new<E>(error: E) -> Self

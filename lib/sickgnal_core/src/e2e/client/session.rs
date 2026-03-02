@@ -10,7 +10,7 @@ pub struct E2ESession {
 
     /// Id of the current key used for encryption
     pub sending_key_id: Uuid,
-    
+
     /// Current key used for encryption
     pub sending_key: SymetricKey,
 
