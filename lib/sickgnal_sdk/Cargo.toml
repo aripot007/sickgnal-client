@@ -6,3 +6,5 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+sickgnal_core = { path = "../sickgnal_core" }
+tokio = { version = "1.49.0", features = ["full"] }
