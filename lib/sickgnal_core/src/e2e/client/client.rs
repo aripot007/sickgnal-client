@@ -531,5 +531,45 @@ where
         Ok(payload)
     }
 
+    /// Get the current sessions of the client
+    #[inline]
+    pub(super) fn sessions(&self) -> &HashMap<Uuid, E2ESession> {
+        &self.sessions
+    }
+
+    /// Update a session state
+    ///
+    /// This does not delete the old session keys, but registers the new ones if necessary
+    pub(super) fn update_session(&mut self, session: E2ESession) -> Result<(), Error> {
+        self.key_storage.add_session_key(
+            session.correspondant_id,
+            session.sending_key_id,
+            session.sending_key,
+        )?;
+        self.key_storage.add_session_key(
+            session.correspondant_id,
+            session.receiving_key_id,
+            session.receiving_key,
+        )?;
+        self.key_storage.save_session(&session)?;
+
+        self.sessions.insert(session.correspondant_id, session);
+
+        Ok(())
+    }
+
+    /// Remove old session keys for a user
+    pub(super) fn clean_session_keys(&mut self, user_id: &Uuid) -> Result<(), Error> {
+        if let Some(sess) = self.sessions.get(user_id) {
+            self.key_storage.cleanup_session_keys(
+                user_id,
+                &sess.sending_key_id,
+                &sess.receiving_key_id,
+            )?;
+        }
+
+        Ok(())
+    }
+
     // endregion: Private API
 }

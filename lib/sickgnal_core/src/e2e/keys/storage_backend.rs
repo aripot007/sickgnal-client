@@ -115,6 +115,14 @@ pub trait KeyStorageBackend {
     /// Delete a session key
     fn delete_session_key(&mut self, user: Uuid, key_id: Uuid) -> Result<(), KeyStorageError>;
 
+    /// Cleanup keys in a session, leaving only the current sending and receiving keys
+    fn cleanup_session_keys(
+        &mut self,
+        user: &Uuid,
+        current_sending_key: &Uuid,
+        current_receiving_key: &Uuid,
+    ) -> Result<(), KeyStorageError>;
+
     // Public user keys
     /// Get the public key of a user
     fn user_public_keys(

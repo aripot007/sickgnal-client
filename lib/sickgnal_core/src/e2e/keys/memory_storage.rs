@@ -217,6 +217,15 @@ impl KeyStorageBackend for MemoryKeyStorage {
         Ok(())
     }
 
+    fn cleanup_session_keys(
+        &mut self,
+        user: &Uuid,
+        current_sending_key: &Uuid,
+        current_receiving_key: &Uuid,
+    ) -> Result<(), KeyStorageError> {
+        todo!()
+    }
+
     fn user_public_keys(
         &self,
         user_id: &Uuid,
