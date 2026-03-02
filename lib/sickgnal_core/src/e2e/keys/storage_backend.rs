@@ -89,10 +89,10 @@ pub trait KeyStorageBackend {
     fn session_key(&self, user: Uuid, key_id: Uuid) -> Result<Option<&SymetricKey>, KeyStorageError>;
     
     /// Add a session key
-    fn add_session_key(&mut self, user: Uuid, session_id: Uuid, key: SymetricKey) -> Result<(), KeyStorageError>;
+    fn add_session_key(&mut self, user: Uuid, key_id: Uuid, key: SymetricKey) -> Result<(), KeyStorageError>;
 
     /// Delete a session key
-    fn delete_session_key(&mut self, user: Uuid, session_id: Uuid) -> Result<(), KeyStorageError>;
+    fn delete_session_key(&mut self, user: Uuid, key_id: Uuid) -> Result<(), KeyStorageError>;
 
     // Public user keys
     /// Get the public key of a user
