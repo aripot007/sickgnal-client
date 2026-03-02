@@ -2,6 +2,7 @@
 //! 
 
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::e2e::{self, message_stream::MessageStreamError, keys::KeyStorageError};
 
@@ -20,4 +21,11 @@ pub enum Error {
     /// When the client receives an E2E message it did not except
     #[error("Unexpected message : {0:?}")]
     UnexpectedE2EMessage(e2e::message::E2EMessage),
+
+    /// When the client can't find the requested prekey during key exchange
+    #[error("Could not find ephemeral prekey with id {0}")]
+    NoSuchPrekey(Uuid),
+
+    #[error("Could not decrypt payload : {0}")]
+    DecryptionError(#[from] e2e::message::encrypted_payload::Error)
 }

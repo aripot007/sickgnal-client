@@ -55,7 +55,7 @@ pub enum E2EMessage {
         /// Nonce used to derive the new key
         #[serde(with = "base64json")]
         nonce: Vec<u8>,
-        
+
         /// Id of the derived key
         #[serde(rename = "kid")]
         key_id: Uuid,

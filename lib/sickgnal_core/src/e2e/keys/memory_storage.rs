@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::e2e::keys::{EphemeralSecretKey, IdentityKeyPair, PublicIdentityKeys, SymetricKey, X25519Secret, storage_backend::KeyStorageError};
+use crate::e2e::{client::session::E2ESession, keys::{EphemeralSecretKey, IdentityKeyPair, PublicIdentityKeys, SymetricKey, X25519Secret, storage_backend::KeyStorageError}};
 
 use super::storage_backend::KeyStorageBackend;
 
@@ -23,6 +23,7 @@ pub struct MemoryKeyStorage {
     ephemeral_keys: HashMap<Uuid, X25519Secret>,
     session_keys: HashMap<(Uuid, Uuid), SymetricKey>,
     user_public_keys: HashMap<Uuid, PublicIdentityKeys>,
+    sessions: HashMap<Uuid, E2ESession>,
 }
 
 #[derive(Debug, Error)]
@@ -51,6 +52,7 @@ impl MemoryKeyStorage {
             ephemeral_keys: HashMap::new(),
             session_keys: HashMap::new(),
             user_public_keys: HashMap::new(),
+            sessions: HashMap::new(),
         }
     }
 }
@@ -202,6 +204,35 @@ impl KeyStorageBackend for MemoryKeyStorage {
 
     fn delete_user_public_keys(&mut self, user_id: &uuid::Uuid) -> Result<(), KeyStorageError> {
         self.user_public_keys.remove(user_id);
+        Ok(())
+    }
+
+    /// Load the session with the given user
+    /// 
+    /// Returns [`None`] if no session is currently open with the other user
+    fn load_session(&mut self, user_id: &Uuid) -> Result<Option<E2ESession>, KeyStorageError> {
+        Ok(self.sessions.get(user_id).cloned())
+    }
+
+    /// Load all known sessions
+    fn load_all_sessions(&mut self) -> Result<Vec<E2ESession>, KeyStorageError> {
+
+        let sessions: Vec<E2ESession> = self.sessions.values()
+            .cloned()
+            .collect();
+
+        Ok(sessions)
+    }
+
+    /// Save a session
+    fn save_session(&mut self, session: &E2ESession) -> Result<(), KeyStorageError> {
+        self.sessions.insert(session.correspondant_id, session.clone());
+        Ok(())
+    }
+
+    /// Delete a session from the storage
+    fn delete_session(&mut self, user_id: &Uuid) -> Result<(), KeyStorageError> {
+        self.sessions.remove(user_id);
         Ok(())
     }
 }

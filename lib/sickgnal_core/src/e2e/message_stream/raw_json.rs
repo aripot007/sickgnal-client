@@ -26,7 +26,7 @@ where
     S: AsyncRead + AsyncWrite + Send + Unpin
 {
     /// Constructor
-    pub fn create(stream: S) -> Self {
+    pub fn new(stream: S) -> Self {
         Self { byte_stream: stream }
     }
 }

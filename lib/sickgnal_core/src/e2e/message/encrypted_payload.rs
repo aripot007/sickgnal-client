@@ -52,7 +52,7 @@ pub struct EncryptedPayload {
 
     /// Message ciphertext
     #[serde(rename = "msg", with="base64json")]
-    ciphertext: Vec<u8>,
+    pub(in crate::e2e) ciphertext: Vec<u8>,
 }
 
 /// A message that is transmitted in the ciphertext of an encrypted message
@@ -105,13 +105,12 @@ impl EncryptedPayload {
             ciphertext,
         })
     }
-
 }
 
 impl PayloadMessage {
 
     /// Serialize a PayloadMessage to bytes
-    fn to_bytes(&self) -> Result<Vec<u8>> {
+    pub(in crate::e2e) fn to_bytes(&self) -> Result<Vec<u8>> {
         
         let mut bytes: Vec<u8> = Vec::new();
         
@@ -131,7 +130,7 @@ impl PayloadMessage {
     }
 
     /// Parse a PayloadMessage from bytes
-    fn try_from_bytes(value: &[u8]) -> Result<Self> {
+    pub(in crate::e2e) fn try_from_bytes(value: &[u8]) -> Result<Self> {
         
         if value.is_empty() {
             return Err(Error::EmptyPayload);

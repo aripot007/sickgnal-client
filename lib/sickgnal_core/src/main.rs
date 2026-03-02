@@ -1,10 +1,14 @@
+use std::error::Error;
+
+use async_std::net::TcpStream;
 use chacha20poly1305::{AeadCore, ChaCha20Poly1305, KeyInit, XChaCha20Poly1305, aead::{Aead, Payload}};
 use rand::{Rng, rngs::OsRng};
 use sha2::Digest;
-use sickgnal_core::{chat::message::*, e2e::{keys::IdentityKeyPair, message::{E2EMessage, KeyExchangeData, encrypted_payload::EncryptedPayload}}};
+use sickgnal_core::{chat::message::*, e2e::{client::{Account, E2EClient}, keys::{IdentityKeyPair, memory_storage::MemoryKeyStorage}, message::{E2EMessage, KeyExchangeData, encrypted_payload::EncryptedPayload}, message_stream::raw_json::RawJsonMessageStream}};
 use uuid::Uuid;
 
-pub fn main() {
+#[tokio::main]
+pub async fn main() -> Result<(), Box<dyn Error>>{
     // encrypt_decrypt_example();
     
     let identity_key = IdentityKeyPair::new_from_rng(OsRng);
@@ -45,7 +49,26 @@ pub fn main() {
     // let m = E2EMessage::Error { code: ErrorCode::InternalError };
     // println!("{}", serde_json::to_string(&m).unwrap());
 
-    return;
+    let storage = MemoryKeyStorage::new();
+    let socket = TcpStream::connect("localhost:4267").await.expect("Could not connect to server");
+    let msg_stream = RawJsonMessageStream::new(socket);
+
+    let account = Account {
+        username: "Alice".into(),
+        id: Uuid::new_v4(),
+        token: None,
+    };
+
+    let mut client = E2EClient::create("Bob".into(), storage, msg_stream).await?;
+
+    // Sync messages
+    let mut sync_iterator = client.sync();
+    while let Some(m) = sync_iterator.next().await? {
+        // Do something with the message
+        println!("{:?}", m);
+    }
+
+    return Ok(());
 }
 
 #[allow(unused)]

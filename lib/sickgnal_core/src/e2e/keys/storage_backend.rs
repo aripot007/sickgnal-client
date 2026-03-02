@@ -1,7 +1,7 @@
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::e2e::keys::{EphemeralSecretKey, IdentityKeyPair, PublicIdentityKeys, SymetricKey, X25519Secret};
+use crate::e2e::{client::session::E2ESession, keys::{EphemeralSecretKey, IdentityKeyPair, PublicIdentityKeys, SymetricKey, X25519Secret}};
 
 /// A trait for anything that can store keys
 pub trait KeyStorageBackend {
@@ -17,7 +17,7 @@ pub trait KeyStorageBackend {
     /// Set the identity keypair
     fn set_identity_keypair(&mut self, identity_keypair: IdentityKeyPair) -> Result<(), KeyStorageError>;
 
-    /// Get the identity keypair
+    /// Get the midterm keypair
     fn midterm_key(&self) -> Result<&X25519Secret, KeyStorageError>;
 
     // Get the midterm keypair if set
@@ -104,6 +104,34 @@ pub trait KeyStorageBackend {
     /// Delete the public key of a user
     fn delete_user_public_keys(&mut self, user_id: &Uuid) -> Result<(), KeyStorageError>;
 
+
+    // Session management
+
+    /// Load the session with the given user
+    /// 
+    /// Returns [`None`] if no session is currently open with the other user
+    fn load_session(&mut self, user_id: &Uuid) -> Result<Option<E2ESession>, KeyStorageError>;
+
+    /// Load all known sessions
+    fn load_all_sessions(&mut self) -> Result<Vec<E2ESession>, KeyStorageError>;
+
+    /// Save a session
+    fn save_session(&mut self, session: &E2ESession) -> Result<(), KeyStorageError>;
+
+    /// Save multiple sessions
+    /// 
+    /// Default implementation loops over sessions calling [`Self::save_session`], but this
+    /// can be overriden when bulk-saving optimizations are available
+    fn save_many_sessions(&mut self, sessions: &[&E2ESession]) -> Result<(), KeyStorageError> {
+        for s in sessions {
+            self.save_session(s)?;
+        }
+        
+        Ok(())
+    }
+
+    /// Delete a session from the storage
+    fn delete_session(&mut self, user_id: &Uuid) -> Result<(), KeyStorageError>;
 }
 
 // region:    Boilerplate error implementation

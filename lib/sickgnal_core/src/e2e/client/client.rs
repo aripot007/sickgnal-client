@@ -1,15 +1,16 @@
 //! Context for the E2E protocol
 //! 
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
+use chacha20poly1305::{KeyInit, XChaCha20Poly1305, aead::{Aead, Payload}};
 use ed25519_dalek::Signer;
 use rand::{CryptoRng, RngCore, SeedableRng, rngs::{OsRng, StdRng}};
 use sha2::{Digest, Sha512};
 use uuid::Uuid;
 use x25519_dalek::PublicKey;
 
-use crate::{chat::message::ChatMessage, e2e::{client::Error, keys::{EphemeralSecretKey, IdentityKeyPair, KeyStorageBackend, X25519Secret}, message::{E2EMessage, EphemeralKey, ErrorCode, SignedPreKey}, message_stream::E2EMessageStream}};
+use crate::e2e::{client::{Error, session::E2ESession, sync_iterator::SyncIterator}, kdf::kdf, keys::{EphemeralSecretKey, IdentityKeyPair, KeyStorageBackend, X25519Secret}, message::{E2EMessage, EphemeralKey, ErrorCode, KeyExchangeData, SignedPreKey, encrypted_payload::{self, PayloadMessage}}, message_stream::E2EMessageStream};
 
 // region:    Struct definition
 
@@ -46,14 +47,17 @@ where
 
     // /// If `true`, the client is in instant relay mode
     // instant_relay_mode: bool,
+
+    /// Currently open sessions
+    sessions: HashMap<Uuid, E2ESession>,
 }
 
 // endregion: Struct definition
 
 impl<Storage, MsgStream> E2EClient<Storage, MsgStream> 
 where 
-    Storage: KeyStorageBackend,
-    MsgStream: E2EMessageStream
+    Storage: KeyStorageBackend + Send,
+    MsgStream: E2EMessageStream + Send
 {
 
     /// Get the authentication token from the account, authenticating if necessary
@@ -82,7 +86,7 @@ where
     /// Use [`send_e2e_raw`] to get the raw response without error conversion.
     /// 
     /// [`send_e2e_raw`]: Self::send_e2e_raw
-    async fn send_e2e(&mut self, msg: E2EMessage) -> Result<E2EMessage, Error> {
+    pub(super) async fn send_e2e(&mut self, msg: E2EMessage) -> Result<E2EMessage, Error> {
 
         match self.send_e2e_raw(msg).await? {
             E2EMessage::Error { code } => Err(Error::ProtocolError(code)),
@@ -95,7 +99,7 @@ where
     /// Use [`send_e2e`] to convert protocol errors to [`Error::ProtocolError`].
     /// 
     /// [`send_e2e`]: Self::send_e2e
-    async fn send_e2e_raw(&mut self, msg: E2EMessage) -> Result<E2EMessage, Error> {
+    pub(super) async fn send_e2e_raw(&mut self, msg: E2EMessage) -> Result<E2EMessage, Error> {
         self.msg_stream.send(msg).await?;
         self.msg_stream.receive().await.map_err(Error::from)
     }
@@ -112,7 +116,7 @@ where
     /// Use [`send_authenticated_e2e_raw`] to get the raw response without error conversion.
     /// 
     /// [`send_authenticated_e2e_raw`]: Self::send_authenticated_e2e_raw
-    async fn send_authenticated_e2e(&mut self, msg: E2EMessage) -> Result<E2EMessage, Error> {
+    pub(super) async fn send_authenticated_e2e(&mut self, msg: E2EMessage) -> Result<E2EMessage, Error> {
 
         match self.send_authenticated_e2e_raw(msg).await? {
             E2EMessage::Error { code } => Err(Error::ProtocolError(code)),
@@ -131,7 +135,7 @@ where
     /// Use [`send_authenticated_e2e`] to convert protocol errors to [`Error::ProtocolError`].
     /// 
     /// [`send_authenticated_e2e`]: Self::send_authenticated_e2e
-    async fn send_authenticated_e2e_raw(&mut self, msg: E2EMessage) -> Result<E2EMessage, Error> {
+    pub(super) async fn send_authenticated_e2e_raw(&mut self, msg: E2EMessage) -> Result<E2EMessage, Error> {
         
         let token = self.get_token().await?.clone();
         let mut msg = msg;
@@ -156,20 +160,24 @@ where
 
     /// Load a client with an account
     pub fn load(account: Account, key_storage: Storage, msg_stream: MsgStream) -> Self {
+        todo!();
         Self { 
             account, 
             key_storage, 
             msg_stream,
             rng: StdRng::from_rng(OsRng).expect("Could not initialize random number generator"),
+            sessions: HashMap::new()
         }
     }
 
     pub fn load_and_authenticate(account: Account, key_storage: Storage, msg_stream: MsgStream) -> Self {
+        todo!();
         Self { 
             account, 
             key_storage, 
             msg_stream,
             rng: StdRng::from_rng(OsRng).expect("Could not initialize random number generator"),
+            sessions: HashMap::new()
         }
     }
 
@@ -209,7 +217,8 @@ where
             account,
             key_storage,
             msg_stream,
-            rng
+            rng,
+            sessions: HashMap::new(),
         })
     }
 
@@ -350,25 +359,97 @@ where
         Ok(nb_available + to_upload)
     }
 
-    /// Get initial messages from the server
-    /// 
-    /// Get up to `limit` conversation opening messages from the server.
-    /// 
-    /// This completes the X3DH handshake and saves the cryptographic material required
-    /// to decrypt furhter messages from the conversation.
-    pub(crate) async fn get_initial_messages(&mut self, limit: usize) -> Result<Vec<ChatMessage>, Error> {
-        todo!()
-    }
-
-    /// Get stored messages from the server
-    /// 
-    /// Get up to `limit` messages from the server.
-    pub(crate) async fn get_messages(&mut self, limit: usize) -> Result<Vec<ChatMessage>, Error> {
-        todo!()
-    }
-
     /// Perform the initial synchronization with the server
-    pub async fn sync(&mut self) -> Result<(), Error> {
-        todo!()
+    pub fn sync(&mut self) -> SyncIterator<'_, Storage, MsgStream> {
+        SyncIterator::new(self)
+    }
+
+    /// Open a new session with a user using key exchange data, and return the decrypted payload
+    pub(super) async fn handle_open_session(&mut self, sender_id: Uuid, kex_data: &KeyExchangeData) -> Result<PayloadMessage, Error> {
+        
+        // TODO: Handle pre-existing sessions with same and different public keys
+        
+        // Get ephemeral key
+        let mut prekey = None;
+        if let Some(id) = &kex_data.recipient_prekey_id {
+
+            let key = self.key_storage.pop_ephemeral_key(id)?;
+            
+            if key.is_none() {
+                return Err(Error::NoSuchPrekey(*id))
+            }
+
+            prekey = key;
+        }
+
+        let midterm_key = self.key_storage.midterm_key()?;
+        let identity_key = &self.key_storage.identity_keypair()?.x25519_secret;
+
+        let dh1 = midterm_key.diffie_hellman(&kex_data.identity_key.x25519).to_bytes();  // DH1 = X25519(p_B, I_A)
+        let dh2 = identity_key.diffie_hellman(&kex_data.ephemeral_prekey).to_bytes();    // DH2 = X25519(i_B, E_A)
+        let dh3 = midterm_key.diffie_hellman(&kex_data.ephemeral_prekey).to_bytes();     // DH3 = X25519(p_B, E_A)
+
+        // Compute DH4 if ephemeral prekey was used
+        let dh4_opt = prekey.map(|secret| secret.diffie_hellman(&kex_data.ephemeral_prekey).to_bytes());  // DH4 = X25519(t_Bi, E_A)
+
+        let shared_secret;
+        
+        // Use DH4 if present
+        if let Some(dh4) = dh4_opt {
+            shared_secret = kdf(&[dh1, dh2, dh3, dh4].concat());
+        } else {
+            shared_secret = kdf(&[dh1, dh2, dh3].concat());
+        }
+
+        // Get our public key from the private secret
+        let public_identity_key = PublicKey::from(identity_key);
+
+        // Our receiving key, which corresponds to the sender's sending key (i)
+        let recv_key = kdf(&[shared_secret.as_slice(), kex_data.identity_key.x25519.as_bytes()].concat());
+        
+        // Our sending key, which corresponds to the sender's receiving key (j)
+        let send_key = kdf(&[shared_secret.as_slice(), public_identity_key.as_bytes()].concat());
+
+        // Try to decrypt the message
+        let aead = XChaCha20Poly1305::new_from_slice(&recv_key)
+            .expect("32 bytes is the correct key size for XChaCha20Poly1305");
+
+        let aad = &[
+            kex_data.identity_key.x25519.as_bytes().as_slice(),  // I_A
+            public_identity_key.as_bytes(),  // I_B
+            kex_data.send_key_id.as_bytes(), // i
+            kex_data.receive_key_id.as_bytes(), // j
+        ].concat();
+
+        let payload = Payload {
+            msg: &kex_data.msg_ciphertext.ciphertext,
+            aad,
+        };
+
+        let bytes = aead.decrypt(&kex_data.msg_ciphertext.nonce.into(), payload)
+            .map_err(encrypted_payload::Error::from)?;
+
+        let payload = PayloadMessage::try_from_bytes(&bytes)?;
+
+        // Save the keys and session information
+        self.key_storage.set_user_public_keys(sender_id, kex_data.identity_key.clone())?;
+
+        // Key ids are inverted since they're from the sender's POV
+        self.key_storage.add_session_key(sender_id, kex_data.send_key_id, recv_key)?;
+        self.key_storage.add_session_key(sender_id, kex_data.receive_key_id, send_key)?;
+
+        let sess = E2ESession {
+            correspondant_id: sender_id,
+            sending_key_id: kex_data.receive_key_id,
+            sending_key: recv_key,
+            key_msg_count: 0,
+            receiving_key_id: kex_data.send_key_id,
+            receiving_key: send_key,
+        };
+        
+        self.key_storage.save_session(&sess)?;
+        self.sessions.insert(sender_id, sess);
+
+        Ok(payload)
     }
 }

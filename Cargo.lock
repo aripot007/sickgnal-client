@@ -153,17 +153,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-recursion"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b43422f69d8ff38f95f1b2bb76517c91589a924d1559a0e935d7c8ce0274c11"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "async-std"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -539,12 +528,6 @@ dependencies = [
  "event-listener 5.4.1",
  "pin-project-lite",
 ]
-
-[[package]]
-name = "fallible-iterator"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
 
 [[package]]
 name = "fastrand"
@@ -1150,7 +1133,6 @@ dependencies = [
 name = "sickgnal_core"
 version = "0.1.0"
 dependencies = [
- "async-recursion",
  "async-std",
  "async-trait",
  "base64",
@@ -1158,7 +1140,6 @@ dependencies = [
  "chrono",
  "curve25519-dalek",
  "ed25519-dalek",
- "fallible-iterator",
  "futures",
  "hkdf",
  "rand",
