@@ -60,8 +60,6 @@ where
     /// Cryptographically secure PRNG used to generate keys
     rng: StdRng,
 
-    // /// If `true`, the client is in instant relay mode
-    // instant_relay_mode: bool,
     /// Currently open sessions
     sessions: HashMap<Uuid, E2ESession>,
 }
@@ -73,6 +71,150 @@ where
     Storage: KeyStorageBackend + Send,
     MsgStream: E2EMessageStream + Send,
 {
+    // region:    Public API
+
+    /// Load a client with an account
+    pub fn load(
+        account: Account,
+        mut key_storage: Storage,
+        msg_stream: MsgStream,
+    ) -> Result<Self, Error> {
+        let sessions = key_storage
+            .load_all_sessions()?
+            .into_iter()
+            .map(|s| (s.correspondant_id, s))
+            .collect();
+
+        Ok(Self {
+            account,
+            key_storage,
+            msg_stream,
+            rng: StdRng::from_rng(OsRng).expect("Could not initialize random number generator"),
+            sessions,
+        })
+    }
+
+    /// Create a new client with the given username
+    ///
+    /// Generates the identity key if it does not exist.
+    pub async fn create(
+        username: String,
+        mut key_storage: Storage,
+        mut msg_stream: MsgStream,
+    ) -> Result<Self, Error> {
+        let mut rng =
+            StdRng::from_rng(OsRng).expect("Could not initialize random number generator");
+
+        let idk = match key_storage.identity_keypair_opt()? {
+            Some(keypair) => keypair,
+            None => Self::create_identity_keypair(&mut key_storage, &mut rng)?,
+        };
+
+        // Register the username on the server
+        let m = E2EMessage::create_account(idk, username.clone());
+        msg_stream.send(m).await?;
+
+        // Wait for the response
+        let resp = msg_stream.receive().await?;
+
+        let account = match resp {
+            E2EMessage::AuthToken { id, token } => Account {
+                username,
+                id,
+                token: Some(token),
+            },
+            E2EMessage::Error { code } => return Err(code.into()),
+            m => return Err(Error::UnexpectedE2EMessage(m)),
+        };
+
+        Ok(Self {
+            account,
+            key_storage,
+            msg_stream,
+            rng,
+            sessions: HashMap::new(),
+        })
+    }
+
+    /// Perform the initial synchronization with the server
+    pub fn sync(&mut self) -> SyncIterator<'_, Storage, MsgStream> {
+        SyncIterator::new(self)
+    }
+
+    /// Initialize prekeys and upload them to the server
+    pub(crate) async fn init_prekeys(&mut self, prekey_count: usize) -> Result<(), Error> {
+        self.upload_prekeys(prekey_count, true, true).await
+    }
+
+    /// Synchronize the prekeys with the ones uploaded on the server.
+    ///
+    /// This removes unknown keys from the server, and uploads new prekeys if there are less
+    /// than `min_prekeys` available on the server (up to the server limit).
+    ///
+    /// If `rotate_midterm_key` is true, this also rotates the midterm key.
+    ///
+    /// Returns the number of available ephemeral prekeys on the server.
+    pub(crate) async fn sync_prekeys(
+        &mut self,
+        min_prekeys: usize,
+        rotate_midterm_key: bool,
+    ) -> Result<usize, Error> {
+        // Get the status of the prekeys
+        let resp = self
+            .send_authenticated_e2e(E2EMessage::PreKeyStatusRequest { token: "".into() })
+            .await?;
+
+        let (limit, available_keys) = match resp {
+            E2EMessage::PreKeyStatus { limit, keys } => (limit, keys),
+            m => return Err(Error::UnexpectedE2EMessage(m)),
+        };
+
+        let nb_available = available_keys.len();
+
+        // Remove keys on the server that are not on the client
+        let server_keys: HashSet<Uuid> = HashSet::from_iter(available_keys.into_iter());
+        let stored_keys: HashSet<Uuid> =
+            HashSet::from_iter(self.key_storage.available_ephemeral_keys()?.cloned());
+
+        let to_remove: Vec<Uuid> = server_keys.difference(&stored_keys).cloned().collect();
+
+        if !to_remove.is_empty() {
+            let resp = self
+                .send_authenticated_e2e(E2EMessage::PreKeyDelete {
+                    token: "".into(),
+                    keys: to_remove,
+                })
+                .await?;
+
+            if !matches!(resp, E2EMessage::Ok) {
+                return Err(Error::UnexpectedE2EMessage(resp));
+            }
+        }
+
+        // Upload new prekeys and optionally the midterm key
+        let mut to_upload = 0;
+        if nb_available < min_prekeys {
+            to_upload = (min_prekeys - nb_available).clamp(0, limit as usize);
+        }
+
+        if to_upload > 0 || rotate_midterm_key {
+            self.upload_prekeys(to_upload, rotate_midterm_key, false)
+                .await?;
+        }
+
+        Ok(nb_available + to_upload)
+    }
+
+    /// Get the underlying client account
+    #[inline]
+    pub fn account(&self) -> &Account {
+        &self.account
+    }
+
+    // endregion: Public API
+
+    // region:    Private API
+
     /// Get the authentication token from the account, authenticating if necessary
     async fn get_token(&mut self) -> Result<&String, Error> {
         if self.account.token.is_none() {
@@ -86,12 +228,6 @@ where
             .expect("authenticate should set account token");
 
         Ok(token)
-    }
-
-    /// Get the underlying client account
-    #[inline]
-    pub fn account(&self) -> &Account {
-        &self.account
     }
 
     /// Send a [`E2EMessage`] and wait for the response
@@ -179,33 +315,6 @@ where
         Ok(resp)
     }
 
-    /// Load a client with an account
-    pub fn load(account: Account, key_storage: Storage, msg_stream: MsgStream) -> Self {
-        todo!();
-        Self {
-            account,
-            key_storage,
-            msg_stream,
-            rng: StdRng::from_rng(OsRng).expect("Could not initialize random number generator"),
-            sessions: HashMap::new(),
-        }
-    }
-
-    pub fn load_and_authenticate(
-        account: Account,
-        key_storage: Storage,
-        msg_stream: MsgStream,
-    ) -> Self {
-        todo!();
-        Self {
-            account,
-            key_storage,
-            msg_stream,
-            rng: StdRng::from_rng(OsRng).expect("Could not initialize random number generator"),
-            sessions: HashMap::new(),
-        }
-    }
-
     /// Create an identity keypair and store it in the key storage
     fn create_identity_keypair<T: RngCore + CryptoRng>(
         storage: &mut Storage,
@@ -214,53 +323,6 @@ where
         let idk = IdentityKeyPair::new_from_rng(rng);
         storage.set_identity_keypair(idk.clone())?;
         storage.identity_keypair().map_err(Error::from)
-    }
-
-    /// Create a new client with the given username
-    ///
-    /// Generates the identity key if it does not exist.
-    pub async fn create(
-        username: String,
-        mut key_storage: Storage,
-        mut msg_stream: MsgStream,
-    ) -> Result<Self, Error> {
-        let mut rng =
-            StdRng::from_rng(OsRng).expect("Could not initialize random number generator");
-
-        let idk = match key_storage.identity_keypair_opt()? {
-            Some(keypair) => keypair,
-            None => Self::create_identity_keypair(&mut key_storage, &mut rng)?,
-        };
-
-        // Register the username on the server
-        let m = E2EMessage::create_account(idk, username.clone());
-        msg_stream.send(m).await?;
-
-        // Wait for the response
-        let resp = msg_stream.receive().await?;
-
-        let account = match resp {
-            E2EMessage::AuthToken { id, token } => Account {
-                username,
-                id,
-                token: Some(token),
-            },
-            E2EMessage::Error { code } => return Err(code.into()),
-            m => return Err(Error::UnexpectedE2EMessage(m)),
-        };
-
-        Ok(Self {
-            account,
-            key_storage,
-            msg_stream,
-            rng,
-            sessions: HashMap::new(),
-        })
-    }
-
-    /// Initialize prekeys and upload them to the server
-    pub async fn init_prekeys(&mut self, prekey_count: usize) -> Result<(), Error> {
-        self.upload_prekeys(prekey_count, true, true).await
     }
 
     /// Authenticate using challenge-response authentication and
@@ -360,70 +422,6 @@ where
             E2EMessage::Ok => Ok(()),
             m => Err(Error::UnexpectedE2EMessage(m)),
         }
-    }
-
-    /// Synchronize the prekeys with the ones uploaded on the server.
-    ///
-    /// This removes unknown keys from the server, and uploads new prekeys if there are less
-    /// than `min_prekeys` available on the server (up to the server limit).
-    ///
-    /// If `rotate_midterm_key` is true, this also rotates the midterm key.
-    ///
-    /// Returns the number of available ephemeral prekeys on the server.
-    pub(crate) async fn sync_prekeys(
-        &mut self,
-        min_prekeys: usize,
-        rotate_midterm_key: bool,
-    ) -> Result<usize, Error> {
-        // Get the status of the prekeys
-        let resp = self
-            .send_authenticated_e2e(E2EMessage::PreKeyStatusRequest { token: "".into() })
-            .await?;
-
-        let (limit, available_keys) = match resp {
-            E2EMessage::PreKeyStatus { limit, keys } => (limit, keys),
-            m => return Err(Error::UnexpectedE2EMessage(m)),
-        };
-
-        let nb_available = available_keys.len();
-
-        // Remove keys on the server that are not on the client
-        let server_keys: HashSet<Uuid> = HashSet::from_iter(available_keys.into_iter());
-        let stored_keys: HashSet<Uuid> =
-            HashSet::from_iter(self.key_storage.available_ephemeral_keys()?.cloned());
-
-        let to_remove: Vec<Uuid> = server_keys.difference(&stored_keys).cloned().collect();
-
-        if !to_remove.is_empty() {
-            let resp = self
-                .send_authenticated_e2e(E2EMessage::PreKeyDelete {
-                    token: "".into(),
-                    keys: to_remove,
-                })
-                .await?;
-
-            if !matches!(resp, E2EMessage::Ok) {
-                return Err(Error::UnexpectedE2EMessage(resp));
-            }
-        }
-
-        // Upload new prekeys and optionally the midterm key
-        let mut to_upload = 0;
-        if nb_available < min_prekeys {
-            to_upload = (min_prekeys - nb_available).clamp(0, limit as usize);
-        }
-
-        if to_upload > 0 || rotate_midterm_key {
-            self.upload_prekeys(to_upload, rotate_midterm_key, false)
-                .await?;
-        }
-
-        Ok(nb_available + to_upload)
-    }
-
-    /// Perform the initial synchronization with the server
-    pub fn sync(&mut self) -> SyncIterator<'_, Storage, MsgStream> {
-        SyncIterator::new(self)
     }
 
     /// Open a new session with a user using key exchange data, and return the decrypted payload
@@ -532,4 +530,6 @@ where
 
         Ok(payload)
     }
+
+    // endregion: Private API
 }
