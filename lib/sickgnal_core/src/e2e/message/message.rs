@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::e2e::keys::{IdentityKeyPair, PublicIdentityKeys};
+use crate::e2e::{keys::{IdentityKeyPair, PublicIdentityKeys}, message::encrypted_payload::EncryptedPayload};
 
 use super::serde::*;
 
@@ -45,7 +45,24 @@ pub enum E2EMessage {
         sender_id: Uuid,
         
         #[serde(flatten)]
-        msg_ciphertext: ChatMessageCiphertext
+        msg_ciphertext: EncryptedPayload
+    },
+
+    /// Message sent on key rotation
+    #[serde(rename = "3")]
+    KeyRotation {
+
+        /// Nonce used to derive the new key
+        #[serde(with = "base64json")]
+        nonce: Vec<u8>,
+        
+        /// Id of the derived key
+        #[serde(rename = "kid")]
+        key_id: Uuid,
+
+        /// Optional random padding
+        #[serde(rename = "pad")]
+        padding: Option<String>,
     },
 
     /// Profile of a user
@@ -226,7 +243,7 @@ pub enum E2EMessage {
         recipient_id: Uuid,
         
         #[serde(flatten)]
-        msg_ciphertext: ChatMessageCiphertext
+        msg_ciphertext: EncryptedPayload
     },
 
     /// Get initial messages stored on the server
@@ -389,23 +406,7 @@ pub struct KeyExchangeData {
 
     /// Initial message ciphertext
     #[serde(flatten)]
-    pub msg_ciphertext: ChatMessageCiphertext
-}
-
-/// Message ciphertext and associated Nonce to decrypt it
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessageCiphertext {
-    /// Nonce used for message encryption
-    #[serde(with="base64nonce")]
-    pub nonce: Nonce,
-
-    /// Id of the key used to encrypt the message
-    #[serde(rename = "kid")]
-    pub key_id: Uuid,
-
-    /// Message ciphertext
-    #[serde(with="base64json")]
-    pub msg: Vec<u8>,
+    pub msg_ciphertext: EncryptedPayload
 }
 
 // endregion: Struct definition

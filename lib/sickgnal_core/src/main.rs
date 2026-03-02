@@ -1,7 +1,7 @@
 use chacha20poly1305::{AeadCore, ChaCha20Poly1305, KeyInit, XChaCha20Poly1305, aead::{Aead, Payload}};
 use rand::{Rng, rngs::OsRng};
 use sha2::Digest;
-use sickgnal_core::{chat::message::*, e2e::{keys::IdentityKeyPair, message::{ChatMessageCiphertext, E2EMessage, ErrorCode, KeyExchangeData, PreKeyBundle}}};
+use sickgnal_core::{chat::message::*, e2e::{keys::IdentityKeyPair, message::{E2EMessage, KeyExchangeData, encrypted_payload::EncryptedPayload}}};
 use uuid::Uuid;
 
 pub fn main() {
@@ -15,24 +15,29 @@ pub fn main() {
     OsRng.fill(&mut nonce);
     
     let chacha = XChaCha20Poly1305::new_from_slice(&ephemeral_key).unwrap();
-    let payload = b"Hello world !";
-    let cipher = chacha.encrypt(&nonce.into(), payload.as_slice()).unwrap();
     
+    let msg = ChatMessage::new_text(Uuid::new_v4(), "Hello world !");
+    
+    let msg_ciphertext = EncryptedPayload::encrypt_chat(Uuid::new_v4(), nonce, &chacha, msg)
+        .expect("encryption failed");
+
     let data = KeyExchangeData {
         identity_key: identity_key.public_keys(),
         ephemeral_prekey: ephemeral_key.into(),
         recipient_prekey_id: Some(Uuid::new_v4()),
         send_key_id: Uuid::new_v4(),
         receive_key_id: Uuid::new_v4(),
-        msg_ciphertext: ChatMessageCiphertext {
-            nonce: nonce.into(),
-            key_id: Uuid::new_v4(),
-            msg: cipher,
-        },
+        msg_ciphertext,
     };
 
-    let m = E2EMessage::SendInitialMessage { token: "auth token".into(), recipient_id: Uuid::new_v4(), data };
-    println!("{}", serde_json::to_string(&m).unwrap());
+    let m = E2EMessage::SendInitialMessage { token: "auth token".into(), recipient_id: Uuid::new_v4(), data: data.clone() };
+    
+    let json_str = serde_json::to_string(&m).unwrap();
+    println!("{}", json_str);
+
+    let decrypted_msg = data.msg_ciphertext.decrypt(&chacha).expect("Decryption failed");
+
+    println!("{:?}", decrypted_msg);
 
     // // let m = E2EMessage::ConversationOpen {thestring: "Hello !".into() };
     // // println!("{}", serde_json::to_string(&m).unwrap());
