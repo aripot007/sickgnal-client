@@ -1,29 +1,38 @@
 //! Context for the E2E protocol
 //!
 
-use std::{collections::{HashMap, HashSet}, ops::DerefMut};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::DerefMut,
+};
 
 use chacha20poly1305::{
-    AeadCore, KeyInit, XChaCha20Poly1305, aead::{Aead, Payload}
+    AeadCore, KeyInit, XChaCha20Poly1305,
+    aead::{Aead, Payload},
 };
 use ed25519_dalek::Signer;
 use rand::{
-    CryptoRng, Rng, RngCore, SeedableRng, distributions::{Alphanumeric, DistString}, rngs::{self, OsRng, StdRng}
+    CryptoRng, Rng, RngCore, SeedableRng,
+    distributions::{Alphanumeric, DistString},
+    rngs::{self, OsRng, StdRng},
 };
 use sha2::{Digest, Sha512};
 use uuid::Uuid;
 use x25519_dalek::PublicKey;
 
-use crate::{chat::message::ChatMessage, e2e::{
-    client::{Error, session::E2ESession, sync_iterator::SyncIterator},
-    kdf::kdf,
-    keys::{EphemeralSecretKey, IdentityKeyPair, KeyStorageBackend, X25519Secret},
-    message::{
-        E2EMessage, EphemeralKey, ErrorCode, KeyExchangeData, SignedPreKey,
-        encrypted_payload::{self, EncryptedPayload, PayloadMessage},
+use crate::{
+    chat::message::ChatMessage,
+    e2e::{
+        client::{Error, session::E2ESession, sync_iterator::SyncIterator},
+        kdf::kdf,
+        keys::{EphemeralSecretKey, IdentityKeyPair, KeyStorageBackend, X25519Secret},
+        message::{
+            E2EMessage, EphemeralKey, ErrorCode, KeyExchangeData, SignedPreKey,
+            encrypted_payload::{self, EncryptedPayload, PayloadMessage},
+        },
+        message_stream::E2EMessageStream,
     },
-    message_stream::E2EMessageStream,
-}};
+};
 
 // region:    Struct definition
 
@@ -32,13 +41,13 @@ use crate::{chat::message::ChatMessage, e2e::{
 const MAX_MSGS_PER_KEY: u64 = 100_000;
 
 /// Range around [`MAX_MSGS_PER_KEY`] where key rotation should occur
-/// 
+///
 /// Each time a key rotation happens, a random number between `MAX_MSGS_PER_KEY` +- `MAX_MSGS_PER_KEY_DEVIATION`
 /// is generated, and the next key derivation will happen at that time
 const MAX_MSGS_PER_KEY_DEVIATION: u64 = 50;
 
-const KEY_ROTATION_MIN_PAD: u64 = 0;  // Minimum padding for key rotation messages
-const KEY_ROTATION_MAX_PAD: u64 = 100;  // Maximum padding for key rotation messages
+const KEY_ROTATION_MIN_PAD: u64 = 0; // Minimum padding for key rotation messages
+const KEY_ROTATION_MAX_PAD: u64 = 100; // Maximum padding for key rotation messages
 
 /// An account on the relay server
 pub struct Account {
@@ -218,7 +227,6 @@ where
 
     /// Send a [`ChatMessage`] to another user
     pub async fn send(&mut self, to: Uuid, mut message: ChatMessage) -> Result<(), Error> {
-        
         message.sender_id = self.account.id;
 
         // Get the existing session or create a new one
@@ -230,24 +238,25 @@ where
         }
 
         sess.key_msg_count = sess.key_msg_count.saturating_sub(1);
-        
+
         // Perform key rotation if necessary
         if sess.key_msg_count == 0 {
-            
             let mut nonce: [u8; 32] = [0; 32];
             self.rng.fill_bytes(&mut nonce);
-            
+
             let next_key = kdf(&[sess.sending_key.as_slice(), &nonce].concat());
             let next_key_id = Uuid::new_v4();
 
-            let padding_length = self.rng.gen_range(KEY_ROTATION_MIN_PAD..=KEY_ROTATION_MAX_PAD);
+            let padding_length = self
+                .rng
+                .gen_range(KEY_ROTATION_MIN_PAD..=KEY_ROTATION_MAX_PAD);
 
             let pad = Alphanumeric.sample_string(&mut self.rng, padding_length as usize);
 
             let m = E2EMessage::KeyRotation {
                 nonce: nonce.into(),
                 key_id: next_key_id,
-                padding: Some(pad), 
+                padding: Some(pad),
             };
 
             match self.send_authenticated_e2e(m).await {
@@ -260,7 +269,8 @@ where
             sess.sending_key_id = next_key_id;
             sess.sending_key = next_key;
 
-            self.key_storage.add_session_key(to, next_key_id, next_key)?;
+            self.key_storage
+                .add_session_key(to, next_key_id, next_key)?;
         }
 
         // Save the updated session
@@ -271,11 +281,12 @@ where
 
         let nonce = XChaCha20Poly1305::generate_nonce(&mut self.rng);
 
-        let msg_ciphertext = EncryptedPayload::encrypt_chat(sess.sending_key_id, nonce.into(), &aead, message)?;
+        let msg_ciphertext =
+            EncryptedPayload::encrypt_chat(sess.sending_key_id, nonce.into(), &aead, message)?;
 
         let m = E2EMessage::ConversationMessage {
-            sender_id: self.account.id, 
-            msg_ciphertext 
+            sender_id: self.account.id,
+            msg_ciphertext,
         };
 
         match self.send_authenticated_e2e(m).await {
@@ -507,16 +518,23 @@ where
     }
 
     /// Open a new session with a user with an initial [`ChatMessage`]
-    async fn open_new_session(&mut self, recipient_id: &Uuid, message: ChatMessage) -> Result<(), Error> {
-        
+    async fn open_new_session(
+        &mut self,
+        recipient_id: &Uuid,
+        message: ChatMessage,
+    ) -> Result<(), Error> {
         // Get the recipient's prekeys
-        let rq = E2EMessage::PreKeyBundleRequest { token: "".into(), id: *recipient_id };
+        let rq = E2EMessage::PreKeyBundleRequest {
+            token: "".into(),
+            id: *recipient_id,
+        };
 
         let bundle = match self.send_authenticated_e2e_raw(rq).await {
-            
             Ok(E2EMessage::PreKeyBundle(bundle)) => bundle,
 
-            Ok(E2EMessage::Error { code: ErrorCode::UserNotFound }) => return Err(Error::UserNotFound),
+            Ok(E2EMessage::Error {
+                code: ErrorCode::UserNotFound,
+            }) => return Err(Error::UserNotFound),
             Ok(m) => return Err(Error::UnexpectedE2EMessage(m)),
             Err(e) => return Err(e),
         };
@@ -527,10 +545,10 @@ where
         let ek = x25519_dalek::ReusableSecret::random_from_rng(&mut self.rng);
 
         // Compute Diffie-Hellman parameters
-        
+
         // DH1 = X25519(i_A, P_B)
         let dh1 = idk.diffie_hellman(&bundle.midterm_prekey).to_bytes();
-        
+
         // DH2 = X25519(e_A, I_B)
         let dh2 = ek.diffie_hellman(&bundle.identity_keys.x25519).to_bytes();
 
@@ -539,7 +557,7 @@ where
 
         let shared_secret;
         let mut prekey_id = None;
-            
+
         // Use DH4 if ephemeral prekey is available
         if let Some(tk) = bundle.ephemeral_prekey {
             prekey_id = Some(tk.id);
@@ -559,14 +577,14 @@ where
         let public_identity_key = PublicKey::from(idk);
 
         // Our sending key KDF(S || I_A)
-        let send_key = kdf(&[
-            shared_secret.as_slice(),
-            public_identity_key.as_bytes(),
-        ]
-        .concat());
+        let send_key = kdf(&[shared_secret.as_slice(), public_identity_key.as_bytes()].concat());
 
         // Our receiving key KDF(S || I_B)
-        let recv_key = kdf(&[shared_secret.as_slice(), bundle.identity_keys.x25519.as_bytes()].concat());
+        let recv_key = kdf(&[
+            shared_secret.as_slice(),
+            bundle.identity_keys.x25519.as_bytes(),
+        ]
+        .concat());
 
         // Generate some ids for the keys
         let send_key_id = Uuid::new_v4();
@@ -603,7 +621,7 @@ where
         };
 
         // Construct and send the message
-        
+
         let kex_data = KeyExchangeData {
             identity_key: identity_keypair.public_keys(),
             ephemeral_prekey: public_ek,
@@ -626,7 +644,8 @@ where
         }
 
         // Save the session
-        let key_msg_count = MAX_MSGS_PER_KEY - MAX_MSGS_PER_KEY_DEVIATION + self.rng.gen_range(0 ..= 2*MAX_MSGS_PER_KEY_DEVIATION);
+        let key_msg_count = MAX_MSGS_PER_KEY - MAX_MSGS_PER_KEY_DEVIATION
+            + self.rng.gen_range(0..=2 * MAX_MSGS_PER_KEY_DEVIATION);
         let session = E2ESession {
             correspondant_id: *recipient_id,
             sending_key_id: send_key_id,
@@ -733,7 +752,8 @@ where
         self.key_storage
             .add_session_key(sender_id, kex_data.receive_key_id, send_key)?;
 
-        let key_msg_count = MAX_MSGS_PER_KEY - MAX_MSGS_PER_KEY_DEVIATION + self.rng.gen_range(0 ..= 2*MAX_MSGS_PER_KEY_DEVIATION);
+        let key_msg_count = MAX_MSGS_PER_KEY - MAX_MSGS_PER_KEY_DEVIATION
+            + self.rng.gen_range(0..=2 * MAX_MSGS_PER_KEY_DEVIATION);
 
         let sess = E2ESession {
             correspondant_id: sender_id,

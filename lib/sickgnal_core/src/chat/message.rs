@@ -7,9 +7,8 @@ use uuid::Uuid;
 /// Message de contenu
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
-
     /// Id de la personne ayant envoyé le message
-    /// 
+    ///
     /// Rempli par le protocole E2E, on peut utiliser la valeur par défaut
     /// `Uuid::default()` à la création.
     #[serde(skip)]
