@@ -10,7 +10,7 @@ use crate::{
     e2e::{
         client::{E2EClient, Error},
         kdf::kdf,
-        keys::{KeyStorageBackend, SymetricKey},
+        keys::{E2EStorageBackend, SymetricKey},
         message::{
             E2EMessage, KeyExchangeData,
             encrypted_payload::{EncryptedPayload, PayloadMessage},
@@ -30,7 +30,7 @@ use crate::{
 /// be lost.
 pub struct SyncIterator<'c, Storage, MsgStream>
 where
-    Storage: KeyStorageBackend + Send,
+    Storage: E2EStorageBackend + Send,
     MsgStream: E2EMessageStream + Send,
 {
     /// Number of messages to fetch on each batch
@@ -77,7 +77,7 @@ struct SessionKeys {
 
 impl<'c, Storage, MsgStream> SyncIterator<'c, Storage, MsgStream>
 where
-    Storage: KeyStorageBackend + Send,
+    Storage: E2EStorageBackend + Send,
     MsgStream: E2EMessageStream + Send,
 {
     pub(super) fn new(client: &'c mut E2EClient<Storage, MsgStream>) -> Self {

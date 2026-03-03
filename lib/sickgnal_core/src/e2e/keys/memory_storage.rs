@@ -19,7 +19,7 @@ use crate::e2e::{
     },
 };
 
-use super::storage_backend::KeyStorageBackend;
+use super::storage_backend::E2EStorageBackend;
 
 /// A simple, non-persistent, in-memory [`KeyStorageBackend`]
 #[derive(Clone)]
@@ -62,7 +62,7 @@ impl MemoryKeyStorage {
     }
 }
 
-impl KeyStorageBackend for MemoryKeyStorage {
+impl E2EStorageBackend for MemoryKeyStorage {
     fn identity_keypair(&self) -> Result<&IdentityKeyPair, KeyStorageError> {
         self.identity_keypair.as_ref().ok_or(Error::NoKey.into())
     }

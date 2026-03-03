@@ -19,7 +19,7 @@ use x25519_dalek::PublicKey;
 use crate::e2e::{
     client::{Error, session::E2ESession, sync_iterator::SyncIterator},
     kdf::kdf,
-    keys::{EphemeralSecretKey, IdentityKeyPair, KeyStorageBackend, X25519Secret},
+    keys::{EphemeralSecretKey, IdentityKeyPair, E2EStorageBackend, X25519Secret},
     message::{
         E2EMessage, EphemeralKey, ErrorCode, KeyExchangeData, SignedPreKey,
         encrypted_payload::{self, PayloadMessage},
@@ -43,7 +43,7 @@ pub struct Account {
 /// A client for the E2E protocol
 pub struct E2EClient<Storage, MsgStream>
 where
-    Storage: KeyStorageBackend,
+    Storage: E2EStorageBackend,
     MsgStream: E2EMessageStream,
 {
     /// User account on the server
@@ -70,7 +70,7 @@ where
 
 impl<Storage, MsgStream> E2EClient<Storage, MsgStream>
 where
-    Storage: KeyStorageBackend + Send,
+    Storage: E2EStorageBackend + Send,
     MsgStream: E2EMessageStream + Send,
 {
     /// Get the authentication token from the account, authenticating if necessary

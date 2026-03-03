@@ -7,7 +7,7 @@ use crate::e2e::{
 };
 
 /// A trait for anything that can store keys
-pub trait KeyStorageBackend {
+pub trait E2EStorageBackend {
     // Identity and mid-term keys
 
     /// Get the identity keypair
