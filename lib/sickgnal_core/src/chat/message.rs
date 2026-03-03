@@ -68,7 +68,22 @@ pub enum ControlMessage {
         #[serde(rename = "data")]
         new_content: Content,
     },
+
+    /// Message reçu
+    AckReception {
+        /// Id du message reçu
+        id: Uuid,
+    },
+
+    /// Message lu
+    AckRead {
+        /// Id du message lu
+        id: Uuid,
+    },
+    
+    IsTyping {},
 }
+
 
 // endregion: Struct definitions
 
