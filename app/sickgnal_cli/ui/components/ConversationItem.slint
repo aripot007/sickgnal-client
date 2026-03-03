@@ -1,0 +1,80 @@
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+export component ConversationItem inherits Rectangle {
+    in property <int> conversation_id;
+    in property <string> name;
+    in property <string> last_message;
+    in property <string> last_message_time;
+    in property <int> unread_count;
+    in property <bool> is_active: false;
+
+    callback clicked();
+    callback delete_clicked();
+
+    background: is_active ? Theme.background-dark : touch.has_hover ? Theme.background-light.darker(0.05) : Theme.background-light;
+    border-radius: 8px;
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    if root.unread_count > 0: Rectangle {
+        x: 10px;
+        y: 10px; 
+        width: 8px;
+        height: 8px;
+        background: Theme.primary;
+        border-radius: self.width / 2;
+    }
+
+    HorizontalBox {
+        VerticalBox {
+            alignment: start;
+            HorizontalBox {
+
+                Text {
+                    text: root.name;
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: Theme.text-main;
+                    horizontal-alignment: left;
+                }
+            }
+
+            Text {
+                text: root.last_message;
+                font-size: 13px;
+                color: Theme.text-muted;
+                horizontal-alignment: left;
+                overflow: elide;
+            }
+
+            Text {
+                text: root.last_message_time;
+                font-size: 11px;
+                color: Theme.text-muted;
+                horizontal-alignment: left;
+            }
+        }
+
+        if touch.has_hover: Rectangle {
+            border-radius: Theme.border-radius;
+            background: delete_touch.has_hover ? #ff4444 : transparent;
+            delete_touch := TouchArea {
+                clicked => {
+                    root.delete_clicked();
+                }
+            }
+
+            Text {
+                text: "x";
+                color: white;
+                font-size: 18px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

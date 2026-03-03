@@ -1,0 +1,16 @@
+import { Theme } from "../theme.slint";
+
+export component StatusIcon inherits Image {
+    // États : "sending", "sent", "read"
+    in property <string> status;
+    in property <color> color: Theme.surface;
+
+    vertical-alignment: center;
+    colorize: color;
+    source: status == "sending" ? @image-url("../assets/sending.png") : 
+            status == "sent" ? @image-url("../assets/clock.png") : 
+            status == "read" ? @image-url("../assets/read.png") : 
+            @image-url("");
+    width: Theme.icon-size;
+    height: Theme.icon-size;
+}

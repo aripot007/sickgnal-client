@@ -1,0 +1,119 @@
+import {
+    VerticalBox,
+    LineEdit,
+    ScrollView,
+    HorizontalBox,
+} from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { MessageBubble } from "../components/MessageBubble.slint";
+import { Chat } from "../models/Chat.slint";
+import { Conversation } from "../models/Conversation.slint";
+import { Button } from "../components/Button.slint";
+
+export component ConservationLayout inherits VerticalBox {
+    private property <bool> show-typing: false;
+    
+    private property <bool> raw-typing: Chat.get-current-conversation().is-typing;
+    private property <int> active-id: Chat.active_chat_id;
+
+    padding: 0;
+    spacing: 0;
+
+    typing-timer := Timer {
+        interval: 5s;
+        running: false;
+        triggered => {
+            root.show-typing = false;
+            self.running = false;
+        }
+    }
+
+    // Remet à zéro lors d'un changement de conversation
+    changed active-id => {
+        root.show-typing = false;
+        typing-timer.running = false;
+    }
+
+    // Réagit au changement de is-typing sur la conversation courante
+    changed raw-typing => {
+        if (root.raw-typing) {
+            root.show-typing = true;
+            typing-timer.running = false;
+            typing-timer.running = true;
+        }
+    }
+
+    Rectangle {
+        height: 60px;
+        background: Theme.background-light;
+        border-color: Theme.background-dark;
+        Text {
+            text: Chat.current.name;
+            font-size: 18px;
+            font-weight: 600;
+            color: Theme.text-main;
+            horizontal-alignment: left;
+        }
+    }
+
+    ScrollView {
+        VerticalBox {
+            padding: 15px;
+            alignment: start;
+            spacing: 10px;
+            if Chat.has-active-conversation() == false: Rectangle {
+                VerticalBox {
+                    alignment: center;
+                    Text {
+                        text: "Sélectionnez une conversation";
+                        font-size: 16px;
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+            for msg in Chat.get-current-conversation().messages: MessageBubble {
+                text: msg.text;
+                time: msg.time;
+                status: msg.status;
+                is-me: msg.is_me;
+            }
+        }
+    }
+
+    if root.show-typing: HorizontalBox {
+        alignment: start;
+        spacing: 6px;
+        padding: 2px;
+        Text {
+            text: Chat.current.name + " est en train d'écrire...";
+            font-size: 13px;
+            color: Theme.text-muted;
+            vertical-alignment: center;
+        }
+    }
+
+    Rectangle {
+        height: 70px;
+        background: Theme.background-light;
+        border-color: Theme.background-dark;
+        HorizontalBox {
+            padding: 15px;
+            spacing: 10px;
+            input := LineEdit {
+                placeholder-text: "Écrire un message...";
+                enabled: Chat.active_chat_id >= 0;
+            }
+
+            Button {
+                text: "Envoyer";
+                enabled: Chat.active_chat_id >= 0 && input.text != "";
+                btn_width: 70px;
+                clicked => {
+                    Chat.send_message(input.text);
+                    input.text = "";
+                }
+            }
+        }
+    }
+}

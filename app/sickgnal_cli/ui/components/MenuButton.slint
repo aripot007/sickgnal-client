@@ -1,0 +1,19 @@
+import { Theme } from "../theme.slint";
+
+export component MenuButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> active;
+    callback clicked <=> touch.clicked;
+    
+    background: active ? Theme.text-main : transparent;
+    border-radius: 5px;
+    height: 40px;
+    
+    touch := TouchArea {}
+    
+    Text {
+        text: root.text;
+        color: active ? Theme.primary : Theme.text-main;
+        font-weight: active ? 700 : 400;
+    }
+}

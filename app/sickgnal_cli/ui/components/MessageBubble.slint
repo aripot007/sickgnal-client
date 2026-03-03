@@ -1,0 +1,93 @@
+import { Theme } from "../theme.slint";
+import { StatusIcon } from "StatusIcon.slint";
+
+component BubbleBase inherits HorizontalLayout {
+    in property <string> text;
+    in property <string> time;
+    in property <string> status;
+    in property <LayoutAlignment> bubble-alignment;
+    in property <length> pad-left;
+    in property <length> pad-right;
+    in property <color> bg-color;
+    in property <color> text-color;
+    in property <length> radius-right;
+    in property <length> radius-left;
+
+    alignment: root.bubble-alignment;
+    padding-left: root.pad-left;
+    padding-right: root.pad-right;
+
+    Rectangle {
+        background: root.bg-color;
+        border-radius: Theme.border-radius;
+        border-bottom-right-radius: root.radius-right;
+        border-bottom-left-radius: root.radius-left;
+
+        VerticalLayout {
+            padding: 10px;
+            spacing: 4px;
+
+            Text {
+                text: root.text;
+                color: root.text-color;
+                font-size: 14px;
+                wrap: word-wrap;
+            }
+
+            HorizontalLayout {
+                alignment: end;
+                spacing: 8px;
+                Text {
+                    vertical-alignment: center;
+                    text: root.time;
+                    font-size: 10px;
+                    color: root.text-color;
+                    opacity: 0.75;
+                }
+
+                if (root.status == "sent" || root.status == "sending" || root.status == "read"): StatusIcon {
+                    status: root.status;
+                    color: root.text-color;
+                }
+            }
+        }
+    }
+}
+
+export component LMessageBubble inherits BubbleBase {
+    bubble-alignment: start;
+    pad-left: Theme.message-bubble-inner-pad;
+    pad-right: Theme.message-bubble-inner-pad * 10;
+    bg-color: Theme.surface;
+    text-color: Theme.on-surface;
+    radius-left: 0px;
+    radius-right: Theme.border-radius;
+}
+
+export component RMessageBubble inherits BubbleBase {
+    bubble-alignment: end;
+    pad-left: Theme.message-bubble-inner-pad * 10;
+    pad-right: Theme.message-bubble-inner-pad;
+    bg-color: Theme.primary;
+    text-color: Theme.on-primary;
+    radius-left: Theme.border-radius;
+    radius-right: 0px;
+}
+
+export component MessageBubble inherits HorizontalLayout {
+    in property <string> text;
+    in property <string> time;
+    in property <string> status;
+    in property <bool> is-me;
+
+    if (root.is-me): RMessageBubble {
+        text: root.text;
+        time: root.time;
+        status: root.status;
+    }
+    if (!root.is-me): LMessageBubble {
+        text: root.text;
+        time: root.time;
+        status: root.status;
+    }
+}

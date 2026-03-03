@@ -1,0 +1,25 @@
+import {
+    Button,
+    VerticalBox,
+    LineEdit,
+    ScrollView,
+    HorizontalBox,
+} from "std-widgets.slint";
+import { MainLayout } from "layout/Main.slint";
+import { Theme } from "theme.slint";
+
+// Export models for Rust access
+export { Chat } from "models/Chat.slint";
+export { MessageData } from "models/Message.slint";
+export { Conversation } from "models/Conversation.slint";
+
+export component AppWindow inherits Window {
+
+    title: "Rust Messenger";
+    min-width: 800px;
+    min-height: 600px;
+
+    background: Theme.background;
+
+    MainLayout { }
+}

@@ -1,0 +1,11 @@
+import { Button } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { ImageButton } from "ImageButton.slint";
+import { ConfigLayout } from "../layout/Configuration.slint";
+
+export component ThemeSwitcher inherits ImageButton {
+    image: Theme.is-dark ? @image-url("../assets/moon.png") : @image-url("../assets/sun.png");
+    clicked => {
+        Theme.is-dark = !Theme.is-dark;
+    }
+}
