@@ -6,7 +6,6 @@ use crate::e2e::message::E2EMessage;
 /// Trait for sending and receiving E2E Messages
 #[async_trait]
 pub trait E2EMessageStream {
-    
     /// Send an E2E message
     async fn send(&mut self, message: E2EMessage) -> Result<(), MessageStreamError>;
 
@@ -27,4 +26,3 @@ impl MessageStreamError {
         MessageStreamError(Box::new(error))
     }
 }
-

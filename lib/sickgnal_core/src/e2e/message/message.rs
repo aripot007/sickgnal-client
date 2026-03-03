@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::e2e::{keys::{IdentityKeyPair, PublicIdentityKeys}, message::encrypted_payload::EncryptedPayload};
+use crate::e2e::{
+    keys::{IdentityKeyPair, PublicIdentityKeys},
+    message::encrypted_payload::EncryptedPayload,
+};
 
 use super::serde::*;
 
@@ -19,13 +22,11 @@ pub type Nonce = [u8; NONCE_BYTES];
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "ty")]
 pub enum E2EMessage {
-    
     // Client messages
-
     /// PreKey bundle used to open a new conversation
     #[serde(rename = "0")]
     PreKeyBundle(PreKeyBundle),
-    
+
     /// Initial message with key negotiation
     #[serde(rename = "1")]
     ConversationOpen {
@@ -36,26 +37,25 @@ pub enum E2EMessage {
         #[serde(flatten)]
         data: KeyExchangeData,
     },
-    
+
     /// Generic message in an open conversation
     #[serde(rename = "2")]
     ConversationMessage {
         /// Id of the sender
         #[serde(rename = "sndr_id")]
         sender_id: Uuid,
-        
+
         #[serde(flatten)]
-        msg_ciphertext: EncryptedPayload
+        msg_ciphertext: EncryptedPayload,
     },
 
     /// Message sent on key rotation
     #[serde(rename = "3")]
     KeyRotation {
-
         /// Nonce used to derive the new key
         #[serde(with = "base64json")]
         nonce: Vec<u8>,
-        
+
         /// Id of the derived key
         #[serde(rename = "kid")]
         key_id: Uuid,
@@ -66,7 +66,7 @@ pub enum E2EMessage {
     },
 
     /// Profile of a user
-    /// 
+    ///
     /// Response from [`E2EMessage::UserProfileByUsername`] and [`E2EMessage::UserProfileById`]
     #[serde(rename = "10")]
     UserProfile {
@@ -76,9 +76,8 @@ pub enum E2EMessage {
     },
 
     // Server messages
-    
-    // Auth
 
+    // Auth
     /// Account creation message
     #[serde(rename = "128")]
     CreateAccount {
@@ -93,9 +92,9 @@ pub enum E2EMessage {
     },
 
     /// Message with an authentication token
-    /// 
+    ///
     /// Sent in response to [`CreateAccount`] or challenge-response authentication
-    /// 
+    ///
     /// [`CreateAccount`]: Self::CreateAccount
     #[serde(rename = "129")]
     AuthToken {
@@ -113,23 +112,23 @@ pub enum E2EMessage {
     },
 
     /// Authentication challenge sent by the server
-    /// 
+    ///
     /// The client should reply with a signature of `SHA512(chall) || username`  with
     /// its identity key pair
     #[serde(rename = "131")]
     AuthChallenge {
         /// The challenge Nonce to sign
-        #[serde(with="base64nonce")]
-        chall: Nonce, 
+        #[serde(with = "base64nonce")]
+        chall: Nonce,
     },
 
     /// Signature response to the server [`AuthChallenge`]
-    /// 
+    ///
     /// [`AuthChallenge`]: Self::AuthChallenge
     #[serde(rename = "132")]
     AuthChallengeSolve {
         /// Original challenge
-        #[serde(with="base64nonce")]
+        #[serde(with = "base64nonce")]
         chall: Nonce,
 
         /// Signature of `SHA512(chall) || username` with the identity key
@@ -138,7 +137,6 @@ pub enum E2EMessage {
     },
 
     // Key management
-
     /// Upload mid-term and ephemeral pre-keys to the server
     #[serde(rename = "133")]
     PreKeyUpload {
@@ -146,7 +144,7 @@ pub enum E2EMessage {
         token: String,
 
         /// Replace all old keys with new ones if true
-        /// 
+        ///
         /// Does not delete the signed prekey if no other one is given.
         replace: bool,
 
@@ -176,11 +174,10 @@ pub enum E2EMessage {
     },
 
     /// Status of uploaded prekeys
-    /// 
+    ///
     /// Sent in response to [`E2EMessage::PreKeyStatusRequest`]
     #[serde(rename = "136")]
     PreKeyStatus {
-
         /// Maximum number of uploadable keys
         limit: u64,
 
@@ -197,9 +194,7 @@ pub enum E2EMessage {
         id: Uuid,
     },
 
-    
     // Profile
-
     /// Get a user profile by username
     #[serde(rename = "140")]
     UserProfileByUsername {
@@ -217,7 +212,6 @@ pub enum E2EMessage {
     },
 
     // Messages
-
     /// Send an initial message to open a conversation
     #[serde(rename = "150")]
     SendInitialMessage {
@@ -241,9 +235,9 @@ pub enum E2EMessage {
         /// Id of the recipient
         #[serde(rename = "rcpt_id")]
         recipient_id: Uuid,
-        
+
         #[serde(flatten)]
-        msg_ciphertext: EncryptedPayload
+        msg_ciphertext: EncryptedPayload,
     },
 
     /// Get initial messages stored on the server
@@ -286,28 +280,26 @@ pub enum E2EMessage {
 
     // Errors
     #[serde(rename = "255")]
-    Error {
-        code: ErrorCode
-    },
+    Error { code: ErrorCode },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Error)]
 #[repr(u8)]
 pub enum ErrorCode {
     /// Invalid message format
-    /// 
+    ///
     /// Usually terminates the connection.
     #[error("Invalid message format")]
     InvalidMessage = 0,
 
     /// Message understood but not accepted by the other party
-    /// 
+    ///
     /// May terminate the connection
     #[error("Message type not accepted")]
     MessageTypeNotAccepted = 1,
 
     /// Missing or invalid token, or invalid challenge response
-    /// 
+    ///
     /// Keeps the connection open, but the clients needs to renew
     /// authentication
     #[error("Invalid authentication")]
@@ -337,17 +329,16 @@ pub enum ErrorCode {
 /// A Prekey bundle that can be used to open a conversation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreKeyBundle {
-    
     /// Public identity key of the correspondant
     #[serde(rename = "ik")]
     pub identity_keys: PublicIdentityKeys,
 
     /// Signed mid-term prekey of the correspondant
-    #[serde(rename = "pk", with="base64x25519key")]
+    #[serde(rename = "pk", with = "base64x25519key")]
     pub midterm_prekey: x25519_dalek::PublicKey,
 
     /// Mid-term prekey signature
-    #[serde(rename = "pksig", with="base64signature")]
+    #[serde(rename = "pksig", with = "base64signature")]
     pub midterm_prekey_signature: Signature,
 
     /// Optional ephemeral prekey
@@ -361,35 +352,34 @@ pub struct EphemeralKey {
     pub id: Uuid,
 
     /// Public ephemeral prekey
-    #[serde(rename = "ek", with="base64x25519key")]
+    #[serde(rename = "ek", with = "base64x25519key")]
     pub key: x25519_dalek::PublicKey,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedPreKey {
     /// Public prekey
-    #[serde(with="base64x25519key")]
+    #[serde(with = "base64x25519key")]
     pub key: x25519_dalek::PublicKey,
 
     /// Signature of the public prekey with the identity key
-    #[serde(rename = "sig", with="base64signature")]
+    #[serde(rename = "sig", with = "base64signature")]
     pub signature: Signature,
 }
 
 /// Key exchange information sent in initial conversation messages
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyExchangeData {
-
     /// Public identity key of the sender
-    /// 
+    ///
     /// Used in extended Diffie-Hellman key exchange.
     #[serde(rename = "ik")]
     pub identity_key: PublicIdentityKeys,
 
     /// Ephemeral public prekey of the sender
-    /// 
+    ///
     /// Used in extended Diffie-Hellman key exchange.
-    #[serde(rename = "ek", with="base64x25519key")]
+    #[serde(rename = "ek", with = "base64x25519key")]
     pub ephemeral_prekey: x25519_dalek::PublicKey,
 
     /// Ephemeral prekey id of the recipient key used, if any
@@ -406,7 +396,7 @@ pub struct KeyExchangeData {
 
     /// Initial message ciphertext
     #[serde(flatten)]
-    pub msg_ciphertext: EncryptedPayload
+    pub msg_ciphertext: EncryptedPayload,
 }
 
 // endregion: Struct definition
@@ -414,15 +404,13 @@ pub struct KeyExchangeData {
 // region:    Constructors
 
 impl E2EMessage {
-
     /// Create an account
     pub fn create_account(identity_keys: &IdentityKeyPair, username: String) -> Self {
-
         let username_sig = identity_keys.ed25519_key.sign(username.as_bytes());
 
-        E2EMessage::CreateAccount { 
-            identity_key: identity_keys.public_keys(), 
-            username, 
+        E2EMessage::CreateAccount {
+            identity_key: identity_keys.public_keys(),
+            username,
             signature: username_sig,
         }
     }
@@ -444,7 +432,6 @@ impl E2EMessage {
             _ => (),
         }
     }
-
 }
 
 // endregion: Constructors

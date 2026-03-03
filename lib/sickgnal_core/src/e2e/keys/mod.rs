@@ -1,5 +1,5 @@
 //! Everything related to key management
-//! 
+//!
 pub mod memory_storage;
 pub mod storage_backend;
 use base64::{DecodeSliceError, Engine, engine::general_purpose};
@@ -44,7 +44,6 @@ pub struct EphemeralSecretKey {
 // endregion: Struct definitions
 
 impl IdentityKeyPair {
-    
     /// Generate a new random keypair
     pub fn new_from_rng<T: RngCore + CryptoRng>(mut csprng: T) -> Self {
         let mut secret = [0; 32];
@@ -89,9 +88,10 @@ impl From<&EphemeralSecretKey> for EphemeralKey {
 impl Serialize for PublicIdentityKeys {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer
+        S: serde::Serializer,
     {
-        let base64 = general_purpose::STANDARD.encode(&[self.x25519.to_bytes(), self.ed25519.to_bytes()].concat());
+        let base64 = general_purpose::STANDARD
+            .encode(&[self.x25519.to_bytes(), self.ed25519.to_bytes()].concat());
         base64.serialize(serializer)
     }
 }
@@ -99,7 +99,7 @@ impl Serialize for PublicIdentityKeys {
 impl<'de> Deserialize<'de> for PublicIdentityKeys {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>
+        D: serde::Deserializer<'de>,
     {
         let base64 = String::deserialize(deserializer)?;
 
@@ -108,10 +108,16 @@ impl<'de> Deserialize<'de> for PublicIdentityKeys {
         let decoded = general_purpose::STANDARD.decode_slice(base64.as_bytes(), &mut buf);
 
         match decoded {
-            Ok(x) => if x != 64 {
-                return Err(serde::de::Error::invalid_length(x, &"64 bytes"));
-            },
-            Err(DecodeSliceError::OutputSliceTooSmall) => return Err(serde::de::Error::custom("invalid length, expected 64 bytes")),
+            Ok(x) => {
+                if x != 64 {
+                    return Err(serde::de::Error::invalid_length(x, &"64 bytes"));
+                }
+            }
+            Err(DecodeSliceError::OutputSliceTooSmall) => {
+                return Err(serde::de::Error::custom(
+                    "invalid length, expected 64 bytes",
+                ));
+            }
             Err(DecodeSliceError::DecodeError(e)) => return Err(serde::de::Error::custom(e)),
         }
 
@@ -126,4 +132,4 @@ impl<'de> Deserialize<'de> for PublicIdentityKeys {
 
         Ok(res)
     }
-} 
+}

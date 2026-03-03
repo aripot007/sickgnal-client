@@ -45,7 +45,7 @@ pub struct ContentMessage {
 #[serde(tag = "content_type", content = "data")]
 pub enum Content {
     #[serde(rename = "text/plain")]
-    Text(String)
+    Text(String),
 }
 
 /// Message de contrôle
@@ -66,32 +66,48 @@ pub enum ControlMessage {
     EditMsg {
         id: Uuid,
         #[serde(rename = "data")]
-        new_content: Content
-    }
+        new_content: Content,
+    },
+
+    /// Message reçu
+    AckReception {
+        /// Id du message reçu
+        id: Uuid,
+    },
+
+    /// Message lu
+    AckRead {
+        /// Id du message lu
+        id: Uuid,
+    },
+    
+    IsTyping {},
 }
+
 
 // endregion: Struct definitions
 
 impl ContentMessage {
     pub fn new_text(content: impl Into<String>, reply_to: Option<Uuid>) -> Self {
-        ContentMessage { 
-            id: Uuid::new_v4(), 
+        ContentMessage {
+            id: Uuid::new_v4(),
             reply_to,
-            content: Content::Text(content.into()) 
+            content: Content::Text(content.into()),
         }
     }
 }
 
 impl ChatMessage {
-
     /// Create a new text message with an optional reply id
-    pub fn new_text_reply(conversation_id: Uuid, message: impl Into<String>, reply_to: Option<Uuid>) -> Self {
-        ChatMessage { 
+    pub fn new_text_reply(
+        conversation_id: Uuid,
+        message: impl Into<String>,
+        reply_to: Option<Uuid>,
+    ) -> Self {
+        ChatMessage {
             issued_at: Utc::now(),
             conversation_id,
-            kind: ChatMessageKind::Data(
-                ContentMessage::new_text(message, reply_to)
-            )
+            kind: ChatMessageKind::Data(ContentMessage::new_text(message, reply_to)),
         }
     }
 
@@ -101,37 +117,37 @@ impl ChatMessage {
     }
 
     /// Create a new control message to edit a text message
-    pub fn new_edit_text(conversation_id: Uuid, message_id: Uuid, new_content: impl Into<String>) -> Self {
-        ChatMessage { 
+    pub fn new_edit_text(
+        conversation_id: Uuid,
+        message_id: Uuid,
+        new_content: impl Into<String>,
+    ) -> Self {
+        ChatMessage {
             issued_at: Utc::now(),
             conversation_id,
-            kind: ChatMessageKind::Ctrl(
-                ControlMessage::EditMsg { 
-                    id: message_id,
-                    new_content: Content::Text(new_content.into()),
-                }
-            )
+            kind: ChatMessageKind::Ctrl(ControlMessage::EditMsg {
+                id: message_id,
+                new_content: Content::Text(new_content.into()),
+            }),
         }
     }
 
     /// Create a new control message to delete a message
     pub fn new_delete(conversation_id: Uuid, message_id: Uuid) -> Self {
-        ChatMessage { 
+        ChatMessage {
             issued_at: Utc::now(),
             conversation_id,
-            kind: ChatMessageKind::Ctrl(
-                ControlMessage::DeleteMsg {
-                    id: message_id,
-                }
-            )
+            kind: ChatMessageKind::Ctrl(ControlMessage::DeleteMsg { id: message_id }),
         }
     }
 
     /// Create a new OPEN_CONV message with an optional conversation id and initial text message
-    /// 
+    ///
     /// Generates a new conversation id if `conversation_id` is None.
-    pub fn new_open_conv_with_id(conversation_id: Option<Uuid>, initial_message: Option<impl Into<String>>) -> Self {
-        
+    pub fn new_open_conv_with_id(
+        conversation_id: Option<Uuid>,
+        initial_message: Option<impl Into<String>>,
+    ) -> Self {
         let conversation_id = match conversation_id {
             Some(id) => id,
             None => Uuid::new_v4(),
@@ -141,16 +157,11 @@ impl ChatMessage {
             None => None,
             Some(msg) => Some(ContentMessage::new_text(msg, None)),
         };
-        
-        ChatMessage { 
+
+        ChatMessage {
             issued_at: Utc::now(),
             conversation_id,
-            kind: ChatMessageKind::Ctrl(
-                ControlMessage::OpenConv { 
-                    initial_message 
-                }
-            )
+            kind: ChatMessageKind::Ctrl(ControlMessage::OpenConv { initial_message }),
         }
     }
-
 }
