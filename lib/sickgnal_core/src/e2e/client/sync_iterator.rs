@@ -139,7 +139,7 @@ where
 
         // Cleanup old session keys
         for user_id in self.session_keys.keys() {
-            if let Err(err) = self.client.clean_session_keys(user_id) {
+            if let Err(err) = self.client.state.clean_session_keys(user_id) {
                 println!("Could not clean keys for user {} : {}", user_id, err);
             }
         }
@@ -224,7 +224,7 @@ where
     ///
     /// [`ConversationOpen`]: E2EMessage::ConversationOpen
     async fn process_open_conversation(&mut self, sender_id: Uuid, data: KeyExchangeData) {
-        let res = self.client.handle_open_session(sender_id, &data).await;
+        let res = self.client.handle_open_session(sender_id, &data);
 
         // Get the initial chat message
         let m = match res {
@@ -270,7 +270,7 @@ where
             session_keys = &keys.keys;
 
         // Session not encountered yet
-        } else if let Some(sess) = self.client.sessions().get(&sender_id) {
+        } else if let Some(sess) = self.client.state.sessions().get(&sender_id) {
             let keys = HashMap::from([(sender_id, sess.receiving_key)]);
             self.session_keys.insert(
                 sender_id,
@@ -377,11 +377,11 @@ where
         session_keys.keys.insert(next_key_id, next_key);
 
         // Update client session
-        if let Some(mut sess) = self.client.sessions().get(&sender_id).cloned() {
+        if let Some(mut sess) = self.client.state.sessions().get(&sender_id).cloned() {
             sess.receiving_key_id = next_key_id;
             sess.receiving_key = next_key;
 
-            if let Err(err) = self.client.update_session(sess) {
+            if let Err(err) = self.client.state.update_session(sess) {
                 // TODO: Better logging
                 println!("Error saving new session state : {}", err);
             }

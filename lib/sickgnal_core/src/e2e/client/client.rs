@@ -1,10 +1,7 @@
 //! Context for the E2E protocol
 //!
 
-use std::{
-    collections::{HashMap, HashSet},
-    ops::DerefMut,
-};
+use std::collections::{HashMap, HashSet};
 
 use chacha20poly1305::{
     AeadCore, KeyInit, XChaCha20Poly1305,
@@ -12,9 +9,9 @@ use chacha20poly1305::{
 };
 use ed25519_dalek::Signer;
 use rand::{
-    CryptoRng, Rng, RngCore, SeedableRng,
+    Rng, RngCore, SeedableRng,
     distributions::{Alphanumeric, DistString},
-    rngs::{self, OsRng, StdRng},
+    rngs::{OsRng, StdRng},
 };
 use sha2::{Digest, Sha512};
 use uuid::Uuid;
@@ -23,9 +20,14 @@ use x25519_dalek::PublicKey;
 use crate::{
     chat::message::ChatMessage,
     e2e::{
-        client::{Error, session::E2ESession, sync_iterator::SyncIterator},
+        client::{
+            error::{Error, Result},
+            session::E2ESession,
+            state::E2EClientState,
+            sync_iterator::SyncIterator,
+        },
         kdf::kdf,
-        keys::{EphemeralSecretKey, IdentityKeyPair, KeyStorageBackend, X25519Secret},
+        keys::{EphemeralSecretKey, KeyStorageBackend, X25519Secret},
         message::{
             E2EMessage, EphemeralKey, ErrorCode, KeyExchangeData, SignedPreKey,
             encrypted_payload::{self, EncryptedPayload, PayloadMessage},
@@ -66,22 +68,13 @@ where
     Storage: KeyStorageBackend,
     MsgStream: E2EMessageStream,
 {
-    /// User account on the server
-    account: Account,
-
-    key_storage: Storage,
-
     /// Message stream to communicate with the server
     ///
     /// Use utility methods like [`E2EClient::send_e2e`] to send messages while
     /// taking into account the client state instead of using the stream directly
     msg_stream: MsgStream,
 
-    /// Cryptographically secure PRNG used to generate keys
-    rng: StdRng,
-
-    /// Currently open sessions
-    sessions: HashMap<Uuid, E2ESession>,
+    pub(super) state: E2EClientState<Storage>,
 }
 
 // endregion: Struct definition
@@ -94,24 +87,21 @@ where
     // region:    Public API
 
     /// Load a client with an account
-    pub fn load(
-        account: Account,
-        mut key_storage: Storage,
-        msg_stream: MsgStream,
-    ) -> Result<Self, Error> {
+    pub fn load(account: Account, mut key_storage: Storage, msg_stream: MsgStream) -> Result<Self> {
         let sessions = key_storage
             .load_all_sessions()?
             .into_iter()
             .map(|s| (s.correspondant_id, s))
             .collect();
 
-        Ok(Self {
+        let state = E2EClientState {
             account,
             key_storage,
-            msg_stream,
             rng: StdRng::from_rng(OsRng).expect("Could not initialize random number generator"),
             sessions,
-        })
+        };
+
+        Ok(Self { msg_stream, state })
     }
 
     /// Create a new client with the given username
@@ -121,13 +111,13 @@ where
         username: String,
         mut key_storage: Storage,
         mut msg_stream: MsgStream,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let mut rng =
             StdRng::from_rng(OsRng).expect("Could not initialize random number generator");
 
         let idk = match key_storage.identity_keypair_opt()? {
             Some(keypair) => keypair,
-            None => Self::create_identity_keypair(&mut key_storage, &mut rng)?,
+            None => E2EClientState::create_identity_keypair(&mut key_storage, &mut rng)?,
         };
 
         // Register the username on the server
@@ -147,13 +137,14 @@ where
             m => return Err(Error::UnexpectedE2EMessage(m)),
         };
 
-        Ok(Self {
+        let state = E2EClientState {
             account,
             key_storage,
-            msg_stream,
             rng,
             sessions: HashMap::new(),
-        })
+        };
+
+        Ok(Self { msg_stream, state })
     }
 
     /// Perform the initial synchronization with the server
@@ -162,7 +153,7 @@ where
     }
 
     /// Initialize prekeys and upload them to the server
-    pub(crate) async fn init_prekeys(&mut self, prekey_count: usize) -> Result<(), Error> {
+    pub(crate) async fn init_prekeys(&mut self, prekey_count: usize) -> Result<()> {
         self.upload_prekeys(prekey_count, true, true).await
     }
 
@@ -178,7 +169,7 @@ where
         &mut self,
         min_prekeys: usize,
         rotate_midterm_key: bool,
-    ) -> Result<usize, Error> {
+    ) -> Result<usize> {
         // Get the status of the prekeys
         let resp = self
             .send_authenticated_e2e(E2EMessage::PreKeyStatusRequest { token: "".into() })
@@ -194,7 +185,7 @@ where
         // Remove keys on the server that are not on the client
         let server_keys: HashSet<Uuid> = HashSet::from_iter(available_keys.into_iter());
         let stored_keys: HashSet<Uuid> =
-            HashSet::from_iter(self.key_storage.available_ephemeral_keys()?.cloned());
+            HashSet::from_iter(self.state.key_storage.available_ephemeral_keys()?.cloned());
 
         let to_remove: Vec<Uuid> = server_keys.difference(&stored_keys).cloned().collect();
 
@@ -226,12 +217,12 @@ where
     }
 
     /// Send a [`ChatMessage`] to another user
-    pub async fn send(&mut self, to: Uuid, mut message: ChatMessage) -> Result<(), Error> {
-        message.sender_id = self.account.id;
+    pub async fn send(&mut self, to: Uuid, mut message: ChatMessage) -> Result<()> {
+        message.sender_id = self.state.account.id;
 
         // Get the existing session or create a new one
         let mut sess;
-        if let Some(session) = self.sessions.get(&to) {
+        if let Some(session) = self.state.sessions.get(&to) {
             sess = session.clone();
         } else {
             return self.open_new_session(&to, message).await;
@@ -242,16 +233,17 @@ where
         // Perform key rotation if necessary
         if sess.key_msg_count == 0 {
             let mut nonce: [u8; 32] = [0; 32];
-            self.rng.fill_bytes(&mut nonce);
+            self.state.rng.fill_bytes(&mut nonce);
 
             let next_key = kdf(&[sess.sending_key.as_slice(), &nonce].concat());
             let next_key_id = Uuid::new_v4();
 
             let padding_length = self
+                .state
                 .rng
                 .gen_range(KEY_ROTATION_MIN_PAD..=KEY_ROTATION_MAX_PAD);
 
-            let pad = Alphanumeric.sample_string(&mut self.rng, padding_length as usize);
+            let pad = Alphanumeric.sample_string(&mut self.state.rng, padding_length as usize);
 
             let m = E2EMessage::KeyRotation {
                 nonce: nonce.into(),
@@ -269,23 +261,24 @@ where
             sess.sending_key_id = next_key_id;
             sess.sending_key = next_key;
 
-            self.key_storage
+            self.state
+                .key_storage
                 .add_session_key(to, next_key_id, next_key)?;
         }
 
         // Save the updated session
-        self.sessions.insert(to, sess.clone());
+        self.state.sessions.insert(to, sess.clone());
 
         let aead = XChaCha20Poly1305::new_from_slice(&sess.sending_key)
             .expect("session key type has the correct length for XChaCha20poly1305");
 
-        let nonce = XChaCha20Poly1305::generate_nonce(&mut self.rng);
+        let nonce = XChaCha20Poly1305::generate_nonce(&mut self.state.rng);
 
         let msg_ciphertext =
             EncryptedPayload::encrypt_chat(sess.sending_key_id, nonce.into(), &aead, message)?;
 
         let m = E2EMessage::ConversationMessage {
-            sender_id: self.account.id,
+            sender_id: self.state.account.id,
             msg_ciphertext,
         };
 
@@ -301,7 +294,7 @@ where
     /// Get the underlying client account
     #[inline]
     pub fn account(&self) -> &Account {
-        &self.account
+        &self.state.account
     }
 
     // endregion: Public API
@@ -309,12 +302,13 @@ where
     // region:    Private API
 
     /// Get the authentication token from the account, authenticating if necessary
-    async fn get_token(&mut self) -> Result<&String, Error> {
-        if self.account.token.is_none() {
+    async fn get_token(&mut self) -> Result<&String> {
+        if self.state.account.token.is_none() {
             self.authenticate().await?;
         }
 
         let token = self
+            .state
             .account
             .token
             .as_ref()
@@ -330,7 +324,7 @@ where
     /// Use [`send_e2e_raw`] to get the raw response without error conversion.
     ///
     /// [`send_e2e_raw`]: Self::send_e2e_raw
-    pub(super) async fn send_e2e(&mut self, msg: E2EMessage) -> Result<E2EMessage, Error> {
+    pub(super) async fn send_e2e(&mut self, msg: E2EMessage) -> Result<E2EMessage> {
         match self.send_e2e_raw(msg).await? {
             E2EMessage::Error { code } => Err(Error::ProtocolError(code)),
             m => Ok(m),
@@ -342,7 +336,7 @@ where
     /// Use [`send_e2e`] to convert protocol errors to [`Error::ProtocolError`].
     ///
     /// [`send_e2e`]: Self::send_e2e
-    pub(super) async fn send_e2e_raw(&mut self, msg: E2EMessage) -> Result<E2EMessage, Error> {
+    pub(super) async fn send_e2e_raw(&mut self, msg: E2EMessage) -> Result<E2EMessage> {
         self.msg_stream.send(msg).await?;
         self.msg_stream.receive().await.map_err(Error::from)
     }
@@ -359,10 +353,7 @@ where
     /// Use [`send_authenticated_e2e_raw`] to get the raw response without error conversion.
     ///
     /// [`send_authenticated_e2e_raw`]: Self::send_authenticated_e2e_raw
-    pub(super) async fn send_authenticated_e2e(
-        &mut self,
-        msg: E2EMessage,
-    ) -> Result<E2EMessage, Error> {
+    pub(super) async fn send_authenticated_e2e(&mut self, msg: E2EMessage) -> Result<E2EMessage> {
         match self.send_authenticated_e2e_raw(msg).await? {
             E2EMessage::Error { code } => Err(Error::ProtocolError(code)),
             m => Ok(m),
@@ -383,7 +374,7 @@ where
     pub(super) async fn send_authenticated_e2e_raw(
         &mut self,
         msg: E2EMessage,
-    ) -> Result<E2EMessage, Error> {
+    ) -> Result<E2EMessage> {
         let token = self.get_token().await?.clone();
         let mut msg = msg;
 
@@ -408,24 +399,14 @@ where
         Ok(resp)
     }
 
-    /// Create an identity keypair and store it in the key storage
-    fn create_identity_keypair<T: RngCore + CryptoRng>(
-        storage: &mut Storage,
-        rng: T,
-    ) -> Result<&IdentityKeyPair, Error> {
-        let idk = IdentityKeyPair::new_from_rng(rng);
-        storage.set_identity_keypair(idk.clone())?;
-        storage.identity_keypair().map_err(Error::from)
-    }
-
     /// Authenticate using challenge-response authentication and
     /// update the account token.
     ///
     /// Guarantees that self.account.token is Some if this function returns Ok().
-    async fn authenticate(&mut self) -> Result<(), Error> {
+    async fn authenticate(&mut self) -> Result<()> {
         let resp = self
             .send_e2e(E2EMessage::AuthChallengeRequest {
-                username: self.account.username.clone(),
+                username: self.state.account.username.clone(),
             })
             .await?;
 
@@ -435,9 +416,14 @@ where
         };
 
         // We need to sign SHA512(chall) || username
-        let chall = [&Sha512::digest(nonce), self.account.username.as_bytes()].concat();
+        let chall = [
+            &Sha512::digest(nonce),
+            self.state.account.username.as_bytes(),
+        ]
+        .concat();
 
         let solve = self
+            .state
             .key_storage
             .identity_keypair()?
             .ed25519_key
@@ -451,8 +437,8 @@ where
             .await?;
 
         if let E2EMessage::AuthToken { id, token } = resp {
-            self.account.id = id;
-            self.account.token = Some(token);
+            self.state.account.id = id;
+            self.state.account.token = Some(token);
 
             Ok(())
         } else {
@@ -470,31 +456,33 @@ where
         count: usize,
         upload_midterm_key: bool,
         replace: bool,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let mut keys = Vec::with_capacity(count);
         let mut public_keys = Vec::with_capacity(count);
 
         for _ in 0..count {
-            let key = EphemeralSecretKey::new_from_rng(&mut self.rng);
+            let key = EphemeralSecretKey::new_from_rng(&mut self.state.rng);
             public_keys.push(EphemeralKey::from(&key));
             keys.push(key);
         }
 
         // Register all keys
-        self.key_storage
+        self.state
+            .key_storage
             .save_many_ephemeral_keys(keys.into_iter())?;
 
         let mut midterm_key = None;
         if upload_midterm_key {
-            let key = X25519Secret::random_from_rng(&mut self.rng);
+            let key = X25519Secret::random_from_rng(&mut self.state.rng);
             let signature = self
+                .state
                 .key_storage
                 .identity_keypair()?
                 .ed25519_key
                 .sign(key.as_bytes());
             let public_key = PublicKey::from(&key);
 
-            self.key_storage.set_midterm_key(key)?;
+            self.state.key_storage.set_midterm_key(key)?;
 
             midterm_key = Some(SignedPreKey {
                 key: public_key,
@@ -518,11 +506,7 @@ where
     }
 
     /// Open a new session with a user with an initial [`ChatMessage`]
-    async fn open_new_session(
-        &mut self,
-        recipient_id: &Uuid,
-        message: ChatMessage,
-    ) -> Result<(), Error> {
+    async fn open_new_session(&mut self, recipient_id: &Uuid, message: ChatMessage) -> Result<()> {
         // Get the recipient's prekeys
         let rq = E2EMessage::PreKeyBundleRequest {
             token: "".into(),
@@ -540,9 +524,9 @@ where
         };
 
         // Get the required keys
-        let identity_keypair = self.key_storage.identity_keypair()?;
+        let identity_keypair = self.state.key_storage.identity_keypair()?;
         let idk = &identity_keypair.x25519_secret;
-        let ek = x25519_dalek::ReusableSecret::random_from_rng(&mut self.rng);
+        let ek = x25519_dalek::ReusableSecret::random_from_rng(&mut self.state.rng);
 
         // Compute Diffie-Hellman parameters
 
@@ -595,7 +579,7 @@ where
         let aead = XChaCha20Poly1305::new_from_slice(&send_key)
             .expect("32 bytes is the correct key size for XChaCha20Poly1305");
 
-        let nonce = XChaCha20Poly1305::generate_nonce(&mut self.rng);
+        let nonce = XChaCha20Poly1305::generate_nonce(&mut self.state.rng);
 
         let aad = &[
             idk.as_bytes().as_slice(),              // I_A
@@ -645,7 +629,7 @@ where
 
         // Save the session
         let key_msg_count = MAX_MSGS_PER_KEY - MAX_MSGS_PER_KEY_DEVIATION
-            + self.rng.gen_range(0..=2 * MAX_MSGS_PER_KEY_DEVIATION);
+            + self.state.rng.gen_range(0..=2 * MAX_MSGS_PER_KEY_DEVIATION);
         let session = E2ESession {
             correspondant_id: *recipient_id,
             sending_key_id: send_key_id,
@@ -655,23 +639,23 @@ where
             receiving_key: recv_key,
         };
 
-        self.update_session(session)?;
+        self.state.update_session(session)?;
 
         Ok(())
     }
 
     /// Open a new session with a user using key exchange data, and return the decrypted payload
-    pub(super) async fn handle_open_session(
+    pub(super) fn handle_open_session(
         &mut self,
         sender_id: Uuid,
         kex_data: &KeyExchangeData,
-    ) -> Result<PayloadMessage, Error> {
+    ) -> Result<PayloadMessage> {
         // TODO: Handle pre-existing sessions with same and different public keys
 
         // Get ephemeral key
         let mut prekey = None;
         if let Some(id) = &kex_data.recipient_prekey_id {
-            let key = self.key_storage.pop_ephemeral_key(id)?;
+            let key = self.state.key_storage.pop_ephemeral_key(id)?;
 
             if key.is_none() {
                 return Err(Error::NoSuchPrekey(*id));
@@ -680,8 +664,8 @@ where
             prekey = key;
         }
 
-        let midterm_key = self.key_storage.midterm_key()?;
-        let identity_key = &self.key_storage.identity_keypair()?.x25519_secret;
+        let midterm_key = self.state.key_storage.midterm_key()?;
+        let identity_key = &self.state.key_storage.identity_keypair()?.x25519_secret;
 
         let dh1 = midterm_key
             .diffie_hellman(&kex_data.identity_key.x25519)
@@ -743,17 +727,20 @@ where
         let payload = PayloadMessage::try_from_bytes(&bytes)?;
 
         // Save the keys and session information
-        self.key_storage
+        self.state
+            .key_storage
             .set_user_public_keys(sender_id, kex_data.identity_key.clone())?;
 
         // Key ids are inverted since they're from the sender's POV
-        self.key_storage
+        self.state
+            .key_storage
             .add_session_key(sender_id, kex_data.send_key_id, recv_key)?;
-        self.key_storage
+        self.state
+            .key_storage
             .add_session_key(sender_id, kex_data.receive_key_id, send_key)?;
 
         let key_msg_count = MAX_MSGS_PER_KEY - MAX_MSGS_PER_KEY_DEVIATION
-            + self.rng.gen_range(0..=2 * MAX_MSGS_PER_KEY_DEVIATION);
+            + self.state.rng.gen_range(0..=2 * MAX_MSGS_PER_KEY_DEVIATION);
 
         let sess = E2ESession {
             correspondant_id: sender_id,
@@ -764,50 +751,10 @@ where
             receiving_key: send_key,
         };
 
-        self.key_storage.save_session(&sess)?;
-        self.sessions.insert(sender_id, sess);
+        self.state.key_storage.save_session(&sess)?;
+        self.state.sessions.insert(sender_id, sess);
 
         Ok(payload)
-    }
-
-    /// Get the current sessions of the client
-    #[inline]
-    pub(super) fn sessions(&self) -> &HashMap<Uuid, E2ESession> {
-        &self.sessions
-    }
-
-    /// Update a session state
-    ///
-    /// This does not delete the old session keys, but registers the new ones if necessary
-    pub(super) fn update_session(&mut self, session: E2ESession) -> Result<(), Error> {
-        self.key_storage.add_session_key(
-            session.correspondant_id,
-            session.sending_key_id,
-            session.sending_key,
-        )?;
-        self.key_storage.add_session_key(
-            session.correspondant_id,
-            session.receiving_key_id,
-            session.receiving_key,
-        )?;
-        self.key_storage.save_session(&session)?;
-
-        self.sessions.insert(session.correspondant_id, session);
-
-        Ok(())
-    }
-
-    /// Remove old session keys for a user
-    pub(super) fn clean_session_keys(&mut self, user_id: &Uuid) -> Result<(), Error> {
-        if let Some(sess) = self.sessions.get(user_id) {
-            self.key_storage.cleanup_session_keys(
-                user_id,
-                &sess.sending_key_id,
-                &sess.receiving_key_id,
-            )?;
-        }
-
-        Ok(())
     }
 
     // endregion: Private API

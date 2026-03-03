@@ -33,3 +33,5 @@ pub enum Error {
     #[error("User not found")]
     UserNotFound,
 }
+
+pub type Result<T> = std::result::Result<T, Error>;
