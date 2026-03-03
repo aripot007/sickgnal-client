@@ -7,6 +7,14 @@ use uuid::Uuid;
 /// Message de contenu
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
+
+    /// Id de la personne ayant envoyé le message
+    /// 
+    /// Rempli par le protocole E2E, on peut utiliser la valeur par défaut
+    /// `Uuid::default()` à la création.
+    #[serde(skip)]
+    pub sender_id: Uuid,
+
     /// Date d'envoi du message
     #[serde(rename = "iat")]
     pub issued_at: DateTime<Utc>,
@@ -90,6 +98,7 @@ impl ChatMessage {
         reply_to: Option<Uuid>,
     ) -> Self {
         ChatMessage {
+            sender_id: Uuid::default(),
             issued_at: Utc::now(),
             conversation_id,
             kind: ChatMessageKind::Data(ContentMessage::new_text(message, reply_to)),
@@ -108,6 +117,7 @@ impl ChatMessage {
         new_content: impl Into<String>,
     ) -> Self {
         ChatMessage {
+            sender_id: Uuid::default(),
             issued_at: Utc::now(),
             conversation_id,
             kind: ChatMessageKind::Ctrl(ControlMessage::EditMsg {
@@ -120,6 +130,7 @@ impl ChatMessage {
     /// Create a new control message to delete a message
     pub fn new_delete(conversation_id: Uuid, message_id: Uuid) -> Self {
         ChatMessage {
+            sender_id: Uuid::default(),
             issued_at: Utc::now(),
             conversation_id,
             kind: ChatMessageKind::Ctrl(ControlMessage::DeleteMsg { id: message_id }),
@@ -144,6 +155,7 @@ impl ChatMessage {
         };
 
         ChatMessage {
+            sender_id: Uuid::default(),
             issued_at: Utc::now(),
             conversation_id,
             kind: ChatMessageKind::Ctrl(ControlMessage::OpenConv { initial_message }),
