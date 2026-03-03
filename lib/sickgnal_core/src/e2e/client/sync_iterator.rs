@@ -224,7 +224,7 @@ where
     ///
     /// [`ConversationOpen`]: E2EMessage::ConversationOpen
     async fn process_open_conversation(&mut self, sender_id: Uuid, data: KeyExchangeData) {
-        let res = self.client.handle_open_session(sender_id, &data);
+        let res = self.client.state.handle_open_session(sender_id, &data);
 
         // Get the initial chat message
         let m = match res {
@@ -304,8 +304,18 @@ where
                 Ok(PayloadMessage::E2EMessage(E2EMessage::KeyRotation {
                     nonce,
                     key_id,
+                    message,
                     padding: _,
                 })) => {
+                    // Add the contained message to the queue if there is one
+                    if let Some(msg_ciphertext) = message {
+                        let m = E2EMessage::ConversationMessage {
+                            sender_id,
+                            msg_ciphertext,
+                        };
+                        queue.push_front(m);
+                    }
+
                     self.process_key_rotation(sender_id, ciphertext.key_id, &nonce, key_id, queue)
                         .await
                 }

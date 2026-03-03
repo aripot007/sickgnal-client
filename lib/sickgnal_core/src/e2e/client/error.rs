@@ -32,6 +32,9 @@ pub enum Error {
     /// When the requested user cannot be found on the server
     #[error("User not found")]
     UserNotFound,
+
+    #[error("No open session with user {0}")]
+    NoSession(Uuid),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

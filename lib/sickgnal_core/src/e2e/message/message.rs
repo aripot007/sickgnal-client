@@ -60,6 +60,10 @@ pub enum E2EMessage {
         #[serde(rename = "kid")]
         key_id: Uuid,
 
+        /// Optional message
+        #[serde(rename = "msg")]
+        message: Option<EncryptedPayload>,
+
         /// Optional random padding
         #[serde(rename = "pad")]
         padding: Option<String>,

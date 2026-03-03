@@ -3,14 +3,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use chacha20poly1305::{
-    AeadCore, KeyInit, XChaCha20Poly1305,
-    aead::{Aead, Payload},
-};
 use ed25519_dalek::Signer;
 use rand::{
-    Rng, RngCore, SeedableRng,
-    distributions::{Alphanumeric, DistString},
+    SeedableRng,
     rngs::{OsRng, StdRng},
 };
 use sha2::{Digest, Sha512};
@@ -22,34 +17,16 @@ use crate::{
     e2e::{
         client::{
             error::{Error, Result},
-            session::E2ESession,
             state::E2EClientState,
             sync_iterator::SyncIterator,
         },
-        kdf::kdf,
         keys::{EphemeralSecretKey, KeyStorageBackend, X25519Secret},
-        message::{
-            E2EMessage, EphemeralKey, ErrorCode, KeyExchangeData, SignedPreKey,
-            encrypted_payload::{self, EncryptedPayload, PayloadMessage},
-        },
+        message::{E2EMessage, EphemeralKey, ErrorCode, SignedPreKey},
         message_stream::E2EMessageStream,
     },
 };
 
 // region:    Struct definition
-
-// Maximum theorical limit should be around 1 billion (~2^30)
-/// Maximum messages to encrypt with a key before key rotation
-const MAX_MSGS_PER_KEY: u64 = 100_000;
-
-/// Range around [`MAX_MSGS_PER_KEY`] where key rotation should occur
-///
-/// Each time a key rotation happens, a random number between `MAX_MSGS_PER_KEY` +- `MAX_MSGS_PER_KEY_DEVIATION`
-/// is generated, and the next key derivation will happen at that time
-const MAX_MSGS_PER_KEY_DEVIATION: u64 = 50;
-
-const KEY_ROTATION_MIN_PAD: u64 = 0; // Minimum padding for key rotation messages
-const KEY_ROTATION_MAX_PAD: u64 = 100; // Maximum padding for key rotation messages
 
 /// An account on the relay server
 pub struct Account {
@@ -59,7 +36,7 @@ pub struct Account {
     pub id: Uuid,
 
     /// Authentication token
-    pub token: Option<String>,
+    pub token: String,
 }
 
 /// A client for the E2E protocol
@@ -131,7 +108,7 @@ where
             E2EMessage::AuthToken { id, token } => Account {
                 username,
                 id,
-                token: Some(token),
+                token: token,
             },
             E2EMessage::Error { code } => return Err(code.into()),
             m => return Err(Error::UnexpectedE2EMessage(m)),
@@ -217,78 +194,20 @@ where
     }
 
     /// Send a [`ChatMessage`] to another user
-    pub async fn send(&mut self, to: Uuid, mut message: ChatMessage) -> Result<()> {
-        message.sender_id = self.state.account.id;
+    pub async fn send(&mut self, to: Uuid, message: ChatMessage) -> Result<()> {
+        let rq = match self.state.prepare_message(to, message.clone()) {
+            Ok(rq) => rq,
 
-        // Get the existing session or create a new one
-        let mut sess;
-        if let Some(session) = self.state.sessions.get(&to) {
-            sess = session.clone();
-        } else {
-            return self.open_new_session(&to, message).await;
-        }
+            // No session with the user yet, create a session
+            Err(Error::NoSession(_)) => return self.open_new_session(to, message).await,
 
-        sess.key_msg_count = sess.key_msg_count.saturating_sub(1);
-
-        // Perform key rotation if necessary
-        if sess.key_msg_count == 0 {
-            let mut nonce: [u8; 32] = [0; 32];
-            self.state.rng.fill_bytes(&mut nonce);
-
-            let next_key = kdf(&[sess.sending_key.as_slice(), &nonce].concat());
-            let next_key_id = Uuid::new_v4();
-
-            let padding_length = self
-                .state
-                .rng
-                .gen_range(KEY_ROTATION_MIN_PAD..=KEY_ROTATION_MAX_PAD);
-
-            let pad = Alphanumeric.sample_string(&mut self.state.rng, padding_length as usize);
-
-            let m = E2EMessage::KeyRotation {
-                nonce: nonce.into(),
-                key_id: next_key_id,
-                padding: Some(pad),
-            };
-
-            match self.send_authenticated_e2e(m).await {
-                Ok(E2EMessage::Ok) => (),
-                Ok(resp) => return Err(Error::UnexpectedE2EMessage(resp)),
-                Err(e) => return Err(e),
-            }
-
-            // Save the key once the key rotation message is sent successfully
-            sess.sending_key_id = next_key_id;
-            sess.sending_key = next_key;
-
-            self.state
-                .key_storage
-                .add_session_key(to, next_key_id, next_key)?;
-        }
-
-        // Save the updated session
-        self.state.sessions.insert(to, sess.clone());
-
-        let aead = XChaCha20Poly1305::new_from_slice(&sess.sending_key)
-            .expect("session key type has the correct length for XChaCha20poly1305");
-
-        let nonce = XChaCha20Poly1305::generate_nonce(&mut self.state.rng);
-
-        let msg_ciphertext =
-            EncryptedPayload::encrypt_chat(sess.sending_key_id, nonce.into(), &aead, message)?;
-
-        let m = E2EMessage::ConversationMessage {
-            sender_id: self.state.account.id,
-            msg_ciphertext,
+            Err(e) => return Err(e),
         };
 
-        match self.send_authenticated_e2e(m).await {
-            Ok(E2EMessage::Ok) => (),
-            Ok(resp) => return Err(Error::UnexpectedE2EMessage(resp)),
-            Err(e) => return Err(e),
+        match self.send_authenticated_e2e(rq).await? {
+            E2EMessage::Ok => Ok(()),
+            m => Err(Error::UnexpectedE2EMessage(m)),
         }
-
-        Ok(())
     }
 
     /// Get the underlying client account
@@ -300,22 +219,6 @@ where
     // endregion: Public API
 
     // region:    Private API
-
-    /// Get the authentication token from the account, authenticating if necessary
-    async fn get_token(&mut self) -> Result<&String> {
-        if self.state.account.token.is_none() {
-            self.authenticate().await?;
-        }
-
-        let token = self
-            .state
-            .account
-            .token
-            .as_ref()
-            .expect("authenticate should set account token");
-
-        Ok(token)
-    }
 
     /// Send a [`E2EMessage`] and wait for the response
     ///
@@ -375,7 +278,7 @@ where
         &mut self,
         msg: E2EMessage,
     ) -> Result<E2EMessage> {
-        let token = self.get_token().await?.clone();
+        let token = self.state.token().clone();
         let mut msg = msg;
 
         msg.set_token(token);
@@ -390,7 +293,7 @@ where
             self.authenticate().await?;
 
             // Update the token
-            let token = self.get_token().await?.clone();
+            let token = self.state.token().clone();
             msg.set_token(token);
 
             resp = self.send_e2e_raw(msg).await?;
@@ -401,8 +304,6 @@ where
 
     /// Authenticate using challenge-response authentication and
     /// update the account token.
-    ///
-    /// Guarantees that self.account.token is Some if this function returns Ok().
     async fn authenticate(&mut self) -> Result<()> {
         let resp = self
             .send_e2e(E2EMessage::AuthChallengeRequest {
@@ -438,7 +339,7 @@ where
 
         if let E2EMessage::AuthToken { id, token } = resp {
             self.state.account.id = id;
-            self.state.account.token = Some(token);
+            self.state.account.token = token;
 
             Ok(())
         } else {
@@ -506,11 +407,16 @@ where
     }
 
     /// Open a new session with a user with an initial [`ChatMessage`]
-    async fn open_new_session(&mut self, recipient_id: &Uuid, message: ChatMessage) -> Result<()> {
-        // Get the recipient's prekeys
+    pub(super) async fn open_new_session(
+        &mut self,
+        recipient_id: Uuid,
+        message: ChatMessage,
+    ) -> Result<()> {
+        // Get the prekey bundle
+
         let rq = E2EMessage::PreKeyBundleRequest {
-            token: "".into(),
-            id: *recipient_id,
+            token: self.state.token().clone(),
+            id: recipient_id,
         };
 
         let bundle = match self.send_authenticated_e2e_raw(rq).await {
@@ -519,242 +425,24 @@ where
             Ok(E2EMessage::Error {
                 code: ErrorCode::UserNotFound,
             }) => return Err(Error::UserNotFound),
+            Ok(E2EMessage::Error { code }) => return Err(Error::ProtocolError(code)),
             Ok(m) => return Err(Error::UnexpectedE2EMessage(m)),
             Err(e) => return Err(e),
         };
 
-        // Get the required keys
-        let identity_keypair = self.state.key_storage.identity_keypair()?;
-        let idk = &identity_keypair.x25519_secret;
-        let ek = x25519_dalek::ReusableSecret::random_from_rng(&mut self.state.rng);
+        let (rq, sess) = self
+            .state
+            .prepare_open_new_session(recipient_id, bundle, message)?;
 
-        // Compute Diffie-Hellman parameters
-
-        // DH1 = X25519(i_A, P_B)
-        let dh1 = idk.diffie_hellman(&bundle.midterm_prekey).to_bytes();
-
-        // DH2 = X25519(e_A, I_B)
-        let dh2 = ek.diffie_hellman(&bundle.identity_keys.x25519).to_bytes();
-
-        // DH3 = X25519(e_A, P_B)
-        let dh3 = ek.diffie_hellman(&bundle.midterm_prekey).to_bytes();
-
-        let shared_secret;
-        let mut prekey_id = None;
-
-        // Use DH4 if ephemeral prekey is available
-        if let Some(tk) = bundle.ephemeral_prekey {
-            prekey_id = Some(tk.id);
-
-            // DH4 = X25519(e_A, T_Bi)
-            let dh4 = ek.diffie_hellman(&tk.key).to_bytes();
-
-            shared_secret = kdf(&[dh1, dh2, dh3, dh4].concat());
-        } else {
-            shared_secret = kdf(&[dh1, dh2, dh3].concat());
-        }
-
-        let public_ek = PublicKey::from(&ek);
-        drop(ek);
-
-        // Get our public key from the private secret
-        let public_identity_key = PublicKey::from(idk);
-
-        // Our sending key KDF(S || I_A)
-        let send_key = kdf(&[shared_secret.as_slice(), public_identity_key.as_bytes()].concat());
-
-        // Our receiving key KDF(S || I_B)
-        let recv_key = kdf(&[
-            shared_secret.as_slice(),
-            bundle.identity_keys.x25519.as_bytes(),
-        ]
-        .concat());
-
-        // Generate some ids for the keys
-        let send_key_id = Uuid::new_v4();
-        let receive_key_id = Uuid::new_v4();
-
-        // Encrypt the payload
-
-        let aead = XChaCha20Poly1305::new_from_slice(&send_key)
-            .expect("32 bytes is the correct key size for XChaCha20Poly1305");
-
-        let nonce = XChaCha20Poly1305::generate_nonce(&mut self.state.rng);
-
-        let aad = &[
-            idk.as_bytes().as_slice(),              // I_A
-            bundle.identity_keys.x25519.as_bytes(), // I_B
-            send_key_id.as_bytes(),                 // i
-            receive_key_id.as_bytes(),              // j
-        ]
-        .concat();
-
-        let payload = Payload {
-            msg: &PayloadMessage::ChatMessage(message).to_bytes()?,
-            aad,
-        };
-
-        let ciphertext = aead
-            .encrypt(&nonce, payload)
-            .map_err(encrypted_payload::Error::from)?;
-
-        let encrypted_payload = EncryptedPayload {
-            nonce: nonce.into(),
-            key_id: send_key_id,
-            ciphertext,
-        };
-
-        // Construct and send the message
-
-        let kex_data = KeyExchangeData {
-            identity_key: identity_keypair.public_keys(),
-            ephemeral_prekey: public_ek,
-            recipient_prekey_id: prekey_id,
-            send_key_id,
-            receive_key_id,
-            msg_ciphertext: encrypted_payload,
-        };
-
-        let rq = E2EMessage::SendInitialMessage {
-            token: "".into(),
-            recipient_id: *recipient_id,
-            data: kex_data,
-        };
-
-        match self.send_authenticated_e2e(rq).await {
-            Ok(E2EMessage::Ok) => (),
-            Ok(m) => return Err(Error::UnexpectedE2EMessage(m)),
-            Err(e) => return Err(e),
+        match self.send_authenticated_e2e(rq).await? {
+            E2EMessage::Ok => (),
+            m => return Err(Error::UnexpectedE2EMessage(m)),
         }
 
         // Save the session
-        let key_msg_count = MAX_MSGS_PER_KEY - MAX_MSGS_PER_KEY_DEVIATION
-            + self.state.rng.gen_range(0..=2 * MAX_MSGS_PER_KEY_DEVIATION);
-        let session = E2ESession {
-            correspondant_id: *recipient_id,
-            sending_key_id: send_key_id,
-            sending_key: send_key,
-            key_msg_count,
-            receiving_key_id: receive_key_id,
-            receiving_key: recv_key,
-        };
-
-        self.state.update_session(session)?;
+        self.state.update_session(sess)?;
 
         Ok(())
-    }
-
-    /// Open a new session with a user using key exchange data, and return the decrypted payload
-    pub(super) fn handle_open_session(
-        &mut self,
-        sender_id: Uuid,
-        kex_data: &KeyExchangeData,
-    ) -> Result<PayloadMessage> {
-        // TODO: Handle pre-existing sessions with same and different public keys
-
-        // Get ephemeral key
-        let mut prekey = None;
-        if let Some(id) = &kex_data.recipient_prekey_id {
-            let key = self.state.key_storage.pop_ephemeral_key(id)?;
-
-            if key.is_none() {
-                return Err(Error::NoSuchPrekey(*id));
-            }
-
-            prekey = key;
-        }
-
-        let midterm_key = self.state.key_storage.midterm_key()?;
-        let identity_key = &self.state.key_storage.identity_keypair()?.x25519_secret;
-
-        let dh1 = midterm_key
-            .diffie_hellman(&kex_data.identity_key.x25519)
-            .to_bytes(); // DH1 = X25519(p_B, I_A)
-        let dh2 = identity_key
-            .diffie_hellman(&kex_data.ephemeral_prekey)
-            .to_bytes(); // DH2 = X25519(i_B, E_A)
-        let dh3 = midterm_key
-            .diffie_hellman(&kex_data.ephemeral_prekey)
-            .to_bytes(); // DH3 = X25519(p_B, E_A)
-
-        // Compute DH4 if ephemeral prekey was used
-        let dh4_opt =
-            prekey.map(|secret| secret.diffie_hellman(&kex_data.ephemeral_prekey).to_bytes()); // DH4 = X25519(t_Bi, E_A)
-
-        let shared_secret;
-
-        // Use DH4 if present
-        if let Some(dh4) = dh4_opt {
-            shared_secret = kdf(&[dh1, dh2, dh3, dh4].concat());
-        } else {
-            shared_secret = kdf(&[dh1, dh2, dh3].concat());
-        }
-
-        // Get our public key from the private secret
-        let public_identity_key = PublicKey::from(identity_key);
-
-        // Our receiving key, which corresponds to the sender's sending key (i)
-        let recv_key = kdf(&[
-            shared_secret.as_slice(),
-            kex_data.identity_key.x25519.as_bytes(),
-        ]
-        .concat());
-
-        // Our sending key, which corresponds to the sender's receiving key (j)
-        let send_key = kdf(&[shared_secret.as_slice(), public_identity_key.as_bytes()].concat());
-
-        // Try to decrypt the message
-        let aead = XChaCha20Poly1305::new_from_slice(&recv_key)
-            .expect("32 bytes is the correct key size for XChaCha20Poly1305");
-
-        let aad = &[
-            kex_data.identity_key.x25519.as_bytes().as_slice(), // I_A
-            public_identity_key.as_bytes(),                     // I_B
-            kex_data.send_key_id.as_bytes(),                    // i
-            kex_data.receive_key_id.as_bytes(),                 // j
-        ]
-        .concat();
-
-        let payload = Payload {
-            msg: &kex_data.msg_ciphertext.ciphertext,
-            aad,
-        };
-
-        let bytes = aead
-            .decrypt(&kex_data.msg_ciphertext.nonce.into(), payload)
-            .map_err(encrypted_payload::Error::from)?;
-
-        let payload = PayloadMessage::try_from_bytes(&bytes)?;
-
-        // Save the keys and session information
-        self.state
-            .key_storage
-            .set_user_public_keys(sender_id, kex_data.identity_key.clone())?;
-
-        // Key ids are inverted since they're from the sender's POV
-        self.state
-            .key_storage
-            .add_session_key(sender_id, kex_data.send_key_id, recv_key)?;
-        self.state
-            .key_storage
-            .add_session_key(sender_id, kex_data.receive_key_id, send_key)?;
-
-        let key_msg_count = MAX_MSGS_PER_KEY - MAX_MSGS_PER_KEY_DEVIATION
-            + self.state.rng.gen_range(0..=2 * MAX_MSGS_PER_KEY_DEVIATION);
-
-        let sess = E2ESession {
-            correspondant_id: sender_id,
-            sending_key_id: kex_data.receive_key_id,
-            sending_key: recv_key,
-            key_msg_count,
-            receiving_key_id: kex_data.send_key_id,
-            receiving_key: send_key,
-        };
-
-        self.state.key_storage.save_session(&sess)?;
-        self.state.sessions.insert(sender_id, sess);
-
-        Ok(payload)
     }
 
     // endregion: Private API
