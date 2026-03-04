@@ -137,6 +137,13 @@ where
             );
         }
 
+        // Cleanup old session keys
+        for user_id in self.session_keys.keys() {
+            if let Err(err) = self.client.state.clean_session_keys(user_id) {
+                println!("Could not clean keys for user {} : {}", user_id, err);
+            }
+        }
+
         Ok(None)
     }
 
@@ -208,18 +215,16 @@ where
                     self.process_conversation_message(sender_id, msg_ciphertext, &mut queue)
                         .await
                 }
-                _ => todo!(),
+                _ => println!("Unexpected message : {:?}", msg),
             };
         }
-
-        todo!()
     }
 
     /// Process a [`ConversationOpen`] message, performing key exchange and creating the session
     ///
     /// [`ConversationOpen`]: E2EMessage::ConversationOpen
     async fn process_open_conversation(&mut self, sender_id: Uuid, data: KeyExchangeData) {
-        let res = self.client.handle_open_session(sender_id, &data).await;
+        let res = self.client.state.handle_open_session(sender_id, &data);
 
         // Get the initial chat message
         let m = match res {
@@ -260,8 +265,27 @@ where
         // Try to get the session keys
         let session_keys;
 
+        // Cached session keys
         if let Some(keys) = self.session_keys.get(&sender_id) {
-            session_keys = keys;
+            session_keys = &keys.keys;
+
+        // Session not encountered yet
+        } else if let Some(sess) = self.client.state.sessions().get(&sender_id) {
+            let keys = HashMap::from([(sender_id, sess.receiving_key)]);
+            self.session_keys.insert(
+                sender_id,
+                SessionKeys {
+                    last_key_id: sess.receiving_key_id,
+                    keys,
+                },
+            );
+
+            let keys = self
+                .session_keys
+                .get(&sender_id)
+                .expect("entry with sender_id key was inserted");
+
+            session_keys = &keys.keys;
         } else {
             // TODO: Better logging
             println!("No session with user {}", sender_id);
@@ -269,7 +293,7 @@ where
         }
 
         // Decrypt the message if a key is available
-        if let Some(key) = session_keys.keys.get(&ciphertext.key_id) {
+        if let Some(key) = session_keys.get(&ciphertext.key_id) {
             let aead = XChaCha20Poly1305::new_from_slice(key)
                 .expect("stored session key should have a valid length");
 
@@ -280,8 +304,18 @@ where
                 Ok(PayloadMessage::E2EMessage(E2EMessage::KeyRotation {
                     nonce,
                     key_id,
+                    message,
                     padding: _,
                 })) => {
+                    // Add the contained message to the queue if there is one
+                    if let Some(msg_ciphertext) = message {
+                        let m = E2EMessage::ConversationMessage {
+                            sender_id,
+                            msg_ciphertext,
+                        };
+                        queue.push_front(m);
+                    }
+
                     self.process_key_rotation(sender_id, ciphertext.key_id, &nonce, key_id, queue)
                         .await
                 }
@@ -349,8 +383,25 @@ where
 
         let next_key = kdf(&[prev_key.as_slice(), nonce].concat());
 
-        session_keys.keys.insert(next_key_id, next_key);
         session_keys.last_key_id = next_key_id;
+        session_keys.keys.insert(next_key_id, next_key);
+
+        // Update client session
+        if let Some(mut sess) = self.client.state.sessions().get(&sender_id).cloned() {
+            sess.receiving_key_id = next_key_id;
+            sess.receiving_key = next_key;
+
+            if let Err(err) = self.client.state.update_session(sess) {
+                // TODO: Better logging
+                println!("Error saving new session state : {}", err);
+            }
+        } else {
+            // TODO: Better logging
+            println!(
+                "Could not update session : no session for user {}",
+                sender_id
+            );
+        }
 
         // Add queued messages for this key, if any
         if let Some(key_queues) = self.undecipherable_messages.get_mut(&sender_id) {

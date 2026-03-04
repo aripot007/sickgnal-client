@@ -14,7 +14,7 @@ pub struct E2ESession {
     /// Current key used for encryption
     pub sending_key: SymetricKey,
 
-    /// Number of messages sent with the current key
+    /// Number of messages left that can be sent with the current key
     pub key_msg_count: u64,
 
     /// Id of the current key used for decryption

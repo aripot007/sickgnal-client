@@ -27,7 +27,7 @@ pub struct MemoryKeyStorage {
     identity_keypair: Option<IdentityKeyPair>,
     midterm_key: Option<X25519Secret>,
     ephemeral_keys: HashMap<Uuid, X25519Secret>,
-    session_keys: HashMap<(Uuid, Uuid), SymetricKey>,
+    session_keys: HashMap<Uuid, HashMap<Uuid, SymetricKey>>,
     user_public_keys: HashMap<Uuid, PublicIdentityKeys>,
     sessions: HashMap<Uuid, E2ESession>,
 }
@@ -184,7 +184,7 @@ impl E2EStorageBackend for MemoryKeyStorage {
         Ok(())
     }
 
-    fn clear_conversation_keys(&mut self) -> Result<(), KeyStorageError> {
+    fn clear_session_keys(&mut self) -> Result<(), KeyStorageError> {
         self.session_keys.clear();
         Ok(())
     }
@@ -199,7 +199,11 @@ impl E2EStorageBackend for MemoryKeyStorage {
         user: Uuid,
         key_id: Uuid,
     ) -> Result<Option<&super::SymetricKey>, KeyStorageError> {
-        Ok(self.session_keys.get(&(user, key_id)))
+        if let Some(keys) = self.session_keys.get(&user) {
+            return Ok(keys.get(&key_id));
+        }
+
+        Ok(None)
     }
 
     fn add_session_key(
@@ -208,12 +212,46 @@ impl E2EStorageBackend for MemoryKeyStorage {
         key_id: Uuid,
         key: super::SymetricKey,
     ) -> Result<(), KeyStorageError> {
-        self.session_keys.insert((user, key_id), key);
+        if let Some(keys) = self.session_keys.get_mut(&user) {
+            keys.insert(key_id, key);
+        } else {
+            let keys = HashMap::from([(key_id, key)]);
+            self.session_keys.insert(user, keys);
+        }
+
         Ok(())
     }
 
     fn delete_session_key(&mut self, user: Uuid, key_id: Uuid) -> Result<(), KeyStorageError> {
-        self.session_keys.remove(&(user, key_id));
+        if let Some(keys) = self.session_keys.get_mut(&user) {
+            keys.remove(&key_id);
+        }
+
+        Ok(())
+    }
+
+    fn cleanup_session_keys(
+        &mut self,
+        user: &Uuid,
+        current_sending_key: &Uuid,
+        current_receiving_key: &Uuid,
+    ) -> Result<(), KeyStorageError> {
+        if let Some(keys) = self.session_keys.get_mut(user) {
+            // Get the current keys to insert them back
+            let snd_key = keys.remove(current_sending_key);
+            let rcv_key = keys.remove(current_receiving_key);
+
+            keys.clear();
+
+            // Insert back the current keys
+            if let Some(key) = snd_key {
+                keys.insert(*current_sending_key, key);
+            }
+            if let Some(key) = rcv_key {
+                keys.insert(*current_receiving_key, key);
+            }
+        }
+
         Ok(())
     }
 

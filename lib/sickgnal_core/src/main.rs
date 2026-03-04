@@ -76,7 +76,7 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let account = Account {
         username: "Alice".into(),
         id: Uuid::new_v4(),
-        token: None,
+        token: "".into(),
     };
 
     let mut client = E2EClient::create("Bob".into(), storage, msg_stream).await?;

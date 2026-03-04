@@ -1,6 +1,7 @@
 mod client;
 pub mod error;
 pub mod session;
+mod state;
 mod sync_iterator;
 
 pub use client::*;

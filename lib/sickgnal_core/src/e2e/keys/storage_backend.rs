@@ -80,8 +80,8 @@ pub trait E2EStorageBackend {
     /// Delete all ephemeral keypairs
     fn clear_ephemeral_keys(&mut self) -> Result<(), KeyStorageError>;
 
-    /// Delete all conversation keys
-    fn clear_conversation_keys(&mut self) -> Result<(), KeyStorageError>;
+    /// Delete all session keys
+    fn clear_session_keys(&mut self) -> Result<(), KeyStorageError>;
 
     /// Delete all user public keys
     fn clear_user_public_keys(&mut self) -> Result<(), KeyStorageError>;
@@ -91,7 +91,7 @@ pub trait E2EStorageBackend {
         self.clear_identity_keypair()?;
         self.clear_midterm_key()?;
         self.clear_ephemeral_keys()?;
-        self.clear_conversation_keys()?;
+        self.clear_session_keys()?;
         self.clear_user_public_keys()?;
         Ok(())
     }
@@ -114,6 +114,14 @@ pub trait E2EStorageBackend {
 
     /// Delete a session key
     fn delete_session_key(&mut self, user: Uuid, key_id: Uuid) -> Result<(), KeyStorageError>;
+
+    /// Cleanup keys in a session, leaving only the current sending and receiving keys
+    fn cleanup_session_keys(
+        &mut self,
+        user: &Uuid,
+        current_sending_key: &Uuid,
+        current_receiving_key: &Uuid,
+    ) -> Result<(), KeyStorageError>;
 
     // Public user keys
     /// Get the public key of a user
