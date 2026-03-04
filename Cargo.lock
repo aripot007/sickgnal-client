@@ -1147,7 +1147,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror",
- "tokio",
  "uuid",
  "x25519-dalek",
 ]
