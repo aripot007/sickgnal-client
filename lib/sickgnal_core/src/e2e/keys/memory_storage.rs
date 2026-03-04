@@ -43,9 +43,9 @@ pub enum Error {
     DuplicateId,
 }
 
-impl Into<KeyStorageError> for Error {
-    fn into(self) -> KeyStorageError {
-        KeyStorageError::new(self)
+impl From<Error> for KeyStorageError {
+    fn from(value: Error) -> Self {
+        KeyStorageError::new(value)
     }
 }
 
