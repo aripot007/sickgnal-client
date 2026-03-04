@@ -92,7 +92,7 @@ where
         let len = u16::from_be_bytes(len);
 
         // Payload
-        let mut payload: Vec<u8> = Vec::with_capacity(len as usize);
+        let mut payload: Vec<u8> = vec![0u8; len as usize];
 
         self.byte_stream
             .read_exact(&mut payload)
