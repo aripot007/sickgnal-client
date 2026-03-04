@@ -79,7 +79,7 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
         token: "".into(),
     };
 
-    let mut client = E2EClient::create("Bob".into(), storage, msg_stream).await?;
+    let mut client = E2EClient::create_account("Bob".into(), storage, msg_stream).await?;
 
     // Sync messages
     let mut sync_iterator = client.sync();

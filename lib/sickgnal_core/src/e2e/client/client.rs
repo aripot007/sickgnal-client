@@ -28,6 +28,9 @@ use crate::{
 
 // region:    Struct definition
 
+/// Number of prekeys to store on the server
+pub(super) const PREKEY_AMOUNT: usize = 100;
+
 /// An account on the relay server
 pub struct Account {
     pub username: String,
@@ -63,7 +66,9 @@ where
 {
     // region:    Public API
 
-    /// Load a client with an account
+    /// Load a client with an existing account
+    ///
+    /// The client must then be synchronized with the server with
     pub fn load(account: Account, mut key_storage: Storage, msg_stream: MsgStream) -> Result<Self> {
         let sessions = key_storage
             .load_all_sessions()?
@@ -81,10 +86,11 @@ where
         Ok(Self { msg_stream, state })
     }
 
-    /// Create a new client with the given username
+    /// Create a new client and register an account with the given username
     ///
-    /// Generates the identity key if it does not exist.
-    pub async fn create(
+    /// Generates the identity key if it does not exist, and upload `prekey_count` initial
+    /// prekeys to the server.
+    pub async fn create_account(
         username: String,
         mut key_storage: Storage,
         mut msg_stream: MsgStream,
@@ -121,7 +127,12 @@ where
             sessions: HashMap::new(),
         };
 
-        Ok(Self { msg_stream, state })
+        let mut client = Self { msg_stream, state };
+
+        // Upload prekeys
+        client.upload_prekeys(PREKEY_AMOUNT, true, true).await?;
+
+        Ok(client)
     }
 
     /// Perform the initial synchronization with the server
@@ -129,10 +140,32 @@ where
         SyncIterator::new(self)
     }
 
-    /// Initialize prekeys and upload them to the server
-    pub(crate) async fn init_prekeys(&mut self, prekey_count: usize) -> Result<()> {
-        self.upload_prekeys(prekey_count, true, true).await
+    /// Get the underlying client account
+    #[inline]
+    pub fn account(&self) -> &Account {
+        &self.state.account
     }
+
+    /// Send a [`ChatMessage`] to another user
+    pub async fn send(&mut self, to: Uuid, message: ChatMessage) -> Result<()> {
+        let rq = match self.state.prepare_message(to, message.clone()) {
+            Ok(rq) => rq,
+
+            // No session with the user yet, create a session
+            Err(Error::NoSession(_)) => return self.open_new_session(to, message).await,
+
+            Err(e) => return Err(e),
+        };
+
+        match self.send_authenticated_e2e(rq).await? {
+            E2EMessage::Ok => Ok(()),
+            m => Err(Error::UnexpectedE2EMessage(m)),
+        }
+    }
+
+    // endregion: Public API
+
+    // region:    Private API
 
     /// Synchronize the prekeys with the ones uploaded on the server.
     ///
@@ -142,7 +175,7 @@ where
     /// If `rotate_midterm_key` is true, this also rotates the midterm key.
     ///
     /// Returns the number of available ephemeral prekeys on the server.
-    pub(crate) async fn sync_prekeys(
+    pub(super) async fn sync_prekeys(
         &mut self,
         min_prekeys: usize,
         rotate_midterm_key: bool,
@@ -192,33 +225,6 @@ where
 
         Ok(nb_available + to_upload)
     }
-
-    /// Send a [`ChatMessage`] to another user
-    pub async fn send(&mut self, to: Uuid, message: ChatMessage) -> Result<()> {
-        let rq = match self.state.prepare_message(to, message.clone()) {
-            Ok(rq) => rq,
-
-            // No session with the user yet, create a session
-            Err(Error::NoSession(_)) => return self.open_new_session(to, message).await,
-
-            Err(e) => return Err(e),
-        };
-
-        match self.send_authenticated_e2e(rq).await? {
-            E2EMessage::Ok => Ok(()),
-            m => Err(Error::UnexpectedE2EMessage(m)),
-        }
-    }
-
-    /// Get the underlying client account
-    #[inline]
-    pub fn account(&self) -> &Account {
-        &self.state.account
-    }
-
-    // endregion: Public API
-
-    // region:    Private API
 
     /// Send a [`E2EMessage`] and wait for the response
     ///

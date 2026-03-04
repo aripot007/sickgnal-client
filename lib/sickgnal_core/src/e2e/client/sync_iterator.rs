@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::{
     chat::message::{ChatMessage, ChatMessageKind, ControlMessage},
     e2e::{
-        client::{E2EClient, Error},
+        client::{E2EClient, Error, PREKEY_AMOUNT},
         kdf::kdf,
         keys::{E2EStorageBackend, SymetricKey},
         message::{
@@ -105,6 +105,9 @@ where
     /// }
     /// ```
     pub async fn next(&mut self) -> Result<Option<ChatMessage>, Error> {
+        // Start by syncrhonizing the prekeys
+        self.client.sync_prekeys(PREKEY_AMOUNT, false).await?;
+
         loop {
             // Return already decrypted messages if available
             if let Some(m) = self.messages.pop() {
