@@ -26,6 +26,9 @@ pub enum Error {
     #[error("Could not find ephemeral prekey with id {0}")]
     NoSuchPrekey(Uuid),
 
+    #[error("No session key {1} for user {0}")]
+    NoSessionKey(Uuid, Uuid),
+
     #[error("Could not encrypt/decrypt payload : {0}")]
     EncryptedPayloadError(#[from] e2e::message::encrypted_payload::Error),
 

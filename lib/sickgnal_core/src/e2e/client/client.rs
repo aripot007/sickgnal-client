@@ -1,9 +1,13 @@
 //! Context for the E2E protocol
 //!
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex},
+};
 
 use ed25519_dalek::Signer;
+use futures::channel::mpsc;
 use rand::{
     SeedableRng,
     rngs::{OsRng, StdRng},
@@ -16,9 +20,11 @@ use crate::{
     chat::message::ChatMessage,
     e2e::{
         client::{
+            client_handle::ClientHandle,
             error::{Error, Result},
             state::E2EClientState,
             sync_iterator::SyncIterator,
+            workers,
         },
         keys::{E2EStorageBackend, EphemeralSecretKey, X25519Secret},
         message::{E2EMessage, EphemeralKey, ErrorCode, SignedPreKey},
@@ -161,6 +167,42 @@ where
             E2EMessage::Ok => Ok(()),
             m => Err(Error::UnexpectedE2EMessage(m)),
         }
+    }
+
+    /// Starts the asynchronous mode
+    ///
+    /// This allows receiving new messages from the server without polling.
+    ///
+    /// Returns a [`ClientHandle`], a [`Receiver<ChatMessage>`] and the receiver and sender tasks that must be spawned.
+    ///
+    /// The [`ClientHandle`] will shutdown the client when [`Drop`]ped
+    ///
+    /// [`Receiver<ChatMessage>`]: mpsc::Receiver
+    pub fn start_async_workers(
+        self,
+    ) -> (
+        ClientHandle<Storage>,
+        mpsc::Receiver<ChatMessage>,
+        impl Future<Output = ()> + Send + 'static, // Receiver task
+        impl Future<Output = ()> + Send + 'static, // Sender task
+    ) {
+        let (reader, writer) = self.msg_stream.split();
+
+        let (send_tx, send_rx) = mpsc::channel(100);
+        let (recv_tx, recv_rx) = mpsc::channel(100);
+
+        let state = Arc::new(Mutex::new(self.state));
+
+        let receiver_task = workers::receive::receive_loop(state.clone(), reader, recv_tx);
+
+        let sender_task = workers::send::send_loop(writer, send_rx);
+
+        let handle = ClientHandle {
+            send_channel: send_tx,
+            client_state: state,
+        };
+
+        (handle, recv_rx, receiver_task, sender_task)
     }
 
     // endregion: Public API

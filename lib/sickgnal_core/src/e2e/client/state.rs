@@ -115,6 +115,104 @@ where
         return Ok(msg);
     }
 
+    /// Decrypt a [`ChatMessage`] in a [`EncryptedPayload`]
+    ///
+    /// Handles key rotation messages automatically. If you need to handle control messages,
+    /// use [`E2EClientState::decrypt_payload`] instead.
+    ///
+    /// May return `None` if the payload is a key rotation payload without a message.
+    ///
+    /// If the payload is a key rotation payload containing a [`PayloadMessage::E2EMessage`] as the
+    /// optional message, returns a [`Error::UnexpectedE2EMessage`] error with the inner payload.
+    pub fn decrypt_message(
+        &mut self,
+        sender_id: Uuid,
+        ciphertext: &EncryptedPayload,
+    ) -> Result<Option<ChatMessage>> {
+        match self.decrypt_payload(sender_id, ciphertext)? {
+            PayloadMessage::ChatMessage(m) => Ok(Some(m)),
+
+            // Handle key rotation
+            PayloadMessage::E2EMessage(E2EMessage::KeyRotation {
+                nonce,
+                key_id,
+                message,
+                padding: _,
+            }) => {
+                self.process_key_rotation(sender_id, &nonce, key_id)?;
+
+                // Decrypt the underlying message if there is one
+                if let Some(msg) = message {
+                    return self.decrypt_message(sender_id, &msg);
+                };
+                Ok(None)
+            }
+            PayloadMessage::E2EMessage(m) => Err(Error::UnexpectedE2EMessage(m)),
+        }
+    }
+
+    /// Decrypt an [`EncryptedPayload`]
+    ///
+    /// This returns the raw [`PayloadMessage`] and does not handle control messages. If you
+    /// want the client to handle control messages directly, use
+    /// [`E2EClientState::decrypt_message`] instead.
+    pub fn decrypt_payload(
+        &mut self,
+        sender_id: Uuid,
+        ciphertext: &EncryptedPayload,
+    ) -> Result<PayloadMessage> {
+        // Try to get the session
+        let session = self
+            .sessions
+            .get(&sender_id)
+            .ok_or(Error::NoSession(sender_id))?;
+
+        // Try to get the key
+        let key = if ciphertext.key_id == session.receiving_key_id {
+            &session.receiving_key
+        } else {
+            // Try to get the key from the storage if its not the most recent one
+            match self.key_storage.session_key(sender_id, ciphertext.key_id)? {
+                Some(key) => key,
+                None => return Err(Error::NoSessionKey(sender_id, ciphertext.key_id)),
+            }
+        };
+
+        // Decrypt the message
+        let aead = XChaCha20Poly1305::new_from_slice(key)
+            .expect("stored session key should have a valid length");
+
+        let payload = ciphertext.decrypt(&aead)?;
+
+        Ok(payload)
+    }
+
+    /// Process a key rotation message for a user
+    pub fn process_key_rotation(
+        &mut self,
+        sender_id: Uuid,
+        nonce: &[u8],
+        next_key_id: Uuid,
+    ) -> Result<()> {
+        let session = self
+            .sessions
+            .get_mut(&sender_id)
+            .ok_or(Error::NoSession(sender_id))?;
+
+        // Compute the next key
+
+        let next_key = kdf(&[&session.receiving_key, nonce].concat());
+
+        // Update the session and store the key
+        session.receiving_key = next_key;
+        session.receiving_key_id = next_key_id;
+
+        self.key_storage
+            .add_session_key(sender_id, next_key_id, next_key)?;
+
+        Ok(())
+    }
+
     /// Create an identity keypair and store it in the key storage
     pub(super) fn create_identity_keypair<T: RngCore + CryptoRng>(
         storage: &mut Storage,

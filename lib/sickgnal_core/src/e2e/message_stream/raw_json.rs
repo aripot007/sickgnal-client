@@ -27,10 +27,10 @@ where
 }
 
 /// Reader half of a [`RawJsonMessageStream`]
-struct ReaderHalf<R: AsyncRead + Send>(R);
+pub struct ReaderHalf<R: AsyncRead + Send>(R);
 
 /// Writer half of a [`RawJsonMessageStream`]
-struct WriterHalf<W: AsyncWrite + Send>(W);
+pub struct WriterHalf<W: AsyncWrite + Send>(W);
 
 impl<S> RawJsonMessageStream<S>
 where
