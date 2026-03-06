@@ -175,7 +175,17 @@ where
     ///
     /// Returns a [`ClientHandle`], a [`Receiver<ChatMessage>`] and the receiver and sender tasks that must be spawned.
     ///
-    /// The [`ClientHandle`] will shutdown the client when [`Drop`]ped
+    /// TODO: The [`ClientHandle`] will shutdown the client when [`Drop`]ped
+    ///
+    /// ```ignore
+    ///
+    /// let (handle, ch, recv_worker, send_worker) = client.start_async_workers();
+    ///
+    /// // Start the two worker tasks
+    /// tokio::spawn(recv_worker);
+    /// tokio::spawn(send_worker)
+    ///
+    /// ```
     ///
     /// [`Receiver<ChatMessage>`]: mpsc::Receiver
     pub fn start_async_workers(
