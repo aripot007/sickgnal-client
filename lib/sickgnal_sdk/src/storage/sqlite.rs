@@ -1,7 +1,7 @@
 use sickgnal_core::chat::storage::*;
 use sickgnal_core::e2e::{
     client::session::E2ESession,
-    keys::{EphemeralSecretKey, IdentityKeyPair, KeyStorageBackend, PublicIdentityKeys, SymetricKey, X25519Secret},
+    keys::{EphemeralSecretKey, IdentityKeyPair, E2EStorageBackend, PublicIdentityKeys, SymetricKey, X25519Secret},
 };
 use sickgnal_core::e2e::keys as key;
 use crate::storage::schema;
@@ -544,10 +544,10 @@ impl StorageBackend for SqliteStorage {
         let params: Vec<Box<dyn rusqlite::ToSql>> = match (limit, offset) {
             (Some(l), Some(o)) => vec![
                 Box::new(conversation_id.to_string()),
-                Box::new(l),
-                Box::new(o),
+                Box::new(l.into()),
+                Box::new(o.into()),
             ],
-            (Some(l), None) => vec![Box::new(conversation_id.to_string()), Box::new(l)],
+            (Some(l), None) => vec![Box::new(conversation_id.to_string()), Box::new(l.into())],
             _ => vec![Box::new(conversation_id.to_string())],
         };
 
@@ -666,7 +666,7 @@ impl SqliteStorage {
     }
 }
 
-impl KeyStorageBackend for SqliteStorage {
+impl E2EStorageBackend for SqliteStorage {
     // ========== Identity and mid-term keys ==========
 
     fn identity_keypair(&self) -> key::Result<&IdentityKeyPair> {
@@ -829,7 +829,7 @@ impl KeyStorageBackend for SqliteStorage {
         Ok(())
     }
 
-    fn clear_conversation_keys(&mut self) -> key::Result<()> {
+    fn clear_session_keys(&mut self) -> key::Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM keys WHERE key_type = 'session_key'", [])
             .map_err(Self::db_error)?;
@@ -995,6 +995,15 @@ impl KeyStorageBackend for SqliteStorage {
         &mut self,
         keypairs: impl Iterator<Item = X25519Secret>,
     ) -> key::Result<impl Iterator<Item = Uuid>> {
+        todo!()
+    }
+    
+    fn cleanup_session_keys(
+        &mut self,
+        user: &Uuid,
+        current_sending_key: &Uuid,
+        current_receiving_key: &Uuid,
+    ) -> key::storage_backend::Result<()> {
         todo!()
     }
 }

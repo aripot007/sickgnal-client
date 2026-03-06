@@ -4,7 +4,8 @@ pub mod memory_storage;
 pub mod storage_backend;
 use base64::{DecodeSliceError, Engine, engine::general_purpose};
 use rand::{CryptoRng, RngCore};
-pub use storage_backend::*;
+
+pub use storage_backend::{ E2EStorageBackend, KeyStorageError};
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

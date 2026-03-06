@@ -60,6 +60,10 @@ pub enum E2EMessage {
         #[serde(rename = "kid")]
         key_id: Uuid,
 
+        /// Optional message
+        #[serde(rename = "msg")]
+        message: Option<EncryptedPayload>,
+
         /// Optional random padding
         #[serde(rename = "pad")]
         padding: Option<String>,
@@ -69,11 +73,7 @@ pub enum E2EMessage {
     ///
     /// Response from [`E2EMessage::UserProfileByUsername`] and [`E2EMessage::UserProfileById`]
     #[serde(rename = "10")]
-    UserProfile {
-        /// Id of the user
-        id: Uuid,
-        username: String,
-    },
+    UserProfile(UserProfile),
 
     // Server messages
 
@@ -344,6 +344,13 @@ pub struct PreKeyBundle {
     /// Optional ephemeral prekey
     #[serde(rename = "ek")]
     pub ephemeral_prekey: Option<EphemeralKey>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserProfile {
+    /// Id of the user
+    id: Uuid,
+    username: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

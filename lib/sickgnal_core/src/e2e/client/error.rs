@@ -26,6 +26,18 @@ pub enum Error {
     #[error("Could not find ephemeral prekey with id {0}")]
     NoSuchPrekey(Uuid),
 
-    #[error("Could not decrypt payload : {0}")]
-    DecryptionError(#[from] e2e::message::encrypted_payload::Error),
+    #[error("No session key {1} for user {0}")]
+    NoSessionKey(Uuid, Uuid),
+
+    #[error("Could not encrypt/decrypt payload : {0}")]
+    EncryptedPayloadError(#[from] e2e::message::encrypted_payload::Error),
+
+    /// When the requested user cannot be found on the server
+    #[error("User not found")]
+    UserNotFound,
+
+    #[error("No open session with user {0}")]
+    NoSession(Uuid),
 }
+
+pub type Result<T> = std::result::Result<T, Error>;
