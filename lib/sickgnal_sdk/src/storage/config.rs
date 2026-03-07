@@ -19,7 +19,7 @@ const ARGON2_PARALLELISM: u32 = 4;
 /// Configuration for storage backend
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub db_path: PathBuf,
+    pub db_dir: PathBuf,
     pub encryption_key: Vec<u8>, // Derived from user password using Argon2
 }
 
@@ -81,7 +81,7 @@ impl Config {
         let encryption_key = Self::derive_key_from_password(password, &salt)?;
 
         Ok(Config {
-            db_path,
+            db_dir: db_path,
             encryption_key: encryption_key.to_vec(),
         })
     }
@@ -193,7 +193,7 @@ mod tests {
 
         // Encryption key should be 32 bytes
         assert_eq!(config.encryption_key.len(), 32);
-        assert_eq!(config.db_path, db_path);
+        assert_eq!(config.db_dir, db_path);
     }
 
     #[test]

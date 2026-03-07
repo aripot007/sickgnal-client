@@ -1,18 +1,19 @@
 /// SQL schema for the SQLite database
 ///
 /// This module contains all table definitions and initialization scripts.
-/// Sensitive columns (identity_key_priv, midterm_key, session_data_json, messages.content)
-/// are stored as BLOB and encrypted at the application layer using ChaCha20Poly1305.
+/// Sensitive columns (session_data_json, messages.content) are stored as BLOB
+/// and encrypted at the application layer using ChaCha20Poly1305.
+/// Cryptographic keys (identity, midterm, ephemeral) are stored in the keys table.
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
 -- Accounts table: stores the local user account information
 -- There should only be one account per database
+-- Cryptographic keys are stored separately in the keys table
 CREATE TABLE IF NOT EXISTS accounts (
     user_id TEXT PRIMARY KEY NOT NULL,
     username TEXT NOT NULL,
-    identity_key_priv BLOB NOT NULL,  -- Encrypted with user's master key
-    midterm_key BLOB NOT NULL,        -- Encrypted with user's master key
+    auth_token TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
 

@@ -65,12 +65,17 @@ where
 }
 
 impl SdkClient<Sqlite, TcpStream> {
-    pub async fn new(
-        username: String,
+    /// Common setup for both new and load scenarios
+    async fn init(
         db_path: PathBuf,
         password: &str,
         server_addr: &str,
-    ) -> Result<Self> {
+    ) -> Result<(
+        Sqlite,
+        RawJsonMessageStream<TcpStream>,
+        mpsc::Sender<Event>,
+        mpsc::Receiver<Event>,
+    )> {
         let (event_tx, event_rx) = mpsc::channel(32);
 
         let storage_config = Config::new(db_path, password, None)?;
@@ -79,7 +84,45 @@ impl SdkClient<Sqlite, TcpStream> {
         let tcp_stream = TcpStream::connect(server_addr).await?;
         let msg_stream = RawJsonMessageStream::new(tcp_stream);
 
-        let chatclient = ChatClient::new(username, msg_stream, storage, event_tx).await?;
+        Ok((storage, msg_stream, event_tx, event_rx))
+    }
+
+    /// Creates a brand new account and saves it to storage
+    pub async fn create(
+        username: String,
+        db_path: PathBuf,
+        password: &str,
+        server_addr: &str,
+    ) -> Result<Self> {
+        let (storage, msg_stream, event_tx, event_rx) =
+            Self::init(db_path, password, server_addr).await?;
+
+        let chatclient = ChatClient::new(username, msg_stream, storage.clone(), event_tx).await?;
+
+        // Save the newly created account
+        storage.create_account(&sickgnal_core::chat::storage::Account::from(
+            chatclient.account(),
+        ))?;
+
+        Ok(Self {
+            chatclient,
+            event_rx,
+        })
+    }
+
+    /// Loads an existing account from storage
+    pub async fn load(db_path: PathBuf, password: &str, server_addr: &str) -> Result<Self> {
+        let (storage, msg_stream, event_tx, event_rx) =
+            Self::init(db_path, password, server_addr).await?;
+
+        let account_db = storage.load_account()??;
+        let account_e2e = Account {
+            id: account_db.user_id,
+            username: account_db.username,
+            token: account_db.auth_token,
+        };
+
+        let chatclient = ChatClient::load(account_e2e, msg_stream, storage, event_tx).await?;
 
         Ok(Self {
             chatclient,

@@ -1,6 +1,8 @@
 use crate::chat::client;
 use crate::chat::client::{ConnectionState, Error, Event, Result};
-use crate::chat::storage::{Conversation, Message, MessageStatus, StorageBackend};
+use crate::chat::storage::{
+    Account as StorageAccount, Conversation, Message, MessageStatus, StorageBackend,
+};
 
 use chrono::Utc;
 use futures::channel::mpsc;
@@ -26,8 +28,6 @@ where
     event_tx: mpsc::Sender<Event>,
     /// Current connection state
     connection_state: ConnectionState,
-    /// Current account information
-    account: Option<Account>,
 }
 
 impl<S, P> ChatClient<S, P>
@@ -48,18 +48,26 @@ where
     pub async fn new(
         username: String,
         msg_stream: RawJsonMessageStream<P>,
-        storage: S,
+        mut storage: S,
         event_tx: mpsc::Sender<Event>,
     ) -> Result<Self> {
-        // E2EClient will be initialized when loading account
         let e2e_client = E2EClient::create_account(username, storage.clone(), msg_stream).await?;
+
+        // Persist the account (uuid + token) assigned by the server
+        let e2e_account = e2e_client.account().clone();
+        let account_db = StorageAccount {
+            user_id: e2e_account.id,
+            username: e2e_account.username.clone(),
+            auth_token: e2e_account.token.clone(),
+            created_at: Utc::now(),
+        };
+        storage.create_account(&account_db)?;
 
         Ok(Self {
             e2e_client,
             storage,
             event_tx,
             connection_state: ConnectionState::Disconnected,
-            account: None,
         })
     }
 
@@ -76,7 +84,6 @@ where
             storage,
             event_tx,
             connection_state: ConnectionState::Disconnected,
-            account: Some(account),
         })
     }
 
@@ -107,11 +114,7 @@ where
             .ok_or_else(|| client::Error::NoConversation(conversation_id))?;
 
         // Get sender account
-        let sender_id = self
-            .account
-            .as_ref()
-            .ok_or_else(|| client::Error::NoAccount)?
-            .id;
+        let sender_id = self.account().id;
 
         // Create message
         let message_id = Uuid::new_v4();
@@ -204,14 +207,12 @@ where
 
     /// Check if a message was sent by the current user
     fn is_my_message(&self, message: &Message) -> bool {
-        self.account
-            .as_ref()
-            .is_some_and(|a| a.id == message.sender_id)
+        self.account().id == message.sender_id
     }
 
     /// Get the current account
-    pub fn get_account(&self) -> Option<Account> {
-        self.account.clone()
+    pub fn account(&self) -> Account {
+        self.e2e_client.account().clone()
     }
 
     /// Get or create a conversation with a peer

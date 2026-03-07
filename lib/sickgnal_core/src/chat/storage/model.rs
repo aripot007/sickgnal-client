@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::e2e;
+
 /// Message status in the local database
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MessageStatus {
@@ -22,9 +24,19 @@ pub enum MessageStatus {
 pub struct Account {
     pub user_id: Uuid,
     pub username: String,
-    pub identity_key_priv: Vec<u8>,
-    pub midterm_key: Vec<u8>,
+    pub auth_token: String,
     pub created_at: DateTime<Utc>,
+}
+
+impl From<e2e::client::Account> for Account {
+    fn from(value: e2e::client::Account) -> Self {
+        Self {
+            user_id: value.id,
+            username: value.username,
+            auth_token: value.token,
+            created_at: Utc::now(),
+        }
+    }
 }
 
 /// Represents a conversation in the database
