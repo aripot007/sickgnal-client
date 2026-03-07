@@ -23,7 +23,7 @@ where
     /// End-to-end encryption client
     e2e_client: E2EClient<S, RawJsonMessageStream<P>>,
     /// Storage backend for persistence (also used for key storage)
-    storage: S,
+    pub storage: S,
     /// Channel sender for client events (to UI)
     event_tx: mpsc::Sender<Event>,
     /// Current connection state
@@ -48,20 +48,10 @@ where
     pub async fn new(
         username: String,
         msg_stream: RawJsonMessageStream<P>,
-        mut storage: S,
+        storage: S,
         event_tx: mpsc::Sender<Event>,
     ) -> Result<Self> {
         let e2e_client = E2EClient::create_account(username, storage.clone(), msg_stream).await?;
-
-        // Persist the account (uuid + token) assigned by the server
-        let e2e_account = e2e_client.account().clone();
-        let account_db = StorageAccount {
-            user_id: e2e_account.id,
-            username: e2e_account.username.clone(),
-            auth_token: e2e_account.token.clone(),
-            created_at: Utc::now(),
-        };
-        storage.create_account(&account_db)?;
 
         Ok(Self {
             e2e_client,

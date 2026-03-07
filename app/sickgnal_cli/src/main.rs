@@ -1,7 +1,32 @@
 use sickgnal_sdk::{account::AccountFile, client::SdkClient, core::chat::client::Event};
+
 use std::path::PathBuf;
 use std::sync::Arc;
 slint::include_modules!();
+/*
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    use uuid::Uuid;
+    use chrono::Utc;
+    use sickgnal_core::chat::storage::StorageBackend;
+    use sickgnal_sdk::storage::{Config, Sqlite};
+    let dir = PathBuf::from("./storage");
+
+    let new_account = sickgnal_core::chat::storage::Account {
+        user_id: Uuid::new_v4(),
+        username: "username".into(),
+        auth_token: "token".into(),
+        created_at: Utc::now(),
+    };
+
+    let storage_config = Config::new(dir.into(), "password".into(), None)?;
+    let mut storage = Sqlite::new(storage_config)?;
+    storage.initialize()?;
+    storage.create_account(&new_account)?;
+
+    Ok(())
+}
+*/
 
 fn main() {
     let dir = PathBuf::from("./storage");
@@ -98,16 +123,21 @@ fn spawn_sdk(
     existing_account: bool,
 ) {
     rt.spawn(async move {
-        let mut sdk = (if existing_account {
+        let sdk_result = if existing_account {
             println!("Existing Account");
             SdkClient::load(username.clone(), dir, &password, "127.0.0.1:8000").await
         } else {
             println!("Unexisting Account");
             SdkClient::new(username.clone(), dir, &password, "127.0.0.1:8000").await
-        })
-        .unwrap_or_else(|e| {
-            panic!("Erreur SDK : {}", e);
-        });
+        };
+
+        let mut sdk = match sdk_result {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Erreur SDK : {}", e);
+                return;
+            }
+        };
 
         loop {
             match sdk.event_rx.recv().await {

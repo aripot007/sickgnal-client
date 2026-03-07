@@ -136,27 +136,42 @@ impl StorageBackend for Sqlite {
         Ok(())
     }
 
-    fn load_account(&self) -> Result<Option<Account>> {
+    fn load_account(&self, username: String) -> Result<Option<Account>> {
         let conn = self.conn.lock().unwrap();
 
-        let result = conn
-            .query_row(
-                "SELECT user_id, username, auth_token, created_at FROM accounts LIMIT 1",
-                [],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, String>(3)?,
-                    ))
-                },
-            )
-            .optional()
+        // 1. Prepare the statement without a LIMIT
+        let mut stmt = conn
+            .prepare("SELECT user_id, username, auth_token, created_at FROM accounts WHERE username = ?1")
             .map_err(|e| Error::Database(e.to_string()))?;
 
-        match result {
-            Some((user_id, username, auth_token, created_at)) => {
+        // 2. Map the rows into a vector
+        let mut rows = stmt
+            .query_map([&username], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })
+            .map_err(|e| Error::Database(e.to_string()))?;
+
+        // 3. Extract the first result and check for duplicates
+        let first_row = rows.next();
+
+        // If there is a second row in the iterator, we have a problem
+        if rows.next().is_some() {
+            return Err(sickgnal_core::chat::storage::Error::from(
+                Error::InvalidData(format!(
+                    "Multiple accounts found for username: {}",
+                    username
+                )),
+            ));
+        }
+
+        // 4. Process the single result (if it exists)
+        match first_row {
+            Some(Ok((user_id, username, auth_token, created_at))) => {
                 let user_id = Uuid::parse_str(&user_id)
                     .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
                 let created_at = DateTime::parse_from_rfc3339(&created_at)
@@ -170,6 +185,9 @@ impl StorageBackend for Sqlite {
                     created_at,
                 }))
             }
+            Some(Err(e)) => Err(sickgnal_core::chat::storage::Error::from(Error::Database(
+                e.to_string(),
+            ))),
             None => Ok(None),
         }
     }
@@ -1240,7 +1258,10 @@ mod tests {
         };
 
         storage.create_account(&account).unwrap();
-        let loaded = storage.load_account().expect("Erreur DB").unwrap();
+        let loaded = storage
+            .load_account(account.username.clone())
+            .expect("Erreur DB")
+            .unwrap();
 
         assert_eq!(loaded.user_id, account.user_id);
         assert_eq!(loaded.username, account.username);
