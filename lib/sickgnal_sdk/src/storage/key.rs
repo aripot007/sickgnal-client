@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use super::Error;
 
 use sickgnal_core::chat::storage::{Result};
-use crate::storage::StorageConfig;
+use crate::storage::Config;
 
 /// Default Argon2 parameters for key derivation
 /// 
@@ -56,7 +56,7 @@ pub fn derive_key_from_password(password: &str, salt: &[u8; 16]) -> Result<[u8; 
 /// should be stored alongside the database file.
 pub fn generate_salt() -> [u8; 16] {
     let mut salt = [0u8; 16];
-    getrandom::getrandom(&mut salt).expect("Failed to generate random salt");
+    getrandom::fill(&mut salt).expect("Failed to generate random salt");
     salt
 }
 
@@ -81,7 +81,7 @@ pub fn create_storage_config(
     db_path: PathBuf,
     password: &str,
     salt_path: Option<PathBuf>,
-) -> Result<StorageConfig> {
+) -> Result<Config> {
     let salt_path = salt_path.unwrap_or_else(|| {
         let mut path = db_path.clone();
         path.set_extension("salt");
@@ -118,7 +118,7 @@ pub fn create_storage_config(
     // Derive encryption key
     let encryption_key = derive_key_from_password(password, &salt)?;
 
-    Ok(StorageConfig {
+    Ok(Config {
         db_path,
         encryption_key: encryption_key.to_vec(),
     })

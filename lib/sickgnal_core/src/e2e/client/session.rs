@@ -1,9 +1,10 @@
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::e2e::keys::SymetricKey;
 
 /// An encrypted session between two users
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct E2ESession {
     /// Uuid of the other user
     pub correspondant_id: Uuid,

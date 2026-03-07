@@ -5,7 +5,7 @@ pub mod storage_backend;
 use base64::{DecodeSliceError, Engine, engine::general_purpose};
 use rand::{CryptoRng, RngCore};
 
-pub use storage_backend::{ E2EStorageBackend, KeyStorageError};
+pub use storage_backend::*;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -87,7 +87,7 @@ impl From<&EphemeralSecretKey> for EphemeralKey {
 }
 
 impl Serialize for PublicIdentityKeys {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
@@ -98,7 +98,7 @@ impl Serialize for PublicIdentityKeys {
 }
 
 impl<'de> Deserialize<'de> for PublicIdentityKeys {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {

@@ -1,11 +1,57 @@
+use sickgnal_sdk::{client::SdkClient, core::chat::client::Event};
 /*use clap::Parser;
 use sickgnal_cli::cli;
-use tokio::net::TcpStream;*/
-use slint::{Model, ModelRc, VecModel};
-use std::rc::Rc;
+use tokio::net::TcpStream;
+use slint::{Model, ModelRc, VecModel};*/
+use std::{fmt::Debug, path::PathBuf, rc::Rc};
 slint::include_modules!();
-fn main() {
-    // Create sample messages for conversation 1
+
+#[tokio::main]
+async fn main() {
+
+    let mut sdk = SdkClient::new("test".into(), PathBuf::new(), "1234", "127.0.0.1").await.unwrap_or_else(|e| {
+            eprintln!("Erreur SDK : {}", e);
+            panic!("Impossible de continuer.");
+        });
+    
+    let ui = AppWindow::new().expect("Failed to load UI");
+    let ui_handle = ui.as_weak();
+
+    // 3. Lancer la tâche d'écoute (Background Task)
+    tokio::spawn(async move {
+        // On boucle sur le receiver du SDK
+        loop {
+            // On attend le prochain message
+            match sdk.event_rx.recv().await {
+                Ok(event) => {
+                    let _ = ui_handle.upgrade_in_event_loop(move |ui| {
+                        handle_sdk_event(ui, event);
+                    });
+                }
+                
+                Err(e) => {
+                    println!("{:?}", e);
+                }
+            }
+        }
+    });
+
+    ui.run().unwrap();
+
+}
+
+fn handle_sdk_event(ui: AppWindow, event: Event) {
+    match event {
+        Event::NewMessage(id, msg) => todo!(),
+        Event::MessageStatusUpdate(uuid, message_status) => todo!(),
+        Event::ConversationCreated(conversation) => todo!(),
+        Event::ConversationDeleted(uuid) => todo!(),
+        Event::TypingIndicator(uuid) => todo!(),
+        Event::ConnectionStateChanged(connection_state) => todo!(),
+    }
+}
+
+ /*   // Create sample messages for conversation 1
     let msg1 = MessageData {
         text: "Salut depuis Rust !".into(),
         time: "10:00".into(),
@@ -179,5 +225,4 @@ fn main() {
         }
     });
 
-    ui.run().unwrap();
-}
+    ui.run().unwrap(); */

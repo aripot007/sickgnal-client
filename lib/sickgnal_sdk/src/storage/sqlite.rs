@@ -1,27 +1,27 @@
 use sickgnal_core::chat::storage::*;
 use sickgnal_core::e2e::{
     client::session::E2ESession,
-    keys::{EphemeralSecretKey, IdentityKeyPair, E2EStorageBackend, PublicIdentityKeys, SymetricKey, X25519Secret},
+    keys::{EphemeralSecretKey, IdentityKeyPair, E2EStorageBackend, PublicIdentityKeys, SymetricKey, X25519Secret, KeyStorageError},
 };
-use sickgnal_core::e2e::keys as key;
+use sickgnal_core::e2e::keys::Result as K_Result;
 use crate::storage::schema;
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
-use crate::storage::StorageConfig;
+use crate::storage::Config;
 use super::Error;
 
 /// SQLite implementation of the StorageBackend trait
 /// 
 /// This implementation uses rusqlite for SQLite access and Pragma
 /// for encrypting the all database. 
-pub struct SqliteStorage {
+#[derive(Clone)]
+pub struct Sqlite {
     conn: Arc<Mutex<Connection>>,
 }
 
-impl SqliteStorage {
+impl Sqlite {
     /// Create a new SqliteStorage instance
     /// 
     /// # Arguments
@@ -30,7 +30,7 @@ impl SqliteStorage {
     /// # Returns
     /// A new SqliteStorage instance, ready to be initialized
     
-    pub fn new(config: StorageConfig) -> Result<Self> {
+    pub fn new(config: Config) -> Result<Self> {
         if let Some(parent) = config.db_path.parent() {
             std::fs::create_dir_all(parent).map_err(Error::from)?;
         }
@@ -76,9 +76,8 @@ impl SqliteStorage {
     }
 }
 
-#[async_trait]
-impl StorageBackend for SqliteStorage {
-    async fn initialize(&mut self) -> Result<()> {
+impl StorageBackend for Sqlite {
+    fn initialize(&mut self) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
         for sql in schema::get_initialization_sql() {
@@ -92,7 +91,7 @@ impl StorageBackend for SqliteStorage {
 
     // ========== Account Operations ==========
 
-    async fn create_account(&mut self, account: &Account) -> Result<()> {
+    fn create_account(&mut self, account: &Account) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
         conn.execute(
@@ -111,7 +110,7 @@ impl StorageBackend for SqliteStorage {
         Ok(())
     }
 
-    async fn load_account(&self) -> Result<Option<Account>> {
+    fn load_account(&self) -> Result<Option<Account>> {
         let conn = self.conn.lock().unwrap();
 
         let result = conn
@@ -152,7 +151,7 @@ impl StorageBackend for SqliteStorage {
         }
     }
 
-    async fn update_account(&mut self, account: &Account) -> Result<()> {
+    fn update_account(&mut self, account: &Account) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
         conn.execute(
@@ -171,7 +170,7 @@ impl StorageBackend for SqliteStorage {
 
     // ========== Conversation Operations ==========
 
-    async fn create_conversation(&mut self, conversation: &Conversation) -> Result<()> {
+    fn create_conversation(&mut self, conversation: &Conversation) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
         conn.execute(
@@ -190,7 +189,7 @@ impl StorageBackend for SqliteStorage {
         Ok(())
     }
 
-    async fn get_conversation(&self, id: Uuid) -> Result<Option<Conversation>> {
+    fn get_conversation(&self, id: Uuid) -> Result<Option<Conversation>> {
         let conn = self.conn.lock().unwrap();
 
         let result = conn
@@ -236,7 +235,7 @@ impl StorageBackend for SqliteStorage {
         }
     }
 
-    async fn get_conversation_by_peer(&self, peer_user_id: Uuid) -> Result<Option<Conversation>> {
+    fn get_conversation_by_peer(&self, peer_user_id: Uuid) -> Result<Option<Conversation>> {
         let conn = self.conn.lock().unwrap();
 
         let result = conn
@@ -282,7 +281,7 @@ impl StorageBackend for SqliteStorage {
         }
     }
 
-    async fn list_conversations(&self) -> Result<Vec<Conversation>> {
+    fn list_conversations(&self) -> Result<Vec<Conversation>> {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn
@@ -330,7 +329,7 @@ impl StorageBackend for SqliteStorage {
         Ok(conversations)
     }
 
-    async fn update_conversation(&mut self, conversation: &Conversation) -> Result<()> {
+    fn update_conversation(&mut self, conversation: &Conversation) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
         conn.execute(
@@ -347,7 +346,7 @@ impl StorageBackend for SqliteStorage {
         Ok(())
     }
 
-    async fn delete_conversation(&mut self, id: Uuid) -> Result<()> {
+    fn delete_conversation(&mut self, id: Uuid) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
         conn.execute("DELETE FROM conversations WHERE id = ?1", params![id.to_string()])
@@ -356,7 +355,7 @@ impl StorageBackend for SqliteStorage {
         Ok(())
     }
 
-    async fn update_conversation_last_message(&mut self, id: Uuid, timestamp: DateTime<Utc>) -> Result<()> {
+    fn update_conversation_last_message(&mut self, id: Uuid, timestamp: DateTime<Utc>) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
         conn.execute(
@@ -368,7 +367,7 @@ impl StorageBackend for SqliteStorage {
         Ok(())
     }
 
-    async fn update_conversation_unread_count(&mut self, id: Uuid, count: i32) -> Result<()> {
+    fn update_conversation_unread_count(&mut self, id: Uuid, count: i32) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
         conn.execute(
@@ -382,7 +381,7 @@ impl StorageBackend for SqliteStorage {
 
     // ========== Message Operations ==========
 
-    async fn create_message(&mut self, message: &Message) -> Result<()> {
+    fn create_message(&mut self, message: &Message) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
         conn.execute(
@@ -404,7 +403,7 @@ impl StorageBackend for SqliteStorage {
         Ok(())
     }
 
-    async fn get_message(&self, id: Uuid) -> Result<Option<Message>> {
+    fn get_message(&self, id: Uuid) -> Result<Option<Message>> {
         let conn = self.conn.lock().unwrap();
 
         let result = conn
@@ -463,7 +462,7 @@ impl StorageBackend for SqliteStorage {
         }
     }
 
-    async fn get_message_by_local_id(&self, local_id: &str) -> Result<Option<Message>> {
+    fn get_message_by_local_id(&self, local_id: &str) -> Result<Option<Message>> {
         let conn = self.conn.lock().unwrap();
 
         let result = conn
@@ -522,7 +521,7 @@ impl StorageBackend for SqliteStorage {
         }
     }
 
-    async fn list_messages(
+    fn list_messages(
         &self,
         conversation_id: Uuid,
         limit: Option<i32>,
@@ -544,10 +543,10 @@ impl StorageBackend for SqliteStorage {
         let params: Vec<Box<dyn rusqlite::ToSql>> = match (limit, offset) {
             (Some(l), Some(o)) => vec![
                 Box::new(conversation_id.to_string()),
-                Box::new(l.into()),
-                Box::new(o.into()),
+                Box::new(l),
+                Box::new(o),
             ],
-            (Some(l), None) => vec![Box::new(conversation_id.to_string()), Box::new(l.into())],
+            (Some(l), None) => vec![Box::new(conversation_id.to_string()), Box::new(l)],
             _ => vec![Box::new(conversation_id.to_string())],
         };
 
@@ -604,7 +603,7 @@ impl StorageBackend for SqliteStorage {
         Ok(messages)
     }
 
-    async fn update_message_status(&mut self, id: Uuid, status: MessageStatus) -> Result<()> {
+    fn update_message_status(&mut self, id: Uuid, status: MessageStatus) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
         conn.execute(
@@ -616,7 +615,7 @@ impl StorageBackend for SqliteStorage {
         Ok(())
     }
 
-    async fn update_message(&mut self, message: &Message) -> Result<()> {
+    fn update_message(&mut self, message: &Message) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
         conn.execute(
@@ -633,7 +632,7 @@ impl StorageBackend for SqliteStorage {
         Ok(())
     }
 
-    async fn delete_message(&mut self, id: Uuid) -> Result<()> {
+    fn delete_message(&mut self, id: Uuid) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
         conn.execute("DELETE FROM messages WHERE id = ?1", params![id.to_string()])
@@ -644,19 +643,19 @@ impl StorageBackend for SqliteStorage {
 
     // ========== Utility Operations ==========
 
-    async fn close(&mut self) -> Result<()> {
+    fn close(&mut self) -> Result<()> {
         // SQLite connection will be closed when dropped
         Ok(())
     }
 }
 
-impl SqliteStorage {
-        fn serialize_key_data<T: serde::Serialize>(data: &T) -> Result<Vec<u8>> {
+impl Sqlite {
+    fn serialize_key_data<T: serde::Serialize>(data: &T) -> K_Result<Vec<u8>> {
         bincode::serialize(data)
             .map_err(|e| KeyStorageError::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))
     }
     
-    fn deserialize_key_data<T: serde::de::DeserializeOwned>(data: &[u8]) -> std::result::Result<T> {
+    fn deserialize_key_data<T: serde::de::DeserializeOwned>(data: &[u8]) -> K_Result<T> {
         bincode::deserialize(data)
             .map_err(|e| KeyStorageError::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))
     }
@@ -666,10 +665,10 @@ impl SqliteStorage {
     }
 }
 
-impl E2EStorageBackend for SqliteStorage {
+impl E2EStorageBackend for Sqlite {
     // ========== Identity and mid-term keys ==========
 
-    fn identity_keypair(&self) -> key::Result<&IdentityKeyPair> {
+    fn identity_keypair(&self) -> K_Result<&IdentityKeyPair> {
         self.identity_keypair_opt()?.ok_or_else(|| {
             KeyStorageError::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -678,7 +677,7 @@ impl E2EStorageBackend for SqliteStorage {
         })
     }
 
-    fn identity_keypair_opt(&self) -> key::Result<Option<&IdentityKeyPair>> {
+    fn identity_keypair_opt(&self) -> K_Result<Option<&IdentityKeyPair>> {
         // Note: This implementation stores keys in database, not in memory
         // So we can't return a reference directly. This is a limitation.
         // For a proper implementation, we'd need to cache keys in memory.
@@ -688,7 +687,7 @@ impl E2EStorageBackend for SqliteStorage {
         )))
     }
 
-    fn set_identity_keypair(&mut self, identity_keypair: IdentityKeyPair) -> key::Result<()> {
+    fn set_identity_keypair(&mut self, identity_keypair: IdentityKeyPair) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         let data = Self::serialize_key_data(&identity_keypair)?;
         
@@ -702,7 +701,7 @@ impl E2EStorageBackend for SqliteStorage {
         Ok(())
     }
 
-    fn midterm_key(&self) -> key::Result<&X25519Secret> {
+    fn midterm_key(&self) -> K_Result<&X25519Secret> {
         self.midterm_key_opt()?.ok_or_else(|| {
             KeyStorageError::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -711,7 +710,7 @@ impl E2EStorageBackend for SqliteStorage {
         })
     }
 
-    fn midterm_key_opt(&self) -> key::Result<Option<&X25519Secret>> {
+    fn midterm_key_opt(&self) -> K_Result<Option<&X25519Secret>> {
         // Same limitation as identity_keypair_opt
         Err(KeyStorageError::new(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
@@ -719,7 +718,7 @@ impl E2EStorageBackend for SqliteStorage {
         )))
     }
 
-    fn set_midterm_key(&mut self, midterm_key: X25519Secret) -> key::Result<()> {
+    fn set_midterm_key(&mut self, midterm_key: X25519Secret) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         let data = midterm_key.to_bytes().to_vec();
         
@@ -735,7 +734,7 @@ impl E2EStorageBackend for SqliteStorage {
 
     // ========== Ephemeral keys ==========
 
-    fn ephemeral_key(&self, id: &Uuid) -> key::Result<Option<&X25519Secret>> {
+    fn ephemeral_key(&self, id: &Uuid) -> K_Result<Option<&X25519Secret>> {
         // Same limitation - can't return reference from database
         Err(KeyStorageError::new(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
@@ -743,7 +742,7 @@ impl E2EStorageBackend for SqliteStorage {
         )))
     }
 
-    fn pop_ephemeral_key(&mut self, id: &Uuid) -> key::Result<Option<X25519Secret>> {
+    fn pop_ephemeral_key(&mut self, id: &Uuid) -> K_Result<Option<X25519Secret>> {
         let conn = self.conn.lock().unwrap();
         
         let result: Option<Vec<u8>> = conn.query_row(
@@ -767,30 +766,28 @@ impl E2EStorageBackend for SqliteStorage {
         }
     }
 
-    fn available_ephemeral_keys(&self) -> key::Result<impl Iterator<Item = &Uuid>> {
-        // Can't return iterator of references from database
-        // Would need to return owned Uuid values
-        Err(KeyStorageError::new(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "available_ephemeral_keys requires in-memory cache"
-        )))
+    fn available_ephemeral_keys(&self) -> K_Result<impl Iterator<Item = &Uuid>> {
+        todo!();
+        #[allow(unreachable_code)]
+        Ok(std::iter::empty())
     }
 
-    fn add_ephemeral_key(&mut self, keypair: EphemeralSecretKey) -> key::Result<()> {
+    fn add_ephemeral_key(&mut self, keypair: X25519Secret) -> K_Result<Uuid> {
         let conn = self.conn.lock().unwrap();
         let data = Self::serialize_key_data(&keypair)?;
-        
+        let new_id = Uuid::new_v4();
+
         conn.execute(
             "INSERT INTO keys (key_id, key_type, key_data, created_at)
              VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(key_id) DO UPDATE SET key_data = excluded.key_data",
-            params![keypair.id.to_string(), "ephemeral", data, Utc::now().to_rfc3339()],
+            params![new_id.to_string(), "ephemeral", data, Utc::now().to_rfc3339()],
         ).map_err(Self::db_error)?;
         
-        Ok(())
+        Ok(new_id)
     }
 
-    fn delete_ephemeral_key(&mut self, id: Uuid) -> key::Result<()> {
+    fn delete_ephemeral_key(&mut self, id: Uuid) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "DELETE FROM keys WHERE key_id = ?1 AND key_type = 'ephemeral'",
@@ -799,7 +796,7 @@ impl E2EStorageBackend for SqliteStorage {
         Ok(())
     }
 
-    fn delete_many_ephemeral_key(&mut self, ids: impl Iterator<Item = Uuid>) -> key::Result<()> {
+    fn delete_many_ephemeral_key(&mut self, ids: impl Iterator<Item = Uuid>) -> K_Result<()> {
         for id in ids {
             self.delete_ephemeral_key(id)?;
         }
@@ -808,35 +805,35 @@ impl E2EStorageBackend for SqliteStorage {
 
     // ========== Clear methods ==========
 
-    fn clear_identity_keypair(&mut self) -> key::Result<()> {
+    fn clear_identity_keypair(&mut self) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM keys WHERE key_type = 'identity'", [])
             .map_err(Self::db_error)?;
         Ok(())
     }
 
-    fn clear_midterm_key(&mut self) -> key::Result<()> {
+    fn clear_midterm_key(&mut self) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM keys WHERE key_type = 'midterm'", [])
             .map_err(Self::db_error)?;
         Ok(())
     }
 
-    fn clear_ephemeral_keys(&mut self) -> key::Result<()> {
+    fn clear_ephemeral_keys(&mut self) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM keys WHERE key_type = 'ephemeral'", [])
             .map_err(Self::db_error)?;
         Ok(())
     }
 
-    fn clear_session_keys(&mut self) -> key::Result<()> {
+    fn clear_session_keys(&mut self) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM keys WHERE key_type = 'session_key'", [])
             .map_err(Self::db_error)?;
         Ok(())
     }
 
-    fn clear_user_public_keys(&mut self) -> key::Result<()> {
+    fn clear_user_public_keys(&mut self) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM keys WHERE key_type = 'user_public_keys'", [])
             .map_err(Self::db_error)?;
@@ -845,7 +842,7 @@ impl E2EStorageBackend for SqliteStorage {
 
     // ========== Session keys ==========
 
-    fn session_key(&self, user: Uuid, key_id: Uuid) -> key::Result<Option<&SymetricKey>> {
+    fn session_key(&self, user: Uuid, key_id: Uuid) -> K_Result<Option<&SymetricKey>> {
         // Can't return reference from database
         Err(KeyStorageError::new(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
@@ -853,7 +850,7 @@ impl E2EStorageBackend for SqliteStorage {
         )))
     }
 
-    fn add_session_key(&mut self, user: Uuid, key_id: Uuid, key: SymetricKey) -> key::Result<()> {
+    fn add_session_key(&mut self, user: Uuid, key_id: Uuid, key: SymetricKey) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         let composite_key = format!("{}_{}", user, key_id);
         
@@ -867,7 +864,7 @@ impl E2EStorageBackend for SqliteStorage {
         Ok(())
     }
 
-    fn delete_session_key(&mut self, user: Uuid, key_id: Uuid) -> key::Result<()> {
+    fn delete_session_key(&mut self, user: Uuid, key_id: Uuid) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         let composite_key = format!("{}_{}", user, key_id);
         
@@ -881,7 +878,7 @@ impl E2EStorageBackend for SqliteStorage {
 
     // ========== Public user keys ==========
 
-    fn user_public_keys(&self, user_id: &Uuid) -> key::Result<Option<&PublicIdentityKeys>> {
+    fn user_public_keys(&self, user_id: &Uuid) -> K_Result<Option<&PublicIdentityKeys>> {
         // Can't return reference from database
         Err(KeyStorageError::new(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
@@ -889,7 +886,7 @@ impl E2EStorageBackend for SqliteStorage {
         )))
     }
 
-    fn set_user_public_keys(&mut self, user_id: Uuid, keys: PublicIdentityKeys) -> key::Result<()> {
+    fn set_user_public_keys(&mut self, user_id: Uuid, keys: PublicIdentityKeys) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         let data = Self::serialize_key_data(&keys)?;
         
@@ -903,7 +900,7 @@ impl E2EStorageBackend for SqliteStorage {
         Ok(())
     }
 
-    fn delete_user_public_keys(&mut self, user_id: &Uuid) -> key::Result<()> {
+    fn delete_user_public_keys(&mut self, user_id: &Uuid) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "DELETE FROM keys WHERE key_id = ?1 AND key_type = 'user_public_keys'",
@@ -914,7 +911,7 @@ impl E2EStorageBackend for SqliteStorage {
 
     // ========== Session management ==========
 
-    fn load_session(&mut self, user_id: &Uuid) -> key::Result<Option<E2ESession>> {
+    fn load_session(&mut self, user_id: &Uuid) -> K_Result<Option<E2ESession>> {
         let conn = self.conn.lock().unwrap();
         
         let result: Option<Vec<u8>> = conn.query_row(
@@ -931,7 +928,7 @@ impl E2EStorageBackend for SqliteStorage {
         }
     }
 
-    fn load_all_sessions(&mut self) -> key::Result<Vec<E2ESession>> {
+    fn load_all_sessions(&mut self) -> K_Result<Vec<E2ESession>> {
         let conn = self.conn.lock().unwrap();
         
         let mut stmt = conn.prepare("SELECT session_data_json FROM sessions")
@@ -951,7 +948,7 @@ impl E2EStorageBackend for SqliteStorage {
         Ok(sessions)
     }
 
-    fn save_session(&mut self, session: &E2ESession) -> key::Result<()> {
+    fn save_session(&mut self, session: &E2ESession) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         let data = Self::serialize_key_data(session)?;
         
@@ -971,7 +968,7 @@ impl E2EStorageBackend for SqliteStorage {
         Ok(())
     }
 
-    fn delete_session(&mut self, user_id: &Uuid) -> key::Result<()> {
+    fn delete_session(&mut self, user_id: &Uuid) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "DELETE FROM sessions WHERE peer_user_id = ?1",
@@ -980,22 +977,24 @@ impl E2EStorageBackend for SqliteStorage {
         Ok(())
     }
     
-    fn save_ephemeral_key(&mut self, keypair: EphemeralSecretKey) -> key::Result<()> {
+    fn save_ephemeral_key(&mut self, keypair: EphemeralSecretKey) -> K_Result<()> {
         todo!()
     }
     
     fn save_many_ephemeral_keys(
         &mut self,
         keypairs: impl Iterator<Item = EphemeralSecretKey>,
-    ) -> key::Result<()> {
+    ) -> K_Result<()> {
         todo!()
     }
     
     fn add_many_ephemeral_key(
         &mut self,
         keypairs: impl Iterator<Item = X25519Secret>,
-    ) -> key::Result<impl Iterator<Item = Uuid>> {
-        todo!()
+    ) -> K_Result<impl Iterator<Item = Uuid>> {
+        todo!();
+        #[allow(unreachable_code)]
+        Ok(std::iter::empty::<Uuid>())
     }
     
     fn cleanup_session_keys(
@@ -1003,7 +1002,7 @@ impl E2EStorageBackend for SqliteStorage {
         user: &Uuid,
         current_sending_key: &Uuid,
         current_receiving_key: &Uuid,
-    ) -> key::storage_backend::Result<()> {
+    ) -> K_Result<()> {
         todo!()
     }
 }
@@ -1013,15 +1012,15 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
-    fn create_test_config() -> StorageConfig {
+    fn create_test_config() -> Config {
         let dir = tempdir().unwrap();
         let db_path = dir.path().join("test.db");
         
         // Generate a random encryption key for testing
         let mut encryption_key = [0u8; 32];
-        getrandom::getrandom(&mut encryption_key).unwrap();
+        getrandom::fill(&mut encryption_key).unwrap();
 
-        StorageConfig {
+        Config {
             db_path,
             encryption_key: encryption_key.to_vec(),
         }
@@ -1030,8 +1029,8 @@ mod tests {
     #[tokio::test]
     async fn test_create_and_load_account() {
         let config = create_test_config();
-        let mut storage = SqliteStorage::new(config).unwrap();
-        storage.initialize().await.unwrap();
+        let mut storage = Sqlite::new(config).unwrap();
+        storage.initialize().unwrap();
 
         let account = Account {
             user_id: Uuid::new_v4(),
@@ -1041,8 +1040,8 @@ mod tests {
             created_at: Utc::now(),
         };
 
-        storage.create_account(&account).await.unwrap();
-        let loaded = storage.load_account().await.unwrap().unwrap();
+        storage.create_account(&account).unwrap();
+        let loaded = storage.load_account().expect("Erreur DB").unwrap();
 
         assert_eq!(loaded.user_id, account.user_id);
         assert_eq!(loaded.username, account.username);
