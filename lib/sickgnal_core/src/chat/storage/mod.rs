@@ -1,7 +1,7 @@
+mod error;
 mod model;
 mod r#trait;
-mod error;
 
+pub use error::*;
 pub use model::*;
 pub use r#trait::*;
-pub use error::*;

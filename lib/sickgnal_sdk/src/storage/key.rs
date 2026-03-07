@@ -1,16 +1,15 @@
+use super::Error;
 /// Cryptographic utilities for the SDK
-/// 
+///
 /// This module provides helper functions for key derivation and password hashing.
-
 use argon2::{Argon2, ParamsBuilder, Version};
 use std::path::PathBuf;
-use super::Error;
 
-use sickgnal_core::chat::storage::{Result};
 use crate::storage::Config;
+use sickgnal_core::chat::storage::Result;
 
 /// Default Argon2 parameters for key derivation
-/// 
+///
 /// These parameters provide a good balance between security and performance.
 /// - Memory cost: 64 MiB (65536 KiB)
 /// - Time cost: 3 iterations
@@ -20,14 +19,14 @@ const ARGON2_TIME_COST: u32 = 3;
 const ARGON2_PARALLELISM: u32 = 4;
 
 /// Derive a 256-bit encryption key from a password using Argon2id
-/// 
+///
 /// This function uses Argon2id (hybrid mode) with recommended parameters.
 /// The same password and salt will always produce the same key.
-/// 
+///
 /// # Arguments
 /// * `password` - The user's password
 /// * `salt` - A 16-byte salt (should be randomly generated once per database)
-/// 
+///
 /// # Returns
 /// A 32-byte key suitable for ChaCha20Poly1305 encryption
 pub fn derive_key_from_password(password: &str, salt: &[u8; 16]) -> Result<[u8; 32]> {
@@ -37,7 +36,12 @@ pub fn derive_key_from_password(password: &str, salt: &[u8; 16]) -> Result<[u8; 
         .t_cost(ARGON2_TIME_COST)
         .p_cost(ARGON2_PARALLELISM)
         .build()
-        .map_err(|e| Error::from(Error::Encryption(format!("Failed to build Argon2 params: {}", e))))?;
+        .map_err(|e| {
+            Error::from(Error::Encryption(format!(
+                "Failed to build Argon2 params: {}",
+                e
+            )))
+        })?;
 
     let argon2 = Argon2::new(argon2::Algorithm::Argon2id, Version::V0x13, params);
 
@@ -51,7 +55,7 @@ pub fn derive_key_from_password(password: &str, salt: &[u8; 16]) -> Result<[u8; 
 }
 
 /// Generate a random salt for key derivation
-/// 
+///
 /// This should be called once when creating a new database, and the salt
 /// should be stored alongside the database file.
 pub fn generate_salt() -> [u8; 16] {
@@ -61,18 +65,18 @@ pub fn generate_salt() -> [u8; 16] {
 }
 
 /// Create a storage configuration with encryption key derived from password
-/// 
+///
 /// This is a convenience function that handles salt generation/loading and
 /// key derivation from a password.
-/// 
+///
 /// # Arguments
 /// * `db_path` - Path to the SQLite database file
 /// * `password` - User's password
 /// * `salt_path` - Optional path to salt file. If None, uses db_path + ".salt"
-/// 
+///
 /// # Returns
 /// A StorageConfig ready to be used with SqliteStorage
-/// 
+///
 /// # Behavior
 /// - If salt file doesn't exist, generates new salt and saves it
 /// - If salt file exists, loads it
@@ -96,7 +100,8 @@ pub fn create_storage_config(
             return Err(Error::InvalidData(format!(
                 "Invalid salt file: expected 16 bytes, got {}",
                 salt_bytes.len()
-            )).into());
+            ))
+            .into());
         }
         let mut salt = [0u8; 16];
         salt.copy_from_slice(&salt_bytes);
@@ -104,12 +109,12 @@ pub fn create_storage_config(
     } else {
         // Generate new salt
         let salt = generate_salt();
-        
+
         // Ensure parent directory exists
         if let Some(parent) = salt_path.parent() {
             std::fs::create_dir_all(parent).map_err(Error::from)?;
         }
-        
+
         // Save salt to file
         std::fs::write(&salt_path, &salt).map_err(Error::from)?;
         salt
@@ -177,11 +182,12 @@ mod tests {
         let db_path = dir.path().join("test.db");
         let salt_path = dir.path().join("test.salt");
 
-        let config = create_storage_config(db_path.clone(), "password", Some(salt_path.clone())).unwrap();
+        let config =
+            create_storage_config(db_path.clone(), "password", Some(salt_path.clone())).unwrap();
 
         // Salt file should have been created
         assert!(salt_path.exists());
-        
+
         // Salt should be 16 bytes
         let salt_bytes = std::fs::read(&salt_path).unwrap();
         assert_eq!(salt_bytes.len(), 16);
@@ -198,10 +204,12 @@ mod tests {
         let salt_path = dir.path().join("test.salt");
 
         // Create config first time
-        let config1 = create_storage_config(db_path.clone(), "password", Some(salt_path.clone())).unwrap();
+        let config1 =
+            create_storage_config(db_path.clone(), "password", Some(salt_path.clone())).unwrap();
 
         // Create config second time with same password
-        let config2 = create_storage_config(db_path.clone(), "password", Some(salt_path.clone())).unwrap();
+        let config2 =
+            create_storage_config(db_path.clone(), "password", Some(salt_path.clone())).unwrap();
 
         // Should produce the same encryption key
         assert_eq!(config1.encryption_key, config2.encryption_key);

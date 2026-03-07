@@ -1,8 +1,8 @@
-use uuid::Uuid;
-use crate::chat::storage::{Conversation, Message, MessageStatus};
 use crate::chat::client::ConnectionState;
+use crate::chat::storage::{Conversation, Message, MessageStatus};
+use uuid::Uuid;
 
-pub enum Event{
+pub enum Event {
     /// Event triggered when a new message is received in a conversation.
     /// Uuid of the conversation
     NewMessage(Uuid, Message),

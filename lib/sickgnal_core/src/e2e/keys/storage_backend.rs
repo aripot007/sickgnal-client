@@ -17,10 +17,7 @@ pub trait E2EStorageBackend {
     fn identity_keypair_opt(&self) -> Result<Option<&IdentityKeyPair>>;
 
     /// Set the identity keypair
-    fn set_identity_keypair(
-        &mut self,
-        identity_keypair: IdentityKeyPair,
-    ) -> Result<()>;
+    fn set_identity_keypair(&mut self, identity_keypair: IdentityKeyPair) -> Result<()>;
 
     /// Get the midterm keypair
     fn midterm_key(&self) -> Result<&X25519Secret>;
@@ -64,10 +61,7 @@ pub trait E2EStorageBackend {
     fn delete_ephemeral_key(&mut self, id: Uuid) -> Result<()>;
 
     /// Delete many ephemeral keypairs
-    fn delete_many_ephemeral_key(
-        &mut self,
-        ids: impl Iterator<Item = Uuid>,
-    ) -> Result<()>;
+    fn delete_many_ephemeral_key(&mut self, ids: impl Iterator<Item = Uuid>) -> Result<()>;
 
     // Clear
 
@@ -98,19 +92,10 @@ pub trait E2EStorageBackend {
 
     // session keys
     /// Get the session for a correspondant
-    fn session_key(
-        &self,
-        user: Uuid,
-        key_id: Uuid,
-    ) -> Result<Option<&SymetricKey>>;
+    fn session_key(&self, user: Uuid, key_id: Uuid) -> Result<Option<&SymetricKey>>;
 
     /// Add a session key
-    fn add_session_key(
-        &mut self,
-        user: Uuid,
-        key_id: Uuid,
-        key: SymetricKey,
-    ) -> Result<()>;
+    fn add_session_key(&mut self, user: Uuid, key_id: Uuid, key: SymetricKey) -> Result<()>;
 
     /// Delete a session key
     fn delete_session_key(&mut self, user: Uuid, key_id: Uuid) -> Result<()>;
@@ -125,17 +110,10 @@ pub trait E2EStorageBackend {
 
     // Public user keys
     /// Get the public key of a user
-    fn user_public_keys(
-        &self,
-        user_id: &Uuid,
-    ) -> Result<Option<&PublicIdentityKeys>>;
+    fn user_public_keys(&self, user_id: &Uuid) -> Result<Option<&PublicIdentityKeys>>;
 
     /// Set the public key of a user
-    fn set_user_public_keys(
-        &mut self,
-        user_id: Uuid,
-        keys: PublicIdentityKeys,
-    ) -> Result<()>;
+    fn set_user_public_keys(&mut self, user_id: Uuid, keys: PublicIdentityKeys) -> Result<()>;
 
     /// Delete the public key of a user
     fn delete_user_public_keys(&mut self, user_id: &Uuid) -> Result<()>;

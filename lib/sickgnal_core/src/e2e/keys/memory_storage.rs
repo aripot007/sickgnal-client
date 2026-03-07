@@ -14,8 +14,8 @@ use uuid::Uuid;
 use crate::e2e::{
     client::session::E2ESession,
     keys::{
-        storage_backend::Result, EphemeralSecretKey, IdentityKeyPair, PublicIdentityKeys, SymetricKey, X25519Secret,
-        storage_backend::KeyStorageError,
+        EphemeralSecretKey, IdentityKeyPair, PublicIdentityKeys, SymetricKey, X25519Secret,
+        storage_backend::KeyStorageError, storage_backend::Result,
     },
 };
 
@@ -71,10 +71,7 @@ impl E2EStorageBackend for MemoryKeyStorage {
         Ok(self.identity_keypair.as_ref())
     }
 
-    fn set_identity_keypair(
-        &mut self,
-        identity_keypair: IdentityKeyPair,
-    ) -> Result<()> {
+    fn set_identity_keypair(&mut self, identity_keypair: IdentityKeyPair) -> Result<()> {
         self.identity_keypair = Some(identity_keypair);
         Ok(())
     }
@@ -96,16 +93,11 @@ impl E2EStorageBackend for MemoryKeyStorage {
         Ok(self.ephemeral_keys.get(id))
     }
 
-    fn pop_ephemeral_key(
-        &mut self,
-        id: &uuid::Uuid,
-    ) -> Result<Option<X25519Secret>> {
+    fn pop_ephemeral_key(&mut self, id: &uuid::Uuid) -> Result<Option<X25519Secret>> {
         Ok(self.ephemeral_keys.remove(id))
     }
 
-    fn available_ephemeral_keys(
-        &self,
-    ) -> Result<impl Iterator<Item = &uuid::Uuid>> {
+    fn available_ephemeral_keys(&self) -> Result<impl Iterator<Item = &uuid::Uuid>> {
         Ok(self.ephemeral_keys.keys())
     }
 
@@ -159,10 +151,7 @@ impl E2EStorageBackend for MemoryKeyStorage {
         Ok(())
     }
 
-    fn delete_many_ephemeral_key(
-        &mut self,
-        ids: impl Iterator<Item = uuid::Uuid>,
-    ) -> Result<()> {
+    fn delete_many_ephemeral_key(&mut self, ids: impl Iterator<Item = uuid::Uuid>) -> Result<()> {
         for id in ids {
             self.ephemeral_keys.remove(&id);
         }
@@ -194,11 +183,7 @@ impl E2EStorageBackend for MemoryKeyStorage {
         Ok(())
     }
 
-    fn session_key(
-        &self,
-        user: Uuid,
-        key_id: Uuid,
-    ) -> Result<Option<&super::SymetricKey>> {
+    fn session_key(&self, user: Uuid, key_id: Uuid) -> Result<Option<&super::SymetricKey>> {
         if let Some(keys) = self.session_keys.get(&user) {
             return Ok(keys.get(&key_id));
         }
@@ -206,12 +191,7 @@ impl E2EStorageBackend for MemoryKeyStorage {
         Ok(None)
     }
 
-    fn add_session_key(
-        &mut self,
-        user: Uuid,
-        key_id: Uuid,
-        key: super::SymetricKey,
-    ) -> Result<()> {
+    fn add_session_key(&mut self, user: Uuid, key_id: Uuid, key: super::SymetricKey) -> Result<()> {
         if let Some(keys) = self.session_keys.get_mut(&user) {
             keys.insert(key_id, key);
         } else {
@@ -255,18 +235,11 @@ impl E2EStorageBackend for MemoryKeyStorage {
         Ok(())
     }
 
-    fn user_public_keys(
-        &self,
-        user_id: &Uuid,
-    ) -> Result<Option<&PublicIdentityKeys>> {
+    fn user_public_keys(&self, user_id: &Uuid) -> Result<Option<&PublicIdentityKeys>> {
         Ok(self.user_public_keys.get(user_id))
     }
 
-    fn set_user_public_keys(
-        &mut self,
-        user_id: uuid::Uuid,
-        key: PublicIdentityKeys,
-    ) -> Result<()> {
+    fn set_user_public_keys(&mut self, user_id: uuid::Uuid, key: PublicIdentityKeys) -> Result<()> {
         self.user_public_keys.insert(user_id, key);
         Ok(())
     }

@@ -1,16 +1,14 @@
+use crate::chat::client;
 use crate::chat::client::{ConnectionState, Error, Event, Result};
-use crate::chat::client as client;
-use crate::chat::storage::{
-    Conversation, Message, MessageStatus, StorageBackend,
-};
+use crate::chat::storage::{Conversation, Message, MessageStatus, StorageBackend};
 
 use chrono::Utc;
-use futures::{AsyncRead, AsyncWrite, SinkExt};
 use futures::channel::mpsc;
+use futures::{AsyncRead, AsyncWrite, SinkExt};
 use uuid::Uuid;
 
-use crate::e2e::client::{Account, E2EClient};
 use crate::chat::message::ChatMessage;
+use crate::e2e::client::{Account, E2EClient};
 use crate::e2e::keys::E2EStorageBackend;
 use crate::e2e::message_stream::raw_json::RawJsonMessageStream;
 
@@ -18,7 +16,7 @@ use crate::e2e::message_stream::raw_json::RawJsonMessageStream;
 pub struct ChatClient<S, P>
 where
     S: StorageBackend + E2EStorageBackend + Send,
-    P: AsyncRead + AsyncWrite + Send + Unpin + 'static
+    P: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     /// End-to-end encryption client
     e2e_client: E2EClient<S, RawJsonMessageStream<P>>,
@@ -35,7 +33,7 @@ where
 impl<S, P> ChatClient<S, P>
 where
     S: StorageBackend + E2EStorageBackend + Send + Clone + 'static,
-    P: AsyncRead + AsyncWrite + Send + Unpin + 'static
+    P: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     /// Create a new ChatClient instance
     ///
@@ -60,8 +58,8 @@ where
             e2e_client,
             storage,
             event_tx,
-            connection_state:   ConnectionState::Disconnected,
-            account:            None,
+            connection_state: ConnectionState::Disconnected,
+            account: None,
         })
     }
 
@@ -69,7 +67,7 @@ where
         account: Account,
         msg_stream: RawJsonMessageStream<P>,
         storage: S,
-        event_tx: mpsc::Sender<Event>
+        event_tx: mpsc::Sender<Event>,
     ) -> Result<Self> {
         let e2e_client = E2EClient::load(account.clone(), storage.clone(), msg_stream)?;
 
@@ -77,7 +75,7 @@ where
             e2e_client,
             storage,
             event_tx,
-            connection_state:   ConnectionState::Disconnected,
+            connection_state: ConnectionState::Disconnected,
             account: Some(account),
         })
     }
@@ -85,7 +83,6 @@ where
     /// Get the current connection state
     pub fn connection_state(&self) -> ConnectionState {
         self.connection_state
-
     }
 
     /// Set connection state and notify listeners
@@ -102,17 +99,17 @@ where
     ///
     /// # Returns
     /// Ok(message_id) if message sent successfully, error otherwise
-    pub async fn send_message(
-        &mut self,
-        conversation_id: Uuid,
-        text: String,
-    ) -> Result<Uuid> {
+    pub async fn send_message(&mut self, conversation_id: Uuid, text: String) -> Result<Uuid> {
         // Get conversation to find peer
-        let conversation = self.storage.get_conversation(conversation_id)?
+        let conversation = self
+            .storage
+            .get_conversation(conversation_id)?
             .ok_or_else(|| client::Error::NoConversation(conversation_id))?;
 
         // Get sender account
-        let sender_id = self.account.as_ref()
+        let sender_id = self
+            .account
+            .as_ref()
             .ok_or_else(|| client::Error::NoAccount)?
             .id;
 
@@ -134,19 +131,27 @@ where
 
         // Save message to storage with "sending" status
         self.storage.create_message(&message)?;
-        self.storage.update_conversation_last_message(conversation_id, timestamp)?;
+        self.storage
+            .update_conversation_last_message(conversation_id, timestamp)?;
 
         // Notify UI of new message
-        let _ = self.event_tx.send(Event::NewMessage(conversation_id, message.clone()));
+        let _ = self
+            .event_tx
+            .send(Event::NewMessage(conversation_id, message.clone()));
 
         // Send via E2E protocol
         let chat_message = ChatMessage::new_text(conversation_id, &text);
 
-        self.e2e_client.send(conversation.peer_user_id, chat_message).await?;
+        self.e2e_client
+            .send(conversation.peer_user_id, chat_message)
+            .await?;
 
         // Update message status based on send result
-        self.storage.update_message_status(message_id, MessageStatus::Sent)?;
-        let _ = self.event_tx.send(Event::MessageStatusUpdate(message_id, MessageStatus::Sent));
+        self.storage
+            .update_message_status(message_id, MessageStatus::Sent)?;
+        let _ = self
+            .event_tx
+            .send(Event::MessageStatusUpdate(message_id, MessageStatus::Sent));
 
         Ok(message_id)
     }
@@ -160,10 +165,13 @@ where
     /// Ok(()) if successful, error otherwise
     pub fn mark_as_read(&mut self, message_id: Uuid) -> Result<()> {
         // Update in storage
-        self.storage.update_message_status(message_id, MessageStatus::Read)?;
+        self.storage
+            .update_message_status(message_id, MessageStatus::Read)?;
 
         // Notify UI
-        let _ = self.event_tx.send(Event::MessageStatusUpdate(message_id, MessageStatus::Read));
+        let _ = self
+            .event_tx
+            .send(Event::MessageStatusUpdate(message_id, MessageStatus::Read));
 
         // TODO: Send read receipt via E2E protocol
         // e2e_client.send_control_message(AckRead { message_id })
@@ -188,14 +196,17 @@ where
         }
 
         // Reset unread count
-        self.storage.update_conversation_unread_count(conversation_id, 0)?;
+        self.storage
+            .update_conversation_unread_count(conversation_id, 0)?;
 
         Ok(())
     }
 
     /// Check if a message was sent by the current user
     fn is_my_message(&self, message: &Message) -> bool {
-        self.account.as_ref().is_some_and(|a| a.id == message.sender_id)
+        self.account
+            .as_ref()
+            .is_some_and(|a| a.id == message.sender_id)
     }
 
     /// Get the current account
@@ -215,7 +226,7 @@ where
         &mut self,
         peer_user_id: Uuid,
         peer_name: String,
-    ) -> Result<Uuid> {        
+    ) -> Result<Uuid> {
         // Try to find existing conversation
         if let Some(conv) = self.storage.get_conversation_by_peer(peer_user_id)? {
             return Ok(conv.id);
@@ -233,7 +244,9 @@ where
         self.storage.create_conversation(&conversation)?;
 
         // Notify UI
-        let _ = self.event_tx.send(Event::ConversationCreated(conversation.clone()));
+        let _ = self
+            .event_tx
+            .send(Event::ConversationCreated(conversation.clone()));
 
         Ok(conversation.id)
     }
@@ -245,7 +258,7 @@ where
     ///
     /// # Returns
     /// Ok(()) if successful, error otherwise
-    pub fn delete_conversation(&mut self, conversation_id: Uuid) -> Result<()> {        
+    pub fn delete_conversation(&mut self, conversation_id: Uuid) -> Result<()> {
         // Delete all messages in conversation (cascade should handle this, but let's be explicit)
         let messages = self.storage.list_messages(conversation_id, None, None)?;
         for message in messages {
@@ -256,7 +269,9 @@ where
         self.storage.delete_conversation(conversation_id)?;
 
         // Notify UI
-        let _ = self.event_tx.send(Event::ConversationDeleted(conversation_id));
+        let _ = self
+            .event_tx
+            .send(Event::ConversationDeleted(conversation_id));
 
         Ok(())
     }
@@ -275,12 +290,19 @@ where
         _is_typing: bool,
     ) -> Result<()> {
         // Get peer from conversation
-        
-        let conversation = self.storage.get_conversation(conversation_id)?
+
+        let conversation = self
+            .storage
+            .get_conversation(conversation_id)?
             .ok_or_else(|| client::Error::NoConversation(conversation_id))?;
 
         // Send via E2E protocol
-        self.e2e_client.send(conversation.peer_user_id, ChatMessage::new_is_typing(conversation_id)).await?;
+        self.e2e_client
+            .send(
+                conversation.peer_user_id,
+                ChatMessage::new_is_typing(conversation_id),
+            )
+            .await?;
 
         Ok(())
     }
@@ -305,7 +327,8 @@ where
         limit: Option<i32>,
         offset: Option<i32>,
     ) -> Result<Vec<Message>> {
-        self.storage.list_messages(conversation_id, limit, offset)
+        self.storage
+            .list_messages(conversation_id, limit, offset)
             .map_err(Error::from)
     }
 }
