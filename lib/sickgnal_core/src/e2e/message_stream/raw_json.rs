@@ -5,7 +5,7 @@ use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, io};
 use thiserror::Error;
 
 use crate::e2e::{
-    message::E2EMessage,
+    message::{E2EMessage, E2EPacket},
     message_stream::{E2EMessageReader, E2EMessageStream, E2EMessageWriter, MessageStreamError},
 };
 
@@ -68,19 +68,25 @@ impl From<Error> for MessageStreamError {
 // endregion: Struct definition
 
 /// Send an E2E message
-async fn send<W>(writer: &mut W, message: E2EMessage) -> Result<(), MessageStreamError>
+async fn send<W>(writer: &mut W, packet: E2EPacket) -> Result<(), MessageStreamError>
 where
     W: AsyncWrite + Unpin,
 {
-    let payload = serde_json::to_vec(&message).map_err(Error::from)?;
+    let payload = serde_json::to_vec(&packet.message).map_err(Error::from)?;
 
     let len: u16 = match payload.len().try_into() {
         Ok(len) => len,
         Err(_) => return Err(Error::PaylodTooLarge.into()),
     };
 
+    let request_id = packet.request_id.to_be_bytes();
+
     writer
-        .write_vectored(&[IoSlice::new(&len.to_be_bytes()), IoSlice::new(&payload)])
+        .write_vectored(&[
+            IoSlice::new(&len.to_be_bytes()),
+            IoSlice::new(&request_id),
+            IoSlice::new(&payload),
+        ])
         .await
         .map_err(Error::from)?;
 
@@ -88,7 +94,7 @@ where
 }
 
 /// Receive an E2E message
-async fn receive<R>(reader: &mut R) -> Result<E2EMessage, MessageStreamError>
+async fn receive<R>(reader: &mut R) -> Result<E2EPacket, MessageStreamError>
 where
     R: AsyncRead + Unpin,
 {
@@ -99,14 +105,27 @@ where
 
     let len = u16::from_be_bytes(len);
 
+    // Request id
+    let mut request_id: [u8; 2] = [0; 2];
+
+    reader
+        .read_exact(&mut request_id)
+        .await
+        .map_err(Error::from)?;
+
+    let request_id = u16::from_be_bytes(request_id);
+
     // Payload
     let mut payload: Vec<u8> = vec![0u8; len as usize];
 
     reader.read_exact(&mut payload).await.map_err(Error::from)?;
 
-    let msg: E2EMessage = serde_json::from_slice(&payload).map_err(Error::from)?;
+    let message: E2EMessage = serde_json::from_slice(&payload).map_err(Error::from)?;
 
-    Ok(msg)
+    Ok(E2EPacket {
+        request_id,
+        message,
+    })
 }
 
 impl<S> E2EMessageStream for RawJsonMessageStream<S>
@@ -133,8 +152,8 @@ where
 {
     /// Send an E2E message
     #[inline]
-    async fn send(&mut self, message: E2EMessage) -> Result<(), MessageStreamError> {
-        send(&mut self.0, message).await
+    async fn send(&mut self, packet: E2EPacket) -> Result<(), MessageStreamError> {
+        send(&mut self.0, packet).await
     }
 }
 
@@ -145,7 +164,7 @@ where
 {
     /// Receive an E2E message
     #[inline]
-    async fn receive(&mut self) -> Result<E2EMessage, MessageStreamError> {
+    async fn receive(&mut self) -> Result<E2EPacket, MessageStreamError> {
         receive(&mut self.0).await
     }
 }
@@ -157,8 +176,8 @@ where
 {
     /// Send an E2E message
     #[inline]
-    async fn send(&mut self, message: E2EMessage) -> Result<(), MessageStreamError> {
-        send(&mut self.byte_stream, message).await
+    async fn send(&mut self, packet: E2EPacket) -> Result<(), MessageStreamError> {
+        send(&mut self.byte_stream, packet).await
     }
 }
 
@@ -169,7 +188,7 @@ where
 {
     /// Receive an E2E message
     #[inline]
-    async fn receive(&mut self) -> Result<E2EMessage, MessageStreamError> {
+    async fn receive(&mut self) -> Result<E2EPacket, MessageStreamError> {
         receive(&mut self.byte_stream).await
     }
 }

@@ -18,6 +18,12 @@ pub const NONCE_BYTES: usize = 24;
 /// A nonce that can be used with XChaCha20Poly1305
 pub type Nonce = [u8; NONCE_BYTES];
 
+/// An E2E packet containing a message
+pub struct E2EPacket {
+    pub request_id: u16,
+    pub message: E2EMessage,
+}
+
 /// E2E Message type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "ty")]
@@ -409,6 +415,16 @@ pub struct KeyExchangeData {
 // endregion: Struct definition
 
 // region:    Constructors
+
+impl E2EPacket {
+    /// Create an untagged packet with a 0 request id
+    pub fn untagged(message: E2EMessage) -> Self {
+        Self {
+            request_id: 0,
+            message,
+        }
+    }
+}
 
 impl E2EMessage {
     /// Create an account

@@ -32,16 +32,15 @@ pub async fn receive_loop<R, S>(
     let mut cache = PayloadCache::new(100, 50);
 
     loop {
+        // TODO: Message filtering by request id to handle synchronous requests
         let msg = match reader.receive().await {
-            Ok(msg) => msg,
+            Ok(packet) => packet.message,
             Err(err) => {
                 // TODO: Better logging
                 println!("Reader error : {}", err);
                 break;
             }
         };
-
-        // TODO: Message filtering by request id to handle synchronous requests
 
         // TODO: Treat cached undecipherable messages on key rotation / session opening
 

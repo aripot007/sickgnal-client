@@ -14,7 +14,7 @@ use crate::{
     e2e::{
         client::{Error, error::Result, state::E2EClientState},
         keys::E2EStorageBackend,
-        message::{E2EMessage, ErrorCode, UserProfile},
+        message::{E2EMessage, E2EPacket, UserProfile},
     },
 };
 
@@ -24,7 +24,7 @@ where
     S: E2EStorageBackend + Send + 'static,
 {
     /// The channel to send [`E2EMessage`] to the server
-    pub(super) send_channel: mpsc::Sender<E2EMessage>,
+    pub(super) send_channel: mpsc::Sender<E2EPacket>,
 
     /// The client state
     pub(super) client_state: Arc<Mutex<E2EClientState<S>>>,
@@ -55,7 +55,7 @@ where
         }
 
         if let Ok(msg) = request {
-            self.send_channel.send(msg).await?;
+            self.send_channel.send(E2EPacket::untagged(msg)).await?;
         } else if let Err(Error::NoSession(_)) = request {
             // Open a new session
 

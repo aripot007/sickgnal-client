@@ -1,11 +1,11 @@
 use futures::channel::mpsc;
 
-use crate::e2e::{message::E2EMessage, message_stream::E2EMessageWriter};
+use crate::e2e::{message::E2EPacket, message_stream::E2EMessageWriter};
 
 /// The sending worker loop
 ///
 /// Sends messages from `channel_out` using the `writer`
-pub async fn send_loop<W>(mut writer: W, mut channel_out: mpsc::Receiver<E2EMessage>)
+pub async fn send_loop<W>(mut writer: W, mut channel_out: mpsc::Receiver<E2EPacket>)
 where
     W: E2EMessageWriter,
 {

@@ -111,10 +111,10 @@ where
 
         // Register the username on the server
         let m = E2EMessage::create_account(idk, username.clone());
-        msg_stream.send(m).await?;
+        msg_stream.send_untagged(m).await?;
 
         // Wait for the response
-        let resp = msg_stream.receive().await?;
+        let resp = msg_stream.receive_untagged().await?;
 
         let account = match resp {
             E2EMessage::AuthToken { id, token } => Account {
@@ -298,8 +298,11 @@ where
     ///
     /// [`send_e2e`]: Self::send_e2e
     pub(super) async fn send_e2e_raw(&mut self, msg: E2EMessage) -> Result<E2EMessage> {
-        self.msg_stream.send(msg).await?;
-        self.msg_stream.receive().await.map_err(Error::from)
+        self.msg_stream.send_untagged(msg).await?;
+        self.msg_stream
+            .receive_untagged()
+            .await
+            .map_err(Error::from)
     }
 
     /// Send a [`E2EMessage`] that needs authentication and wait for the response
