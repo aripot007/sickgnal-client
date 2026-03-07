@@ -12,9 +12,14 @@ pub struct AccountFile {
 }
 
 impl AccountFile {
-    pub fn new(mut path: PathBuf) -> Self {
+    pub fn new(mut path: PathBuf) -> Result<Self> {
+        std::fs::create_dir_all(&path).map_err(Error::from)?;
         path.push("credentials.txt");
-        Self { path }
+        // Guard against a stale directory at the credentials path (bad previous run)
+        if path.is_dir() {
+            std::fs::remove_dir_all(&path).map_err(Error::from)?;
+        }
+        Ok(Self { path })
     }
 
     /// Vérifie si un compte existe et si le mot de passe est correct
@@ -28,6 +33,7 @@ impl AccountFile {
 
         Ok(stored_user.to_string())
     }
+
     /// Vérifie si un compte existe et si le mot de passe est correct
     pub fn verify(&self, username: &str, password: &str) -> Result<bool> {
         let content = std::fs::read_to_string(&self.path).map_err(Error::from)?;
@@ -52,8 +58,6 @@ impl AccountFile {
 
     /// Crée un nouveau compte
     pub fn create(&self, username: &str, password: &str) -> Result<()> {
-        std::fs::create_dir_all(&self.path).map_err(Error::from)?;
-
         let salt = SaltString::generate(&mut OsRng);
         let hash = Argon2::default()
             .hash_password(password.as_bytes(), &salt)

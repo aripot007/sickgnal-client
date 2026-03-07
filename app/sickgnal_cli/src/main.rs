@@ -2,10 +2,13 @@ use sickgnal_sdk::{account::AccountFile, client::SdkClient, core::chat::client::
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 slint::include_modules!();
 
 fn main() {
-    let dir = PathBuf::from("./storage");
+    let mut dir = PathBuf::new();
+    dir.push(".");
+    dir.push("storage");
 
     if let Some((username, password)) = login_phase(dir.clone()) {
         tokio::runtime::Runtime::new()
@@ -22,41 +25,55 @@ fn login_phase(path: PathBuf) -> Option<(String, String)> {
 
     let ui = AppWindow::new().expect("Failed to load UI");
 
-    let account_file = AccountFile::new(path);
-    match account_file.username() {
-        Ok(username) => ui.global::<Auth>().set_username(username.into()),
-        Err(_) => {} // No account yet, show sign-up form
+    let account_file = Arc::new(AccountFile::new(path).expect("Dossier non crée"));
+
+    // Initialisation du nom d'utilisateur au démarrage
+    if let Ok(username) = account_file.username() {
+        ui.global::<Auth>().set_username(username.into());
     }
 
-    // sign_up: create account then proceed
-    let creds = credentials.clone();
+    // --- CALLBACK SIGN UP ---
     let ui_weak = ui.as_weak();
+    let af_clone = Arc::clone(&account_file); // On clone pour le premier callback
     ui.global::<Auth>()
         .on_sign_up(move |user, pass, conf_pass| {
+            let ui = match ui_weak.upgrade() {
+                Some(ui) => ui,
+                None => return, // L'interface n'existe plus, on s'arrête
+            };
+
             if pass != conf_pass {
-                if let Some(ui) = ui_weak.upgrade() {
-                    ui.global::<Auth>().set_different_password(true);
-                }
+                ui.global::<Auth>().set_different_password(true);
                 return;
             }
-            match account_file.create(user.as_str(), pass.as_str()) {
-                Ok(()) => {}
-                Err(e) => panic!("unable to store credentials: {}", e),
-            }
-            *creds.borrow_mut() = Some((user.to_string(), pass.to_string()));
-            if let Some(ui) = ui_weak.upgrade() {
-                ui.hide().unwrap();
-            }
-        });
 
-    // sign_in: username is already stored in the Auth global
-    let creds = credentials.clone();
+            // 2. On utilise 'ui' (l'instance upgradée) et non la variable globale
+            ui.global::<Auth>().set_is_logged_in(true);
+            ui.window().set_maximized(true);
+
+            // Utilisation de la référence clonée
+            af_clone
+                .create(user.as_str(), pass.as_str())
+                .expect("unable to store credentials");
+        });
+    // --- CALLBACK SIGN IN ---
     let ui_weak = ui.as_weak();
+    let af_clone = Arc::clone(&account_file); // On clone pour le second callback
     ui.global::<Auth>().on_sign_in(move |pass| {
         if let Some(ui) = ui_weak.upgrade() {
             let username = ui.global::<Auth>().get_username().to_string();
-            *creds.borrow_mut() = Some((username, pass.to_string()));
-            ui.hide().unwrap();
+            // Utilisation de la référence clonée
+            match af_clone.verify(username.as_str(), pass.as_str()) {
+                Ok(is_valid) => {
+                    if is_valid {
+                        ui.global::<Auth>().set_is_logged_in(true);
+                        ui.window().set_maximized(true);
+                    } else {
+                        ui.global::<Auth>().set_incorrect_password(true);
+                    }
+                }
+                Err(e) => panic!("Erreur de vérification: {}", e),
+            };
         }
     });
 

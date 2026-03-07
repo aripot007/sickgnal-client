@@ -10,7 +10,7 @@ import { Chat } from "../models/Chat.slint";
 import { Conversation } from "../models/Conversation.slint";
 import { Button } from "../components/Button.slint";
 
-export component ConservationLayout inherits VerticalBox {
+export component ConversationLayout inherits VerticalBox {
     private property <bool> show-typing: false;
     
     private property <bool> raw-typing: Chat.get-current-conversation().is-typing;
@@ -44,7 +44,7 @@ export component ConservationLayout inherits VerticalBox {
     }
 
     Rectangle {
-        height: 60px;
+        height: 50px;
         background: Theme.background-light;
         border-color: Theme.background-dark;
         Text {
