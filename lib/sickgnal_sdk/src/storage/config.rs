@@ -1,14 +1,13 @@
-/// Cryptographic utilities for the SDK
-/// 
-/// This module provides helper functions for key derivation and password hashing.
-
-use argon2::{Argon2, ParamsBuilder, Version};
-use std::path::PathBuf;
-use sickgnal_core::chat::storage::Result;
 use crate::storage::Error;
+/// Cryptographic utilities for the SDK
+///
+/// This module provides helper functions for key derivation and password hashing.
+use argon2::{Argon2, ParamsBuilder, Version};
+use sickgnal_core::chat::storage::Result;
+use std::path::PathBuf;
 
 /// Default Argon2 parameters for key derivation
-/// 
+///
 /// These parameters provide a good balance between security and performance.
 /// - Memory cost: 64 MiB (65536 KiB)
 /// - Time cost: 3 iterations
@@ -26,27 +25,23 @@ pub struct Config {
 
 impl Config {
     /// Create a storage configuration with encryption key derived from password
-    /// 
+    ///
     /// This is a convenience function that handles salt generation/loading and
     /// key derivation from a password.
-    /// 
+    ///
     /// # Arguments
     /// * `db_path` - Path to the SQLite database file
     /// * `password` - User's password
     /// * `salt_path` - Optional path to salt file. If None, uses db_path + ".salt"
-    /// 
+    ///
     /// # Returns
     /// A StorageConfig ready to be used with SqliteStorage
-    /// 
+    ///
     /// # Behavior
     /// - If salt file doesn't exist, generates new salt and saves it
     /// - If salt file exists, loads it
     /// - Derives encryption key from password + salt
-    pub fn new(
-        db_path: PathBuf,
-        password: &str,
-        salt_path: Option<PathBuf>,
-    ) -> Result<Self> {
+    pub fn new(db_path: PathBuf, password: &str, salt_path: Option<PathBuf>) -> Result<Self> {
         let salt_path = salt_path.unwrap_or_else(|| {
             let mut path = db_path.clone();
             path.set_extension("salt");
@@ -55,14 +50,14 @@ impl Config {
 
         // Load or generate salt
         let salt = if salt_path.exists() {
-           
             let salt_bytes = std::fs::read(&salt_path).map_err(Error::from)?;
 
             if salt_bytes.len() != 16 {
                 return Err(Error::InvalidData(format!(
                     "Invalid salt file: expected 16 bytes, got {}",
                     salt_bytes.len()
-                )).into());
+                ))
+                .into());
             }
 
             let mut salt = [0u8; 16];
@@ -71,12 +66,12 @@ impl Config {
         } else {
             // Generate new salt
             let salt = Self::generate_salt();
-            
+
             // Ensure parent directory exists
             if let Some(parent) = salt_path.parent() {
                 std::fs::create_dir_all(parent).map_err(Error::from)?;
             }
-            
+
             // Save salt to file
             std::fs::write(&salt_path, &salt).map_err(Error::from)?;
             salt
@@ -90,16 +85,16 @@ impl Config {
             encryption_key: encryption_key.to_vec(),
         })
     }
-    
+
     /// Derive a 256-bit encryption key from a password using Argon2id
-    /// 
+    ///
     /// This function uses Argon2id (hybrid mode) with recommended parameters.
     /// The same password and salt will always produce the same key.
-    /// 
+    ///
     /// # Arguments
     /// * `password` - The user's password
     /// * `salt` - A 16-byte salt (should be randomly generated once per database)
-    /// 
+    ///
     /// # Returns
     /// A 32-byte key suitable for ChaCha20Poly1305 encryption
     fn derive_key_from_password(password: &str, salt: &[u8; 16]) -> Result<[u8; 32]> {
@@ -123,7 +118,7 @@ impl Config {
     }
 
     /// Generate a random salt for key derivation
-    /// 
+    ///
     /// This should be called once when creating a new database, and the salt
     /// should be stored alongside the database file.
     fn generate_salt() -> [u8; 16] {
@@ -131,8 +126,6 @@ impl Config {
         getrandom::fill(&mut salt).expect("Failed to generate random salt");
         salt
     }
-
-    
 }
 
 #[cfg(test)]
@@ -193,7 +186,7 @@ mod tests {
 
         // Salt file should have been created
         assert!(salt_path.exists());
-        
+
         // Salt should be 16 bytes
         let salt_bytes = std::fs::read(&salt_path).unwrap();
         assert_eq!(salt_bytes.len(), 16);

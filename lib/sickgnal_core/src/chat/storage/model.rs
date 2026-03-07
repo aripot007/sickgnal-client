@@ -1,4 +1,3 @@
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -24,7 +23,7 @@ pub struct Account {
     pub user_id: Uuid,
     pub username: String,
     pub identity_key_priv: Vec<u8>,
-    pub midterm_key: Vec<u8>,      
+    pub midterm_key: Vec<u8>,
     pub created_at: DateTime<Utc>,
 }
 

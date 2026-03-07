@@ -1,5 +1,5 @@
 /// SQL schema for the SQLite database
-/// 
+///
 /// This module contains all table definitions and initialization scripts.
 /// Sensitive columns (identity_key_priv, midterm_key, session_data_json, messages.content)
 /// are stored as BLOB and encrypted at the application layer using ChaCha20Poly1305.

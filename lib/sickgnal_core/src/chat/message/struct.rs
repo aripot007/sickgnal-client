@@ -88,7 +88,7 @@ pub enum ControlMessage {
         id: Uuid,
     },
 
-    IsTyping
+    IsTyping,
 }
 
 // endregion: Struct definitions
@@ -175,8 +175,8 @@ impl ChatMessage {
         }
     }
 
-    /// 
-    /// 
+    ///
+    ///
     ///
     pub fn new_is_typing(conversation_id: Uuid) -> Self {
         ChatMessage {

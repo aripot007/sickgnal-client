@@ -1,21 +1,24 @@
-use sickgnal_core::chat::storage::*;
-use sickgnal_core::e2e::{
-    client::session::E2ESession,
-    keys::{EphemeralSecretKey, IdentityKeyPair, E2EStorageBackend, PublicIdentityKeys, SymetricKey, X25519Secret, KeyStorageError},
-};
-use sickgnal_core::e2e::keys::Result as K_Result;
+use super::Error;
+use crate::storage::Config;
 use crate::storage::schema;
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
+use sickgnal_core::chat::storage::*;
+use sickgnal_core::e2e::keys::Result as K_Result;
+use sickgnal_core::e2e::{
+    client::session::E2ESession,
+    keys::{
+        E2EStorageBackend, EphemeralSecretKey, IdentityKeyPair, KeyStorageError,
+        PublicIdentityKeys, SymetricKey, X25519Secret,
+    },
+};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
-use crate::storage::Config;
-use super::Error;
 
 /// SQLite implementation of the StorageBackend trait
-/// 
+///
 /// This implementation uses rusqlite for SQLite access and Pragma
-/// for encrypting the all database. 
+/// for encrypting the all database.
 #[derive(Clone)]
 pub struct Sqlite {
     conn: Arc<Mutex<Connection>>,
@@ -23,20 +26,19 @@ pub struct Sqlite {
 
 impl Sqlite {
     /// Create a new SqliteStorage instance
-    /// 
+    ///
     /// # Arguments
     /// * `config` - Storage configuration including database path and encryption key
-    /// 
+    ///
     /// # Returns
     /// A new SqliteStorage instance, ready to be initialized
-    
+
     pub fn new(config: Config) -> Result<Self> {
         if let Some(parent) = config.db_path.parent() {
             std::fs::create_dir_all(parent).map_err(Error::from)?;
         }
 
-        let conn = Connection::open(&config.db_path)
-            .map_err(|e| Error::Database(e.to_string()))?;
+        let conn = Connection::open(&config.db_path).map_err(|e| Error::Database(e.to_string()))?;
 
         // Set encryption key using SQLCipher's PRAGMA
         let key_hex = hex::encode(&config.encryption_key);
@@ -83,7 +85,6 @@ impl StorageBackend for Sqlite {
         for sql in schema::get_initialization_sql() {
             conn.execute_batch(sql)
                 .map_err(|e| Error::Database(e.to_string()));
-
         }
 
         Ok(())
@@ -137,7 +138,6 @@ impl StorageBackend for Sqlite {
                 let created_at = DateTime::parse_from_rfc3339(&created_at)
                     .map_err(|e| Error::InvalidData(format!("Invalid timestamp: {}", e)))?
                     .with_timezone(&Utc);
-    
 
                 Ok(Some(Account {
                     user_id,
@@ -349,13 +349,20 @@ impl StorageBackend for Sqlite {
     fn delete_conversation(&mut self, id: Uuid) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        conn.execute("DELETE FROM conversations WHERE id = ?1", params![id.to_string()])
-            .map_err(|e| Error::Database(e.to_string()))?;
+        conn.execute(
+            "DELETE FROM conversations WHERE id = ?1",
+            params![id.to_string()],
+        )
+        .map_err(|e| Error::Database(e.to_string()))?;
 
         Ok(())
     }
 
-    fn update_conversation_last_message(&mut self, id: Uuid, timestamp: DateTime<Utc>) -> Result<()> {
+    fn update_conversation_last_message(
+        &mut self,
+        id: Uuid,
+        timestamp: DateTime<Utc>,
+    ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
         conn.execute(
@@ -428,7 +435,16 @@ impl StorageBackend for Sqlite {
             .map_err(|e| Error::Database(e.to_string()))?;
 
         match result {
-            Some((id, conversation_id, sender_id, content, timestamp, status, reply_to_id, local_id)) => {
+            Some((
+                id,
+                conversation_id,
+                sender_id,
+                content,
+                timestamp,
+                status,
+                reply_to_id,
+                local_id,
+            )) => {
                 let id = Uuid::parse_str(&id)
                     .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
                 let conversation_id = Uuid::parse_str(&conversation_id)
@@ -487,7 +503,16 @@ impl StorageBackend for Sqlite {
             .map_err(|e| Error::Database(e.to_string()))?;
 
         match result {
-            Some((id, conversation_id, sender_id, content, timestamp, status, reply_to_id, local_id)) => {
+            Some((
+                id,
+                conversation_id,
+                sender_id,
+                content,
+                timestamp,
+                status,
+                reply_to_id,
+                local_id,
+            )) => {
                 let id = Uuid::parse_str(&id)
                     .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
                 let conversation_id = Uuid::parse_str(&conversation_id)
@@ -635,8 +660,11 @@ impl StorageBackend for Sqlite {
     fn delete_message(&mut self, id: Uuid) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
-        conn.execute("DELETE FROM messages WHERE id = ?1", params![id.to_string()])
-            .map_err(|e| Error::Database(e.to_string()))?;
+        conn.execute(
+            "DELETE FROM messages WHERE id = ?1",
+            params![id.to_string()],
+        )
+        .map_err(|e| Error::Database(e.to_string()))?;
 
         Ok(())
     }
@@ -651,13 +679,15 @@ impl StorageBackend for Sqlite {
 
 impl Sqlite {
     fn serialize_key_data<T: serde::Serialize>(data: &T) -> K_Result<Vec<u8>> {
-        bincode::serialize(data)
-            .map_err(|e| KeyStorageError::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))
+        bincode::serialize(data).map_err(|e| {
+            KeyStorageError::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        })
     }
-    
+
     fn deserialize_key_data<T: serde::de::DeserializeOwned>(data: &[u8]) -> K_Result<T> {
-        bincode::deserialize(data)
-            .map_err(|e| KeyStorageError::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)))
+        bincode::deserialize(data).map_err(|e| {
+            KeyStorageError::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        })
     }
 
     fn db_error(e: rusqlite::Error) -> KeyStorageError {
@@ -672,7 +702,7 @@ impl E2EStorageBackend for Sqlite {
         self.identity_keypair_opt()?.ok_or_else(|| {
             KeyStorageError::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "Identity keypair not found"
+                "Identity keypair not found",
             ))
         })
     }
@@ -683,21 +713,22 @@ impl E2EStorageBackend for Sqlite {
         // For a proper implementation, we'd need to cache keys in memory.
         Err(KeyStorageError::new(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "identity_keypair_opt requires in-memory cache - use load/save methods instead"
+            "identity_keypair_opt requires in-memory cache - use load/save methods instead",
         )))
     }
 
     fn set_identity_keypair(&mut self, identity_keypair: IdentityKeyPair) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         let data = Self::serialize_key_data(&identity_keypair)?;
-        
+
         conn.execute(
             "INSERT INTO keys (key_id, key_type, key_data, created_at)
              VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(key_id) DO UPDATE SET key_data = excluded.key_data",
             params!["identity", "identity", data, Utc::now().to_rfc3339()],
-        ).map_err(Self::db_error)?;
-        
+        )
+        .map_err(Self::db_error)?;
+
         Ok(())
     }
 
@@ -705,7 +736,7 @@ impl E2EStorageBackend for Sqlite {
         self.midterm_key_opt()?.ok_or_else(|| {
             KeyStorageError::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "Midterm key not found"
+                "Midterm key not found",
             ))
         })
     }
@@ -714,21 +745,22 @@ impl E2EStorageBackend for Sqlite {
         // Same limitation as identity_keypair_opt
         Err(KeyStorageError::new(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "midterm_key_opt requires in-memory cache - use load/save methods instead"
+            "midterm_key_opt requires in-memory cache - use load/save methods instead",
         )))
     }
 
     fn set_midterm_key(&mut self, midterm_key: X25519Secret) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         let data = midterm_key.to_bytes().to_vec();
-        
+
         conn.execute(
             "INSERT INTO keys (key_id, key_type, key_data, created_at)
              VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(key_id) DO UPDATE SET key_data = excluded.key_data",
             params!["midterm", "midterm", data, Utc::now().to_rfc3339()],
-        ).map_err(Self::db_error)?;
-        
+        )
+        .map_err(Self::db_error)?;
+
         Ok(())
     }
 
@@ -738,29 +770,33 @@ impl E2EStorageBackend for Sqlite {
         // Same limitation - can't return reference from database
         Err(KeyStorageError::new(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "ephemeral_key requires in-memory cache - use pop_ephemeral_key instead"
+            "ephemeral_key requires in-memory cache - use pop_ephemeral_key instead",
         )))
     }
 
     fn pop_ephemeral_key(&mut self, id: &Uuid) -> K_Result<Option<X25519Secret>> {
         let conn = self.conn.lock().unwrap();
-        
-        let result: Option<Vec<u8>> = conn.query_row(
-            "SELECT key_data FROM keys WHERE key_id = ?1 AND key_type = 'ephemeral'",
-            params![id.to_string()],
-            |row| row.get(0)
-        ).optional().map_err(Self::db_error)?;
-        
+
+        let result: Option<Vec<u8>> = conn
+            .query_row(
+                "SELECT key_data FROM keys WHERE key_id = ?1 AND key_type = 'ephemeral'",
+                params![id.to_string()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(Self::db_error)?;
+
         if let Some(data) = result {
             // Delete the key
             conn.execute(
                 "DELETE FROM keys WHERE key_id = ?1 AND key_type = 'ephemeral'",
-                params![id.to_string()]
-            ).map_err(Self::db_error)?;
-            
+                params![id.to_string()],
+            )
+            .map_err(Self::db_error)?;
+
             // Deserialize and return
             let ephemeral: EphemeralSecretKey = Self::deserialize_key_data(&data)?;
-            Ok(None)//Some(ephemeral.secret))
+            Ok(None) //Some(ephemeral.secret))
         } else {
             Ok(None)
         }
@@ -781,9 +817,15 @@ impl E2EStorageBackend for Sqlite {
             "INSERT INTO keys (key_id, key_type, key_data, created_at)
              VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(key_id) DO UPDATE SET key_data = excluded.key_data",
-            params![new_id.to_string(), "ephemeral", data, Utc::now().to_rfc3339()],
-        ).map_err(Self::db_error)?;
-        
+            params![
+                new_id.to_string(),
+                "ephemeral",
+                data,
+                Utc::now().to_rfc3339()
+            ],
+        )
+        .map_err(Self::db_error)?;
+
         Ok(new_id)
     }
 
@@ -791,8 +833,9 @@ impl E2EStorageBackend for Sqlite {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "DELETE FROM keys WHERE key_id = ?1 AND key_type = 'ephemeral'",
-            params![id.to_string()]
-        ).map_err(Self::db_error)?;
+            params![id.to_string()],
+        )
+        .map_err(Self::db_error)?;
         Ok(())
     }
 
@@ -846,33 +889,40 @@ impl E2EStorageBackend for Sqlite {
         // Can't return reference from database
         Err(KeyStorageError::new(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "session_key requires in-memory cache"
+            "session_key requires in-memory cache",
         )))
     }
 
     fn add_session_key(&mut self, user: Uuid, key_id: Uuid, key: SymetricKey) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         let composite_key = format!("{}_{}", user, key_id);
-        
+
         conn.execute(
             "INSERT INTO keys (key_id, key_type, key_data, created_at)
              VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(key_id) DO UPDATE SET key_data = excluded.key_data",
-            params![composite_key, "session_key", key.to_vec(), Utc::now().to_rfc3339()],
-        ).map_err(Self::db_error)?;
-        
+            params![
+                composite_key,
+                "session_key",
+                key.to_vec(),
+                Utc::now().to_rfc3339()
+            ],
+        )
+        .map_err(Self::db_error)?;
+
         Ok(())
     }
 
     fn delete_session_key(&mut self, user: Uuid, key_id: Uuid) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         let composite_key = format!("{}_{}", user, key_id);
-        
+
         conn.execute(
             "DELETE FROM keys WHERE key_id = ?1 AND key_type = 'session_key'",
-            params![composite_key]
-        ).map_err(Self::db_error)?;
-        
+            params![composite_key],
+        )
+        .map_err(Self::db_error)?;
+
         Ok(())
     }
 
@@ -882,21 +932,27 @@ impl E2EStorageBackend for Sqlite {
         // Can't return reference from database
         Err(KeyStorageError::new(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "user_public_keys requires in-memory cache"
+            "user_public_keys requires in-memory cache",
         )))
     }
 
     fn set_user_public_keys(&mut self, user_id: Uuid, keys: PublicIdentityKeys) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         let data = Self::serialize_key_data(&keys)?;
-        
+
         conn.execute(
             "INSERT INTO keys (key_id, key_type, key_data, created_at)
              VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(key_id) DO UPDATE SET key_data = excluded.key_data",
-            params![user_id.to_string(), "user_public_keys", data, Utc::now().to_rfc3339()],
-        ).map_err(Self::db_error)?;
-        
+            params![
+                user_id.to_string(),
+                "user_public_keys",
+                data,
+                Utc::now().to_rfc3339()
+            ],
+        )
+        .map_err(Self::db_error)?;
+
         Ok(())
     }
 
@@ -904,8 +960,9 @@ impl E2EStorageBackend for Sqlite {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "DELETE FROM keys WHERE key_id = ?1 AND key_type = 'user_public_keys'",
-            params![user_id.to_string()]
-        ).map_err(Self::db_error)?;
+            params![user_id.to_string()],
+        )
+        .map_err(Self::db_error)?;
         Ok(())
     }
 
@@ -913,13 +970,16 @@ impl E2EStorageBackend for Sqlite {
 
     fn load_session(&mut self, user_id: &Uuid) -> K_Result<Option<E2ESession>> {
         let conn = self.conn.lock().unwrap();
-        
-        let result: Option<Vec<u8>> = conn.query_row(
-            "SELECT session_data_json FROM sessions WHERE peer_user_id = ?1",
-            params![user_id.to_string()],
-            |row| row.get(0)
-        ).optional().map_err(Self::db_error)?;
-        
+
+        let result: Option<Vec<u8>> = conn
+            .query_row(
+                "SELECT session_data_json FROM sessions WHERE peer_user_id = ?1",
+                params![user_id.to_string()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(Self::db_error)?;
+
         if let Some(data) = result {
             let session: E2ESession = Self::deserialize_key_data(&data)?;
             Ok(Some(session))
@@ -930,28 +990,29 @@ impl E2EStorageBackend for Sqlite {
 
     fn load_all_sessions(&mut self) -> K_Result<Vec<E2ESession>> {
         let conn = self.conn.lock().unwrap();
-        
-        let mut stmt = conn.prepare("SELECT session_data_json FROM sessions")
+
+        let mut stmt = conn
+            .prepare("SELECT session_data_json FROM sessions")
             .map_err(Self::db_error)?;
-        
-        let rows = stmt.query_map([], |row| {
-            row.get::<_, Vec<u8>>(0)
-        }).map_err(Self::db_error)?;
-        
+
+        let rows = stmt
+            .query_map([], |row| row.get::<_, Vec<u8>>(0))
+            .map_err(Self::db_error)?;
+
         let mut sessions = Vec::new();
         for row in rows {
             let data = row.map_err(Self::db_error)?;
             let session: E2ESession = Self::deserialize_key_data(&data)?;
             sessions.push(session);
         }
-        
+
         Ok(sessions)
     }
 
     fn save_session(&mut self, session: &E2ESession) -> K_Result<()> {
         let conn = self.conn.lock().unwrap();
         let data = Self::serialize_key_data(session)?;
-        
+
         conn.execute(
             "INSERT INTO sessions (peer_user_id, session_data_json, updated_at)
              VALUES (?1, ?2, ?3)
@@ -963,8 +1024,9 @@ impl E2EStorageBackend for Sqlite {
                 data,
                 Utc::now().to_rfc3339(),
             ],
-        ).map_err(Self::db_error)?;
-        
+        )
+        .map_err(Self::db_error)?;
+
         Ok(())
     }
 
@@ -972,22 +1034,23 @@ impl E2EStorageBackend for Sqlite {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "DELETE FROM sessions WHERE peer_user_id = ?1",
-            params![user_id.to_string()]
-        ).map_err(Self::db_error)?;
+            params![user_id.to_string()],
+        )
+        .map_err(Self::db_error)?;
         Ok(())
     }
-    
+
     fn save_ephemeral_key(&mut self, keypair: EphemeralSecretKey) -> K_Result<()> {
         todo!()
     }
-    
+
     fn save_many_ephemeral_keys(
         &mut self,
         keypairs: impl Iterator<Item = EphemeralSecretKey>,
     ) -> K_Result<()> {
         todo!()
     }
-    
+
     fn add_many_ephemeral_key(
         &mut self,
         keypairs: impl Iterator<Item = X25519Secret>,
@@ -996,7 +1059,7 @@ impl E2EStorageBackend for Sqlite {
         #[allow(unreachable_code)]
         Ok(std::iter::empty::<Uuid>())
     }
-    
+
     fn cleanup_session_keys(
         &mut self,
         user: &Uuid,
@@ -1015,7 +1078,7 @@ mod tests {
     fn create_test_config() -> Config {
         let dir = tempdir().unwrap();
         let db_path = dir.path().join("test.db");
-        
+
         // Generate a random encryption key for testing
         let mut encryption_key = [0u8; 32];
         getrandom::fill(&mut encryption_key).unwrap();

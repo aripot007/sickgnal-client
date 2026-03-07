@@ -1,0 +1,73 @@
+import { VerticalBox, LineEdit, Button } from "std-widgets.slint";
+
+export global Auth {
+    in-out property <string> username: "";
+    in-out property <bool> is-logged-in: false;
+    callback sign-in(string);
+    callback sign-up(string, string, string);
+    in-out property <bool> already-existing-username: false;
+    in-out property <bool> different-password: false;
+}
+
+component SignIn inherits VerticalBox {
+    Text {
+        font-size: 16px;
+        text: "Utilisateur trouvé : '" + Auth.username + "'. Connectez-vous !";
+        color: green;
+    }
+
+    password := LineEdit {
+        placeholder-text: "Password";
+        height: 30px;
+    }
+
+    Button {
+        text: "Inscription";
+        primary: true;
+        height: 30px;
+        clicked => {
+            Auth.sign-in(password.text)
+        }
+    }
+}
+
+component SignUp inherits VerticalBox {
+    Text {
+        font-size: 16px;
+        text: "Aucun compte trouvé. Inscrivez-vous !";
+        color: orange;
+    }
+
+    user := LineEdit {
+        placeholder-text: "Username";
+        height: 30px;
+    }
+
+    passwd := LineEdit {
+        placeholder-text: "Password";
+        height: 30px;
+    }
+
+    confirm-password := LineEdit {
+        placeholder-text: "Confirm password";
+        height: 30px;
+    }
+
+    Button {
+        text: "Inscription";
+        primary: true;
+        height: 30px;
+        clicked => {
+            Auth.sign-up(user.text, passwd.text, confirm-password.text)
+        }
+    }
+}
+
+export component LogLayout inherits VerticalBox {
+    height: 400px;
+    width: 400px;
+    alignment: center;
+
+    if (Auth.username != ""): SignIn { }
+    if (Auth.username == ""): SignUp { }
+}
