@@ -38,6 +38,7 @@ use crate::{
 pub(super) const PREKEY_AMOUNT: usize = 100;
 
 /// An account on the relay server
+#[derive(Clone)]
 pub struct Account {
     pub username: String,
 

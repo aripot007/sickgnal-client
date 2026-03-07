@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::{
     chat::message::ChatMessage,
     e2e::{
-        client::{Error, error::Result, state::E2EClientState},
+        client::{Account, Error, error::Result, state::E2EClientState},
         keys::E2EStorageBackend,
         message::{E2EMessage, E2EPacket, UserProfile},
     },
@@ -39,6 +39,12 @@ where
     S: E2EStorageBackend + Send,
 {
     // region:    Public API
+
+    /// Get the client account
+    #[inline]
+    pub fn account(&self) -> Account {
+        self.client_state.lock().unwrap().account.clone()
+    }
 
     /// Send a [`ChatMessage`] to a user.
     ///
