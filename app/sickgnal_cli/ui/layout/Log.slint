@@ -1,0 +1,133 @@
+import { VerticalBox, LineEdit, Button } from "std-widgets.slint";
+
+export global Auth {
+    in-out property <string> username: "";
+    in-out property <bool> is-logged-in: false;
+    callback sign-in(string);
+    in-out property <bool> incorrect-password: false;
+    callback sign-up(string, string, string);
+    in-out property <bool> already-existing-username: false;
+    in-out property <bool> different-password: false;
+}
+
+component SignIn inherits VerticalBox {
+    Text {
+        font-size: 16px;
+        text: "Utilisateur trouvé : '" + Auth.username + "'. Connectez-vous !";
+        color: green;
+    }
+
+    Timer {
+        interval: 2s;
+        running: Auth.incorrect-password; 
+        triggered() => {
+            Auth.incorrect-password = false; 
+        }
+    }
+
+    passwd := LineEdit {
+        placeholder-text: "Password";
+        enabled: !Auth.incorrect-password;
+        input-type: password;
+        height: 30px;
+        accepted => { Auth.sign-in(self.text) }
+    }
+
+    if (Auth.incorrect-password) : Text {
+        font-size: 16px;
+        text: "Mot de passe incorrect";
+        color: red;
+    }
+
+    Button {
+        text: "Inscription";
+        primary: true;
+        enabled: !Auth.incorrect-password;
+        height: 30px;
+        clicked => {
+            Auth.sign-in(passwd.text)
+        }
+    }
+}
+
+component SignUp inherits VerticalBox {
+    spacing: 12px;
+
+    // --- LOGIQUE DES TIMERS ---
+    // Timer pour "Utilisateur déjà existant"
+    Timer {
+        interval: 2s;
+        running: Auth.already-existing-username;
+        triggered() => { Auth.already-existing-username = false; }
+    }
+
+    // Timer pour "Mots de passe différents"
+    Timer {
+        interval: 2s;
+        running: Auth.different-password;
+        triggered() => { Auth.different-password = false; }
+    }
+
+    // --- INTERFACE ---
+    Text {
+        font-size: 16px;
+        text: "Aucun compte trouvé. Inscrivez-vous !";
+        color: orange;
+        horizontal-alignment: center;
+    }
+
+    user := LineEdit {
+        placeholder-text: "Nom d'utilisateur";
+        enabled: !Auth.already-existing-username && !Auth.different-password;
+        height: 35px;
+    }
+
+    passwd := LineEdit {
+        placeholder-text: "Mot de passe";
+        input-type: password;
+        enabled: !Auth.already-existing-username && !Auth.different-password;
+        height: 35px;
+    }
+
+    confirm-password := LineEdit {
+        placeholder-text: "Confirmer le mot de passe";
+        input-type: password;
+        enabled: !Auth.already-existing-username && !Auth.different-password;
+        height: 35px;
+        accepted => { Auth.sign-up(user.text, passwd.text, self.text) }
+    }
+
+    // --- AFFICHAGE DES ERREURS ---
+    if (Auth.already-existing-username) : Text {
+        text: "Cet utilisateur existe déjà !";
+        color: red;
+        font-size: 14px;
+        horizontal-alignment: center;
+    }
+
+    if (Auth.different-password) : Text {
+        text: "Les mots de passe ne correspondent pas";
+        color: red;
+        font-size: 14px;
+        horizontal-alignment: center;
+    }
+
+    Button {
+        text: "Créer mon compte";
+        primary: true;
+        height: 35px;
+        enabled: !Auth.already-existing-username && !Auth.different-password;
+        clicked => {
+            Auth.sign-up(user.text, passwd.text, confirm-password.text)
+        }
+    }
+}
+
+export component LogLayout inherits VerticalBox {
+    height: 400px;
+    width: 400px;
+    alignment: center;
+
+    if (Auth.username != ""): SignIn { }
+    if (Auth.username == ""): SignUp { }
+}

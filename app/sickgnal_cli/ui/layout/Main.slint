@@ -3,7 +3,7 @@ import { ThemeSwitcher } from "../components/ThemeSwitcher.slint";
 import { Theme } from "../theme.slint";
 import { ConversationList } from "../components/ConversationList.slint";
 import { ConfigLayout } from "Configuration.slint";
-import { ConservationLayout } from "Conservation.slint";
+import { ConversationLayout } from "Conversation.slint";
 import { ImageButton } from "../components/ImageButton.slint";
 
 export component MainLayout inherits HorizontalBox {
@@ -45,7 +45,7 @@ export component MainLayout inherits HorizontalBox {
     }
 
     Rectangle {
-        if (root.current_page == "chat"): ConservationLayout { }
+        if (root.current_page == "chat"): ConversationLayout { }
         if (root.current_page == "settings"): ConfigLayout { }
     }
 }
