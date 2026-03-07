@@ -1,0 +1,57 @@
+export global Theme {
+    in-out property <bool> is-dark: true;
+
+    property <color> blue: #0A84FF;
+    property <color> purple: #5856D6; 
+    property <color> green: #32D74B;
+
+    
+    in property <color> primary-light: root.blue.brighter(15%);
+    in property <color> primary:       root.blue;
+    in property <color> primary-dark:  root.blue.darker(15%);
+    
+    in property <color> primary-hover: is-dark ? root.primary-light : root.primary-dark;
+    in property <color> on-primary:    white;
+
+    
+    in property <color> secondary-light: root.purple.brighter(15%);
+    in property <color> secondary:       root.purple;
+    in property <color> secondary-dark:  root.purple.darker(15%);
+    
+    in property <color> secondary-hover: is-dark ? root.secondary-light : root.secondary-dark;
+    in property <color> on-secondary:    white;
+
+    
+    in property <color> background:    is-dark ? #1C1C1E : #F2F2F7;
+    in property <color> on-background: is-dark ? #F2F2F7 : #1C1C1E; 
+    in property <color> background-light:    background.brighter(15%);
+    in property <color> background-dark:    background.darker(15%);
+    
+    in property <color> surface:       is-dark ? #2C2C2E : white;
+    in property <color> on-surface:    is-dark ? white : #000000;
+    in property <color> surface-hover: is-dark ? root.surface.brighter(10%) : root.surface.darker(5%);
+
+    in property <color> text-main:  root.on-surface;
+    in property <color> text-muted: is-dark ? #8E8E93 : #636366;
+    in property <color> text-link:       root.primary;
+    in property <color> text-link-hover: root.primary-hover;
+    in property <color> text-interactive:       is-dark ? #EBEBF5.darker(10%) : #3C3C43.brighter(10%);
+    in property <color> text-interactive-hover: is-dark ? white : black;
+
+    in property <color> success:    root.green;
+    in property <color> on-success: white;
+    
+    in property <color> msg-sent:      root.primary;
+    in property <color> on-msg-sent:   root.on-primary;
+    in property <color> msg-received:  root.surface;
+    in property <color> on-msg-received: root.on-surface;
+
+    in property <color> border: is-dark ? #48484A : #C6C6C8;
+
+    in property <length> font-size-title: 24px;
+    in property <length> font-size-body: 14px;
+    in property <length> spacing-standard: 12px;
+    in property <length> border-radius: 15px;
+    in property <length> icon-size: 17px;
+    in property <length> message-bubble-inner-pad: 10px;
+}

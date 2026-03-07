@@ -1,0 +1,22 @@
+import { Conversation } from "Conversation.slint";
+
+export global Chat {
+    in-out property <[Conversation]> chats: [];
+    in-out property <int> active_chat_id: -1;
+
+    out property <Conversation> current: chats[active_chat_id];
+    public pure function get-current-conversation() -> Conversation {
+        if (root.active_chat_id >= 0 && root.active_chat_id < root.chats.length) {
+            return root.chats[root.active_chat_id];
+        }
+        // Retourne une conversation "vide" par défaut
+        return { id: -1, name: "", last_message: "", last_message_time: "", unread_count: 0, messages: [] };
+    }
+    public pure function has-active-conversation() -> bool {
+        return root.active_chat_id >= 0 && root.active_chat_id < root.chats.length;
+    }
+    callback switch_conversation(int);
+    callback delete_conversation(int);
+    callback send_message(string);
+    callback create_new_conversation();
+}

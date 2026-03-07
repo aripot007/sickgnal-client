@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::e2e::{
     client::session::E2ESession,
     keys::{
-        EphemeralSecretKey, IdentityKeyPair, PublicIdentityKeys, SymetricKey, X25519Secret,
+        storage_backend::Result, EphemeralSecretKey, IdentityKeyPair, PublicIdentityKeys, SymetricKey, X25519Secret,
         storage_backend::KeyStorageError,
     },
 };
@@ -63,53 +63,53 @@ impl MemoryKeyStorage {
 }
 
 impl E2EStorageBackend for MemoryKeyStorage {
-    fn identity_keypair(&self) -> Result<&IdentityKeyPair, KeyStorageError> {
+    fn identity_keypair(&self) -> Result<&IdentityKeyPair> {
         self.identity_keypair.as_ref().ok_or(Error::NoKey.into())
     }
 
-    fn identity_keypair_opt(&self) -> Result<Option<&IdentityKeyPair>, KeyStorageError> {
+    fn identity_keypair_opt(&self) -> Result<Option<&IdentityKeyPair>> {
         Ok(self.identity_keypair.as_ref())
     }
 
     fn set_identity_keypair(
         &mut self,
         identity_keypair: IdentityKeyPair,
-    ) -> Result<(), KeyStorageError> {
+    ) -> Result<()> {
         self.identity_keypair = Some(identity_keypair);
         Ok(())
     }
 
-    fn midterm_key(&self) -> Result<&X25519Secret, KeyStorageError> {
+    fn midterm_key(&self) -> Result<&X25519Secret> {
         self.midterm_key.as_ref().ok_or(Error::NoKey.into())
     }
 
-    fn midterm_key_opt(&self) -> Result<Option<&X25519Secret>, KeyStorageError> {
+    fn midterm_key_opt(&self) -> Result<Option<&X25519Secret>> {
         Ok(self.midterm_key.as_ref())
     }
 
-    fn set_midterm_key(&mut self, midterm_key: X25519Secret) -> Result<(), KeyStorageError> {
+    fn set_midterm_key(&mut self, midterm_key: X25519Secret) -> Result<()> {
         self.midterm_key = Some(midterm_key);
         Ok(())
     }
 
-    fn ephemeral_key(&self, id: &uuid::Uuid) -> Result<Option<&X25519Secret>, KeyStorageError> {
+    fn ephemeral_key(&self, id: &uuid::Uuid) -> Result<Option<&X25519Secret>> {
         Ok(self.ephemeral_keys.get(id))
     }
 
     fn pop_ephemeral_key(
         &mut self,
         id: &uuid::Uuid,
-    ) -> Result<Option<X25519Secret>, KeyStorageError> {
+    ) -> Result<Option<X25519Secret>> {
         Ok(self.ephemeral_keys.remove(id))
     }
 
     fn available_ephemeral_keys(
         &self,
-    ) -> Result<impl Iterator<Item = &uuid::Uuid>, KeyStorageError> {
+    ) -> Result<impl Iterator<Item = &uuid::Uuid>> {
         Ok(self.ephemeral_keys.keys())
     }
 
-    fn save_ephemeral_key(&mut self, key: EphemeralSecretKey) -> Result<(), KeyStorageError> {
+    fn save_ephemeral_key(&mut self, key: EphemeralSecretKey) -> Result<()> {
         let id = key.id;
         let keypair = key.secret;
 
@@ -124,7 +124,7 @@ impl E2EStorageBackend for MemoryKeyStorage {
     fn save_many_ephemeral_keys(
         &mut self,
         keypairs: impl Iterator<Item = EphemeralSecretKey>,
-    ) -> Result<(), KeyStorageError> {
+    ) -> Result<()> {
         for keypair in keypairs {
             self.save_ephemeral_key(keypair)?;
         }
@@ -132,7 +132,7 @@ impl E2EStorageBackend for MemoryKeyStorage {
         Ok(())
     }
 
-    fn add_ephemeral_key(&mut self, key: X25519Secret) -> Result<uuid::Uuid, KeyStorageError> {
+    fn add_ephemeral_key(&mut self, key: X25519Secret) -> Result<uuid::Uuid> {
         let id = Uuid::new_v4();
 
         self.save_ephemeral_key(EphemeralSecretKey { id, secret: key })?;
@@ -143,7 +143,7 @@ impl E2EStorageBackend for MemoryKeyStorage {
     fn add_many_ephemeral_key(
         &mut self,
         keypairs: impl Iterator<Item = X25519Secret>,
-    ) -> Result<impl Iterator<Item = uuid::Uuid>, KeyStorageError> {
+    ) -> Result<impl Iterator<Item = uuid::Uuid>> {
         let mut ids = Vec::new();
 
         for keypair in keypairs {
@@ -154,7 +154,7 @@ impl E2EStorageBackend for MemoryKeyStorage {
         Ok(ids.into_iter())
     }
 
-    fn delete_ephemeral_key(&mut self, id: Uuid) -> Result<(), KeyStorageError> {
+    fn delete_ephemeral_key(&mut self, id: Uuid) -> Result<()> {
         self.ephemeral_keys.remove(&id);
         Ok(())
     }
@@ -162,34 +162,34 @@ impl E2EStorageBackend for MemoryKeyStorage {
     fn delete_many_ephemeral_key(
         &mut self,
         ids: impl Iterator<Item = uuid::Uuid>,
-    ) -> Result<(), KeyStorageError> {
+    ) -> Result<()> {
         for id in ids {
             self.ephemeral_keys.remove(&id);
         }
         Ok(())
     }
 
-    fn clear_identity_keypair(&mut self) -> Result<(), KeyStorageError> {
+    fn clear_identity_keypair(&mut self) -> Result<()> {
         self.identity_keypair = None;
         Ok(())
     }
 
-    fn clear_midterm_key(&mut self) -> Result<(), KeyStorageError> {
+    fn clear_midterm_key(&mut self) -> Result<()> {
         self.midterm_key = None;
         Ok(())
     }
 
-    fn clear_ephemeral_keys(&mut self) -> Result<(), KeyStorageError> {
+    fn clear_ephemeral_keys(&mut self) -> Result<()> {
         self.ephemeral_keys.clear();
         Ok(())
     }
 
-    fn clear_session_keys(&mut self) -> Result<(), KeyStorageError> {
+    fn clear_session_keys(&mut self) -> Result<()> {
         self.session_keys.clear();
         Ok(())
     }
 
-    fn clear_user_public_keys(&mut self) -> Result<(), KeyStorageError> {
+    fn clear_user_public_keys(&mut self) -> Result<()> {
         self.user_public_keys.clear();
         Ok(())
     }
@@ -198,7 +198,7 @@ impl E2EStorageBackend for MemoryKeyStorage {
         &self,
         user: Uuid,
         key_id: Uuid,
-    ) -> Result<Option<&super::SymetricKey>, KeyStorageError> {
+    ) -> Result<Option<&super::SymetricKey>> {
         if let Some(keys) = self.session_keys.get(&user) {
             return Ok(keys.get(&key_id));
         }
@@ -211,7 +211,7 @@ impl E2EStorageBackend for MemoryKeyStorage {
         user: Uuid,
         key_id: Uuid,
         key: super::SymetricKey,
-    ) -> Result<(), KeyStorageError> {
+    ) -> Result<()> {
         if let Some(keys) = self.session_keys.get_mut(&user) {
             keys.insert(key_id, key);
         } else {
@@ -222,7 +222,7 @@ impl E2EStorageBackend for MemoryKeyStorage {
         Ok(())
     }
 
-    fn delete_session_key(&mut self, user: Uuid, key_id: Uuid) -> Result<(), KeyStorageError> {
+    fn delete_session_key(&mut self, user: Uuid, key_id: Uuid) -> Result<()> {
         if let Some(keys) = self.session_keys.get_mut(&user) {
             keys.remove(&key_id);
         }
@@ -235,7 +235,7 @@ impl E2EStorageBackend for MemoryKeyStorage {
         user: &Uuid,
         current_sending_key: &Uuid,
         current_receiving_key: &Uuid,
-    ) -> Result<(), KeyStorageError> {
+    ) -> Result<()> {
         if let Some(keys) = self.session_keys.get_mut(user) {
             // Get the current keys to insert them back
             let snd_key = keys.remove(current_sending_key);
@@ -258,7 +258,7 @@ impl E2EStorageBackend for MemoryKeyStorage {
     fn user_public_keys(
         &self,
         user_id: &Uuid,
-    ) -> Result<Option<&PublicIdentityKeys>, KeyStorageError> {
+    ) -> Result<Option<&PublicIdentityKeys>> {
         Ok(self.user_public_keys.get(user_id))
     }
 
@@ -266,12 +266,12 @@ impl E2EStorageBackend for MemoryKeyStorage {
         &mut self,
         user_id: uuid::Uuid,
         key: PublicIdentityKeys,
-    ) -> Result<(), KeyStorageError> {
+    ) -> Result<()> {
         self.user_public_keys.insert(user_id, key);
         Ok(())
     }
 
-    fn delete_user_public_keys(&mut self, user_id: &uuid::Uuid) -> Result<(), KeyStorageError> {
+    fn delete_user_public_keys(&mut self, user_id: &uuid::Uuid) -> Result<()> {
         self.user_public_keys.remove(user_id);
         Ok(())
     }
@@ -279,26 +279,26 @@ impl E2EStorageBackend for MemoryKeyStorage {
     /// Load the session with the given user
     ///
     /// Returns [`None`] if no session is currently open with the other user
-    fn load_session(&mut self, user_id: &Uuid) -> Result<Option<E2ESession>, KeyStorageError> {
+    fn load_session(&mut self, user_id: &Uuid) -> Result<Option<E2ESession>> {
         Ok(self.sessions.get(user_id).cloned())
     }
 
     /// Load all known sessions
-    fn load_all_sessions(&mut self) -> Result<Vec<E2ESession>, KeyStorageError> {
+    fn load_all_sessions(&mut self) -> Result<Vec<E2ESession>> {
         let sessions: Vec<E2ESession> = self.sessions.values().cloned().collect();
 
         Ok(sessions)
     }
 
     /// Save a session
-    fn save_session(&mut self, session: &E2ESession) -> Result<(), KeyStorageError> {
+    fn save_session(&mut self, session: &E2ESession) -> Result<()> {
         self.sessions
             .insert(session.correspondant_id, session.clone());
         Ok(())
     }
 
     /// Delete a session from the storage
-    fn delete_session(&mut self, user_id: &Uuid) -> Result<(), KeyStorageError> {
+    fn delete_session(&mut self, user_id: &Uuid) -> Result<()> {
         self.sessions.remove(user_id);
         Ok(())
     }

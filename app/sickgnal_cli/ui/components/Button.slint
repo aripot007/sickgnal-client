@@ -1,0 +1,32 @@
+import { Theme } from "../theme.slint";
+
+export component Button inherits Rectangle {
+    in property <string> text;
+    in property <color> bg-color: Theme.primary;
+    in property <color> text-color: white;
+    in property <length> font-size: Theme.font-size-body;
+    in property <length> btn_width: 50px;
+    in property <bool> enabled: true;
+    
+    callback clicked;
+
+    // Style de base
+    height: 40px;
+    min-width: btn_width;
+    border-radius: Theme.border-radius / 2;
+    background: root.bg-color;
+    
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+        enabled: enabled;
+    }
+
+    Text {
+        text: root.text;
+        color: root.text-color;
+        font-size: root.font-size;
+        font-weight: 600;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+    }
+}

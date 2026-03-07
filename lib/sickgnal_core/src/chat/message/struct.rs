@@ -88,7 +88,7 @@ pub enum ControlMessage {
         id: Uuid,
     },
 
-    IsTyping {},
+    IsTyping
 }
 
 // endregion: Struct definitions
@@ -172,6 +172,18 @@ impl ChatMessage {
             issued_at: Utc::now(),
             conversation_id,
             kind: ChatMessageKind::Ctrl(ControlMessage::OpenConv { initial_message }),
+        }
+    }
+
+    /// 
+    /// 
+    ///
+    pub fn new_is_typing(conversation_id: Uuid) -> Self {
+        ChatMessage {
+            sender_id: Uuid::default(),
+            issued_at: Utc::now(),
+            conversation_id,
+            kind: ChatMessageKind::Ctrl(ControlMessage::IsTyping),
         }
     }
 }

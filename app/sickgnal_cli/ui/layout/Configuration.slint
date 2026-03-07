@@ -1,0 +1,40 @@
+import {
+    VerticalBox,
+    LineEdit,
+    HorizontalBox, TextEdit,
+} from "std-widgets.slint";
+import { Button } from "../components/Button.slint";
+import { Theme } from "../theme.slint";
+
+export component ConfigLayout inherits VerticalBox {
+    padding: 30px;
+    alignment: start;
+    spacing: 20px;
+    Text {
+        text: "Configuration";
+        font-size: 24px;
+        color: Theme.text-main;
+    }
+
+    HorizontalBox {
+        padding: 0;
+        Text {
+            text: "Nom d'utilisateur";
+            color: Theme.text-main;
+            vertical-alignment: center;
+            font-size: 14px;
+        }
+
+        LineEdit {
+            text: "User_42";
+        }
+
+        Button {
+            text: "Ok";
+        }
+    }
+
+    Button {
+        text: "Déconnexion";
+    }
+}

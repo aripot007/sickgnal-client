@@ -1,0 +1,26 @@
+
+import { Theme } from "../theme.slint";
+import { Chat } from "../models/Chat.slint";
+
+export component ImageButton inherits Rectangle {
+    in property <image> image;
+    in property <length> size: 20px;
+
+    callback clicked;
+
+    width: 32px;
+    height: 32px;
+    background: add_touch.has_hover ?  Theme.background-light.brighter(100%) : Theme.background-light;
+
+    add_touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    Image {
+        source: image;
+        width: size;
+        height: size;
+        vertical-alignment: center;
+        colorize:  Theme.on-background;
+    }
+}

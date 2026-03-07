@@ -1,0 +1,52 @@
+import { ScrollView, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { ConversationItem } from "../components/ConversationItem.slint";
+import { Chat } from "../models/Chat.slint";
+import { ImageButton } from "ImageButton.slint";
+
+export component ConversationList inherits Rectangle {
+    background: Theme.background-light;
+    VerticalBox {
+        padding: 0;
+        padding-top: 8px;
+        HorizontalBox {
+            padding: 0;
+            Text {
+                text: "Conversations";
+                font-size: 18px;
+                font-weight: 700;
+                vertical-alignment: center;
+                color: Theme.text-main;
+                horizontal-alignment: left;
+            }
+
+            ImageButton {
+                image: @image-url("../assets/add.png");
+                clicked => {
+                    // New conversation
+                }
+            }
+        }
+
+        ScrollView {
+            viewport-height: self.visible-height;
+            VerticalBox {
+                alignment: start;
+                for conv[index] in Chat.chats: ConversationItem {
+                    conversation_id: conv.id;
+                    name: conv.name;
+                    last_message: conv.last_message;
+                    last_message_time: conv.last_message_time;
+                    unread_count: conv.unread_count;
+                    is_active: index == Chat.active_chat_id;
+                    clicked => {
+                        Chat.switch_conversation(index);
+                    }
+                    delete_clicked => {
+                        Chat.delete_conversation(index);
+                    }
+                }
+            }
+        }
+    }
+}

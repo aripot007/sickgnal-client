@@ -37,6 +37,7 @@ use crate::{
 /// Number of prekeys to store on the server
 pub(super) const PREKEY_AMOUNT: usize = 100;
 
+#[derive(Debug, Clone)]
 /// An account on the relay server
 #[derive(Clone)]
 pub struct Account {

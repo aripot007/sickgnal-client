@@ -1,10 +1,5 @@
-pub struct Client {
-    // ...
-}
+mod client;
+mod error;
 
-impl Client {
-    pub async fn init(/* ... */) -> Self {
-        // Do something
-        Self {}
-    }
-}
+pub use error::*;
+pub use client::*;

@@ -1,0 +1,51 @@
+import { VerticalBox, HorizontalBox, Button } from "std-widgets.slint";
+import { ThemeSwitcher } from "../components/ThemeSwitcher.slint";
+import { Theme } from "../theme.slint";
+import { ConversationList } from "../components/ConversationList.slint";
+import { ConfigLayout } from "Configuration.slint";
+import { ConservationLayout } from "Conservation.slint";
+import { ImageButton } from "../components/ImageButton.slint";
+
+export component MainLayout inherits HorizontalBox {
+    in-out property <string> current_page: "chat";
+    width: 100%;
+    height: 100%;
+
+    Rectangle {
+        height: 100%;
+        width: 15%;
+        min-width: 250px;
+        background: Theme.background-light;
+        VerticalBox {
+            HorizontalLayout {
+                alignment: space-between;
+                ThemeSwitcher { }
+
+                ImageButton {
+                    image: root.current_page == "settings" ? @image-url("../assets/conversation.png") : @image-url("../assets/settings.png");
+                    clicked => {
+                        root.current_page = root.current_page == "settings" ? "chat" : "settings";
+                    }
+                }
+            }
+
+            if root.current_page == "chat": ConversationList { }
+            if root.current_page == "settings": HorizontalBox {
+                padding: 0;
+                padding-top: 12px;
+                Text {
+                    text: "Paramètres";
+                    font-size: 18px;
+                    font-weight: 700;
+                    color: Theme.text-main;
+                    horizontal-alignment: left;
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        if (root.current_page == "chat"): ConservationLayout { }
+        if (root.current_page == "settings"): ConfigLayout { }
+    }
+}
