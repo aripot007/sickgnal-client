@@ -1,10 +1,13 @@
 //! E2E Client errors
 //!
 
+use futures::channel::mpsc::SendError;
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::e2e::{self, keys::KeyStorageError, message_stream::MessageStreamError};
+use crate::e2e::{
+    self, keys::KeyStorageError, message::ErrorCode, message_stream::MessageStreamError,
+};
 
 /// An E2E Client error
 #[derive(Error, Debug)]
@@ -16,7 +19,7 @@ pub enum Error {
     MessageStreamError(#[from] MessageStreamError),
 
     #[error(transparent)]
-    ProtocolError(#[from] e2e::message::ErrorCode),
+    ProtocolError(e2e::message::ErrorCode),
 
     /// When the client receives an E2E message it did not except
     #[error("Unexpected message : {0:?}")]
@@ -38,6 +41,24 @@ pub enum Error {
 
     #[error("No open session with user {0}")]
     NoSession(Uuid),
+
+    /// When we try to open a session with a user that didn't upload keys on the server
+    #[error("No prekey available on the server")]
+    NoPrekeyAvailable,
+
+    /// When there is an error sending the message on the worker channel
+    #[error("Could not send message to worker : {0}")]
+    WorkerSendError(#[from] SendError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl From<ErrorCode> for Error {
+    fn from(code: ErrorCode) -> Self {
+        match code {
+            ErrorCode::UserNotFound => Error::UserNotFound,
+            ErrorCode::NoAvailableKey => Error::NoPrekeyAvailable,
+            _ => Error::ProtocolError(code),
+        }
+    }
+}

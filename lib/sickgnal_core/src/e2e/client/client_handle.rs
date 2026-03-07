@@ -1,7 +1,10 @@
 //! Client handle for asynchrounous mode
 //!
 
-use std::sync::{Arc, Mutex};
+use std::{
+    os::linux::raw::stat,
+    sync::{Arc, Mutex},
+};
 
 use futures::{SinkExt, channel::mpsc};
 use uuid::Uuid;
@@ -9,9 +12,9 @@ use uuid::Uuid;
 use crate::{
     chat::message::ChatMessage,
     e2e::{
-        client::{error::Result, state::E2EClientState},
+        client::{Error, error::Result, state::E2EClientState},
         keys::E2EStorageBackend,
-        message::{E2EMessage, UserProfile},
+        message::{E2EMessage, ErrorCode, UserProfile},
     },
 };
 
@@ -40,16 +43,91 @@ where
 {
     // region:    Public API
 
+    /// Send a [`ChatMessage`] to a user.
+    ///
+    /// Opens a new session if necessary
     pub async fn send(&mut self, to: Uuid, message: ChatMessage) -> Result<()> {
-        todo!()
+        let request;
+        {
+            let mut state = self.client_state.lock().unwrap();
+
+            request = state.prepare_message(to, message.clone())
+        }
+
+        if let Ok(msg) = request {
+            self.send_channel.send(msg).await?;
+        } else if let Err(Error::NoSession(_)) = request {
+            // Open a new session
+
+            let rq;
+            {
+                let state = self.client_state.lock().unwrap();
+                rq = E2EMessage::PreKeyBundleRequest {
+                    token: state.account.token.clone(),
+                    id: to,
+                };
+            }
+
+            let bundle = match self.request(rq).await? {
+                E2EMessage::PreKeyBundle(bundle) => bundle,
+                m => return Err(Error::UnexpectedE2EMessage(m)),
+            };
+
+            let (msg, sess) = {
+                let mut state = self.client_state.lock().unwrap();
+                state.prepare_open_new_session(to, bundle, message)?
+            };
+
+            // Save the session if the message gets sent
+            match self.request(msg).await? {
+                E2EMessage::Ok => (),
+                m => return Err(Error::UnexpectedE2EMessage(m)),
+            }
+
+            {
+                let mut state = self.client_state.lock().unwrap();
+                state.update_session(sess)?;
+            }
+        } else if let Err(e) = request {
+            // Other error
+            return Err(e);
+        }
+
+        Ok(())
     }
 
-    pub async fn get_profile_by_id(&mut self, user_id: Uuid) -> Result<UserProfile> {
-        todo!()
+    /// Get a user's profile by its id
+    pub async fn get_profile_by_id(&mut self, id: Uuid) -> Result<UserProfile> {
+        let rq;
+        {
+            let state = self.client_state.lock().unwrap();
+            rq = E2EMessage::UserProfileById {
+                token: state.token().clone(),
+                id,
+            };
+        }
+
+        match self.request(rq).await? {
+            E2EMessage::UserProfile(profile) => Ok(profile),
+            m => Err(Error::UnexpectedE2EMessage(m)),
+        }
     }
 
+    /// Get a user's profile by its username
     pub async fn get_profile_by_username(&mut self, username: String) -> Result<UserProfile> {
-        todo!()
+        let rq;
+        {
+            let state = self.client_state.lock().unwrap();
+            rq = E2EMessage::UserProfileByUsername {
+                token: state.token().clone(),
+                username,
+            };
+        }
+
+        match self.request(rq).await? {
+            E2EMessage::UserProfile(profile) => Ok(profile),
+            m => Err(Error::UnexpectedE2EMessage(m)),
+        }
     }
 
     // endregion: Public API
