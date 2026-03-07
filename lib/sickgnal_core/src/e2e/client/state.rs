@@ -164,42 +164,6 @@ where
         return (packet, rx);
     }
 
-    /// Decrypt a [`ChatMessage`] in a [`EncryptedPayload`]
-    ///
-    /// Handles key rotation messages automatically. If you need to handle control messages,
-    /// use [`E2EClientState::decrypt_payload`] instead.
-    ///
-    /// May return `None` if the payload is a key rotation payload without a message.
-    ///
-    /// If the payload is a key rotation payload containing a [`PayloadMessage::E2EMessage`] as the
-    /// optional message, returns a [`Error::UnexpectedE2EMessage`] error with the inner payload.
-    pub fn decrypt_message(
-        &mut self,
-        sender_id: Uuid,
-        ciphertext: &EncryptedPayload,
-    ) -> Result<Option<ChatMessage>> {
-        match self.decrypt_payload(sender_id, ciphertext)? {
-            PayloadMessage::ChatMessage(m) => Ok(Some(m)),
-
-            // Handle key rotation
-            PayloadMessage::E2EMessage(E2EMessage::KeyRotation {
-                nonce,
-                key_id,
-                message,
-                padding: _,
-            }) => {
-                self.process_key_rotation(sender_id, &nonce, key_id)?;
-
-                // Decrypt the underlying message if there is one
-                if let Some(msg) = message {
-                    return self.decrypt_message(sender_id, &msg);
-                };
-                Ok(None)
-            }
-            PayloadMessage::E2EMessage(m) => Err(Error::UnexpectedE2EMessage(m)),
-        }
-    }
-
     /// Decrypt an [`EncryptedPayload`]
     ///
     /// This returns the raw [`PayloadMessage`] and does not handle control messages. If you
