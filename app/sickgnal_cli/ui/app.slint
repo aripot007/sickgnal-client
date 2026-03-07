@@ -21,5 +21,39 @@ export component AppWindow inherits Window {
 
     background: Theme.background;
 
+    in-out property <string> username: "";
+    in-out property <bool> checked: false;
+
+    callback check-user(string);
+
+    VerticalBox {
+        spacing: 15px;
+        padding: 30px;
+
+        Text {
+            text: "Vérification du compte";
+            font-size: 20px;
+        }
+
+        input := LineEdit {
+            placeholder-text: "Entrez votre e-mail";
+        }
+
+        Button {
+            text: "Vérifier";
+            primary: true;
+            clicked => { root.check-user(input.text) }
+        }
+
+        // Zone d'affichage dynamique
+        if (root.checked) : Text {
+            // Si username n'est pas vide, il existe
+            text: root.username != "" 
+                ? "Utilisateur trouvé : " + root.username 
+                : "Aucun compte trouvé. Voulez-vous vous inscrire ?";
+            color: root.username != "" ? green : orange;
+        }
+    }
+
     MainLayout { }
 }

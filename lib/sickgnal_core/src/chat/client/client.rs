@@ -1,7 +1,7 @@
 use crate::chat::client::{ConnectionState, Error, Event, Result};
 use crate::chat::client as client;
 use crate::chat::storage::{
-    Account, Conversation, Message, MessageStatus, StorageBackend,
+    Conversation, Message, MessageStatus, StorageBackend,
 };
 
 use chrono::Utc;
@@ -9,7 +9,7 @@ use futures::{AsyncRead, AsyncWrite, SinkExt};
 use futures::channel::mpsc;
 use uuid::Uuid;
 
-use crate::e2e::client::{E2EClient};
+use crate::e2e::client::{Account, E2EClient};
 use crate::chat::message::ChatMessage;
 use crate::e2e::keys::E2EStorageBackend;
 use crate::e2e::message_stream::raw_json::RawJsonMessageStream;
@@ -30,9 +30,7 @@ where
     connection_state: ConnectionState,
     /// Current account information
     account: Option<Account>,
-
 }
-
 
 impl<S, P> ChatClient<S, P>
 where
@@ -64,6 +62,23 @@ where
             event_tx,
             connection_state:   ConnectionState::Disconnected,
             account:            None,
+        })
+    }
+
+    pub fn load(
+        account: Account,
+        msg_stream: RawJsonMessageStream<P>,
+        storage: S,
+        event_tx: mpsc::Sender<Event>
+    ) -> Result<Self> {
+        let e2e_client = E2EClient::load(account.clone(), storage.clone(), msg_stream)?;
+
+        Ok(Self {
+            e2e_client,
+            storage,
+            event_tx,
+            connection_state:   ConnectionState::Disconnected,
+            account: Some(account),
         })
     }
 
@@ -99,7 +114,7 @@ where
         // Get sender account
         let sender_id = self.account.as_ref()
             .ok_or_else(|| client::Error::NoAccount)?
-            .user_id;
+            .id;
 
         // Create message
         let message_id = Uuid::new_v4();
@@ -180,7 +195,7 @@ where
 
     /// Check if a message was sent by the current user
     fn is_my_message(&self, message: &Message) -> bool {
-        self.account.as_ref().is_some_and(|a| a.user_id == message.sender_id)
+        self.account.as_ref().is_some_and(|a| a.id == message.sender_id)
     }
 
     /// Get the current account

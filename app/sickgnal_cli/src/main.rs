@@ -17,6 +17,11 @@ async fn main() {
     let ui = AppWindow::new().expect("Failed to load UI");
     let ui_handle = ui.as_weak();
 
+
+
+
+    
+
     // 3. Lancer la tâche d'écoute (Background Task)
     tokio::spawn(async move {
         // On boucle sur le receiver du SDK
