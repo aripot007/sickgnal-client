@@ -32,15 +32,42 @@ pub async fn receive_loop<R, S>(
     let mut cache = PayloadCache::new(100, 50);
 
     loop {
-        // TODO: Message filtering by request id to handle synchronous requests
-        let msg = match reader.receive().await {
-            Ok(packet) => packet.message,
+        let packet = match reader.receive().await {
+            Ok(packet) => packet,
             Err(err) => {
                 // TODO: Better logging
                 println!("Reader error : {}", err);
                 break;
             }
         };
+
+        // Handle synchronous packets
+        if packet.request_id != 0 {
+            // Dispatch the packet to the corresponding channel
+
+            let waiting_channel = {
+                let mut state = state.lock().unwrap();
+                state.waiting_requests.remove(&packet.request_id)
+            };
+
+            if let Some(channel) = waiting_channel {
+                if channel.send(packet.message).is_err() {
+                    println!(
+                        "Response channel for packet {} closed, discarding packet",
+                        packet.request_id
+                    );
+                }
+                continue;
+            } else {
+                // If no channel waiting for this packet, log and dispatch normally
+                println!(
+                    "No response channel for tagged packet {}",
+                    packet.request_id
+                );
+            }
+        }
+
+        let msg = packet.message;
 
         // TODO: Treat cached undecipherable messages on key rotation / session opening
 

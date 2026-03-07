@@ -7,6 +7,7 @@ use chacha20poly1305::{
     AeadCore, KeyInit, XChaCha20Poly1305,
     aead::{Aead, Payload},
 };
+use futures::channel::oneshot;
 use rand::{CryptoRng, Rng, RngCore, rngs::StdRng};
 use uuid::Uuid;
 use x25519_dalek::PublicKey;
@@ -22,7 +23,7 @@ use crate::{
         kdf::kdf,
         keys::{E2EStorageBackend, IdentityKeyPair},
         message::{
-            E2EMessage, KeyExchangeData, PreKeyBundle,
+            E2EMessage, E2EPacket, KeyExchangeData, PreKeyBundle,
             encrypted_payload::{self, EncryptedPayload, PayloadMessage},
         },
     },
@@ -45,19 +46,43 @@ pub struct E2EClientState<S: E2EStorageBackend> {
     /// User account on the server
     pub(super) account: Account,
 
-    pub(super) key_storage: S,
+    pub(super) storage: S,
 
     /// Cryptographically secure PRNG used to generate keys
     pub(super) rng: StdRng,
 
     /// Currently open sessions
     pub(super) sessions: HashMap<Uuid, E2ESession>,
+
+    /// Next request id to use for tagged messages
+    next_request_id: u16,
+
+    /// Oneshot channels for tagged requests
+    ///
+    /// Stores the oneshot channel waiting for the reponse for a request id
+    pub(super) waiting_requests: HashMap<u16, oneshot::Sender<E2EMessage>>,
 }
 
 impl<Storage> E2EClientState<Storage>
 where
     Storage: E2EStorageBackend + Send,
 {
+    pub fn new(
+        account: Account,
+        storage: Storage,
+        rng: StdRng,
+        sessions: HashMap<Uuid, E2ESession>,
+    ) -> Self {
+        Self {
+            account,
+            storage,
+            rng,
+            sessions,
+            next_request_id: 1,
+            waiting_requests: HashMap::new(),
+        }
+    }
+
     /// Get the authentication token
     #[inline]
     pub(super) fn token(&self) -> &String {
@@ -91,8 +116,7 @@ where
             let next_key_id = Uuid::new_v4();
 
             // Save the session key and update the session
-            self.key_storage
-                .add_session_key(to, next_key_id, next_key)?;
+            self.storage.add_session_key(to, next_key_id, next_key)?;
 
             sess.sending_key_id = next_key_id;
             sess.sending_key = next_key;
@@ -113,6 +137,31 @@ where
         };
 
         return Ok(msg);
+    }
+
+    /// Tag a message and create a [oneshot `Receiver`](oneshot::Receiver) to receive the response
+    pub fn tag_message(
+        &mut self,
+        message: E2EMessage,
+    ) -> (E2EPacket, oneshot::Receiver<E2EMessage>) {
+        let request_id = self.next_request_id;
+
+        // Increment the next request id, skipping 0 in case of an overflow
+        self.next_request_id = match self.next_request_id.overflowing_add(1).0 {
+            0 => 1,
+            n => n,
+        };
+
+        let packet = E2EPacket {
+            request_id,
+            message,
+        };
+
+        let (tx, rx) = oneshot::channel();
+
+        self.waiting_requests.insert(request_id, tx);
+
+        return (packet, rx);
     }
 
     /// Decrypt a [`ChatMessage`] in a [`EncryptedPayload`]
@@ -172,7 +221,7 @@ where
             &session.receiving_key
         } else {
             // Try to get the key from the storage if its not the most recent one
-            match self.key_storage.session_key(sender_id, ciphertext.key_id)? {
+            match self.storage.session_key(sender_id, ciphertext.key_id)? {
                 Some(key) => key,
                 None => return Err(Error::NoSessionKey(sender_id, ciphertext.key_id)),
             }
@@ -207,7 +256,7 @@ where
         session.receiving_key = next_key;
         session.receiving_key_id = next_key_id;
 
-        self.key_storage
+        self.storage
             .add_session_key(sender_id, next_key_id, next_key)?;
 
         Ok(())
@@ -233,17 +282,17 @@ where
     ///
     /// This does not delete the old session keys, but registers the new ones if necessary
     pub(super) fn update_session(&mut self, session: E2ESession) -> Result<()> {
-        self.key_storage.add_session_key(
+        self.storage.add_session_key(
             session.correspondant_id,
             session.sending_key_id,
             session.sending_key,
         )?;
-        self.key_storage.add_session_key(
+        self.storage.add_session_key(
             session.correspondant_id,
             session.receiving_key_id,
             session.receiving_key,
         )?;
-        self.key_storage.save_session(&session)?;
+        self.storage.save_session(&session)?;
 
         self.sessions.insert(session.correspondant_id, session);
 
@@ -253,7 +302,7 @@ where
     /// Remove old session keys for a user
     pub(super) fn clean_session_keys(&mut self, user_id: &Uuid) -> Result<()> {
         if let Some(sess) = self.sessions.get(user_id) {
-            self.key_storage.cleanup_session_keys(
+            self.storage.cleanup_session_keys(
                 user_id,
                 &sess.sending_key_id,
                 &sess.receiving_key_id,
@@ -276,7 +325,7 @@ where
         message.sender_id = self.account.id;
 
         // Get the required keys
-        let identity_keypair = self.key_storage.identity_keypair()?;
+        let identity_keypair = self.storage.identity_keypair()?;
         let idk = &identity_keypair.x25519_secret;
         let ek = x25519_dalek::ReusableSecret::random_from_rng(&mut self.rng);
 
@@ -399,7 +448,7 @@ where
         // Get ephemeral key
         let mut prekey = None;
         if let Some(id) = &kex_data.recipient_prekey_id {
-            let key = self.key_storage.pop_ephemeral_key(id)?;
+            let key = self.storage.pop_ephemeral_key(id)?;
 
             if key.is_none() {
                 return Err(Error::NoSuchPrekey(*id));
@@ -408,8 +457,8 @@ where
             prekey = key;
         }
 
-        let midterm_key = self.key_storage.midterm_key()?;
-        let identity_key = &self.key_storage.identity_keypair()?.x25519_secret;
+        let midterm_key = self.storage.midterm_key()?;
+        let identity_key = &self.storage.identity_keypair()?.x25519_secret;
 
         let dh1 = midterm_key
             .diffie_hellman(&kex_data.identity_key.x25519)
@@ -471,13 +520,13 @@ where
         let payload = PayloadMessage::try_from_bytes(&bytes)?;
 
         // Save the keys and session information
-        self.key_storage
+        self.storage
             .set_user_public_keys(sender_id, kex_data.identity_key.clone())?;
 
         // Key ids are inverted since they're from the sender's POV
-        self.key_storage
+        self.storage
             .add_session_key(sender_id, kex_data.send_key_id, recv_key)?;
-        self.key_storage
+        self.storage
             .add_session_key(sender_id, kex_data.receive_key_id, send_key)?;
 
         let key_msg_count = MAX_MSGS_PER_KEY - MAX_MSGS_PER_KEY_DEVIATION
@@ -492,7 +541,7 @@ where
             receiving_key: send_key,
         };
 
-        self.key_storage.save_session(&sess)?;
+        self.storage.save_session(&sess)?;
         self.sessions.insert(sender_id, sess);
 
         Ok(payload)

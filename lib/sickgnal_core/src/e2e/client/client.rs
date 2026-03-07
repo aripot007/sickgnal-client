@@ -75,19 +75,16 @@ where
     /// Load a client with an existing account
     ///
     /// The client must then be synchronized with the server with
-    pub fn load(account: Account, mut key_storage: Storage, msg_stream: MsgStream) -> Result<Self> {
-        let sessions = key_storage
+    pub fn load(account: Account, mut storage: Storage, msg_stream: MsgStream) -> Result<Self> {
+        let sessions = storage
             .load_all_sessions()?
             .into_iter()
             .map(|s| (s.correspondant_id, s))
             .collect();
 
-        let state = E2EClientState {
-            account,
-            key_storage,
-            rng: StdRng::from_rng(OsRng).expect("Could not initialize random number generator"),
-            sessions,
-        };
+        let rng = StdRng::from_rng(OsRng).expect("Could not initialize random number generator");
+
+        let state = E2EClientState::new(account, storage, rng, sessions);
 
         Ok(Self { msg_stream, state })
     }
@@ -98,15 +95,15 @@ where
     /// prekeys to the server.
     pub async fn create_account(
         username: String,
-        mut key_storage: Storage,
+        mut storage: Storage,
         mut msg_stream: MsgStream,
     ) -> Result<Self> {
         let mut rng =
             StdRng::from_rng(OsRng).expect("Could not initialize random number generator");
 
-        let idk = match key_storage.identity_keypair_opt()? {
+        let idk = match storage.identity_keypair_opt()? {
             Some(keypair) => keypair,
-            None => E2EClientState::create_identity_keypair(&mut key_storage, &mut rng)?,
+            None => E2EClientState::create_identity_keypair(&mut storage, &mut rng)?,
         };
 
         // Register the username on the server
@@ -126,12 +123,7 @@ where
             m => return Err(Error::UnexpectedE2EMessage(m)),
         };
 
-        let state = E2EClientState {
-            account,
-            key_storage,
-            rng,
-            sessions: HashMap::new(),
-        };
+        let state = E2EClientState::new(account, storage, rng, HashMap::new());
 
         let mut client = Self { msg_stream, state };
 
@@ -247,7 +239,7 @@ where
         // Remove keys on the server that are not on the client
         let server_keys: HashSet<Uuid> = HashSet::from_iter(available_keys.into_iter());
         let stored_keys: HashSet<Uuid> =
-            HashSet::from_iter(self.state.key_storage.available_ephemeral_keys()?.cloned());
+            HashSet::from_iter(self.state.storage.available_ephemeral_keys()?.cloned());
 
         let to_remove: Vec<Uuid> = server_keys.difference(&stored_keys).cloned().collect();
 
@@ -386,7 +378,7 @@ where
 
         let solve = self
             .state
-            .key_storage
+            .storage
             .identity_keypair()?
             .ed25519_key
             .sign(&chall);
@@ -430,7 +422,7 @@ where
 
         // Register all keys
         self.state
-            .key_storage
+            .storage
             .save_many_ephemeral_keys(keys.into_iter())?;
 
         let mut midterm_key = None;
@@ -438,13 +430,13 @@ where
             let key = X25519Secret::random_from_rng(&mut self.state.rng);
             let signature = self
                 .state
-                .key_storage
+                .storage
                 .identity_keypair()?
                 .ed25519_key
                 .sign(key.as_bytes());
             let public_key = PublicKey::from(&key);
 
-            self.state.key_storage.set_midterm_key(key)?;
+            self.state.storage.set_midterm_key(key)?;
 
             midterm_key = Some(SignedPreKey {
                 key: public_key,

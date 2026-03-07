@@ -49,6 +49,10 @@ pub enum Error {
     /// When there is an error sending the message on the worker channel
     #[error("Could not send message to worker : {0}")]
     WorkerSendError(#[from] SendError),
+
+    /// When we can't receive a response because the receiving worker stopped
+    #[error("Receiving worker stopped")]
+    ReceiveWorkerStopped,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

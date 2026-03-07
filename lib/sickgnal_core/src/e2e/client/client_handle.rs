@@ -1,10 +1,7 @@
 //! Client handle for asynchrounous mode
 //!
 
-use std::{
-    os::linux::raw::stat,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use futures::{SinkExt, channel::mpsc};
 use uuid::Uuid;
@@ -136,7 +133,16 @@ where
 
     /// Send a synchronous request and wait for the response
     async fn request(&mut self, message: E2EMessage) -> Result<E2EMessage> {
-        todo!()
+        let (rq, channel) = {
+            let mut state = self.client_state.lock().unwrap();
+            state.tag_message(message)
+        };
+
+        self.send_channel.send(rq).await?;
+
+        // FIXME: Handle error correctly
+        // Wait for the response
+        channel.await.or(Err(Error::ReceiveWorkerStopped))
     }
 
     // endregion: Util functions
