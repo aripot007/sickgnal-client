@@ -77,6 +77,54 @@ where
         })
     }
 
+    pub async fn process_queued_messages(
+        self,
+    ) -> (
+        crate::e2e::client::client_handle::ClientHandle<impl E2EStorageBackend + Send + 'static>,
+        mpsc::Receiver<ChatMessage>,
+        impl Future<Output = ()> + Send + 'static, // Receiver task
+        impl Future<Output = ()> + Send + 'static, // Sender task
+    ) {
+        let mut event_tx = self.event_tx;
+        let mut storage = self.storage;
+
+        let mut e2e_client = self.e2e_client;
+        let mut iter = e2e_client.sync();
+
+        loop {
+            match iter.next().await {
+                Ok(Some(msg)) => {
+                    match storage.get_conversation_by_peer(msg.sender_id) {
+                        Ok(Some(conv)) => {
+                            let message = Message::from(msg);
+
+                            storage.create_message(&message).expect_err(
+                                format!("Unable to store the message: {}", message.content)
+                                    .as_str(),
+                            );
+                            let _ = event_tx.send(Event::NewMessage(conv.id, message));
+                        }
+                        Ok(None) => {
+                            let _ = event_tx
+                                .send(Event::MessageForUnknownConversation(Message::from(msg)));
+                        }
+                        Err(e) => eprintln!(
+                            "Error while getting conversation after reived message: {}",
+                            e
+                        ),
+                    };
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    eprintln!("{}", e);
+                    break;
+                }
+            }
+        }
+
+        e2e_client.start_async_workers()
+    }
+
     /// Get the current connection state
     pub fn connection_state(&self) -> ConnectionState {
         self.connection_state
@@ -103,29 +151,21 @@ where
             .get_conversation(conversation_id)?
             .ok_or_else(|| client::Error::NoConversation(conversation_id))?;
 
-        // Get sender account
-        let sender_id = self.account().id;
-
-        // Create message
-        let message_id = Uuid::new_v4();
-        let local_id = format!("local_{}", Uuid::new_v4());
-        let timestamp = Utc::now();
-
         let message = Message {
-            id: message_id,
+            id: Uuid::new_v4(),
             conversation_id,
-            sender_id,
+            sender_id: self.account().id,
             content: text.clone(),
-            timestamp,
+            timestamp: Utc::now(),
             status: MessageStatus::Sending,
             reply_to_id: None,
-            local_id: Some(local_id.clone()),
+            local_id: Some(format!("local_{}", Uuid::new_v4()).clone()),
         };
 
         // Save message to storage with "sending" status
         self.storage.create_message(&message)?;
         self.storage
-            .update_conversation_last_message(conversation_id, timestamp)?;
+            .update_conversation_last_message(conversation_id, message.timestamp)?;
 
         // Notify UI of new message
         let _ = self
@@ -141,12 +181,12 @@ where
 
         // Update message status based on send result
         self.storage
-            .update_message_status(message_id, MessageStatus::Sent)?;
+            .update_message_status(message.id, MessageStatus::Sent)?;
         let _ = self
             .event_tx
-            .send(Event::MessageStatusUpdate(message_id, MessageStatus::Sent));
+            .send(Event::MessageStatusUpdate(message.id, MessageStatus::Sent));
 
-        Ok(message_id)
+        Ok(message.id)
     }
 
     /// Mark a message as read

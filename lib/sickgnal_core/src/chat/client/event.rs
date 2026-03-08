@@ -6,6 +6,9 @@ pub enum Event {
     /// Event triggered when a new message is received in a conversation.
     /// Uuid of the conversation
     NewMessage(Uuid, Message),
+    /// Event triggered when a new message is received in a conversation.
+    /// Uuid of the conversation
+    MessageForUnknownConversation(Message),
     /// Event triggered when the status of a message is updated.
     /// Uuid of the message
     MessageStatusUpdate(Uuid, MessageStatus),

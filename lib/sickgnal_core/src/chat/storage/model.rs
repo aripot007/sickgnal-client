@@ -2,7 +2,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::e2e;
+use crate::{
+    chat::message::{ChatMessage, ChatMessageKind, Content},
+    e2e,
+};
 
 /// Message status in the local database
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,6 +63,36 @@ pub struct Message {
     pub status: MessageStatus,
     pub reply_to_id: Option<Uuid>,
     pub local_id: Option<String>, // For tracking messages before server confirmation
+}
+
+impl From<ChatMessage> for Message {
+    fn from(value: ChatMessage) -> Self {
+        match value.kind {
+            ChatMessageKind::Data(content_msg) => {
+                let text_content = match content_msg.content {
+                    Content::Text(txt) => txt,
+                };
+
+                Self {
+                    id: content_msg.id,
+                    conversation_id: value.conversation_id,
+                    sender_id: value.sender_id,
+                    content: text_content,
+                    timestamp: value.issued_at,
+                    status: MessageStatus::Sent, // Par défaut lors de la réception/création
+                    reply_to_id: content_msg.reply_to,
+                    local_id: None, // Rempli manuellement si c'est un message sortant
+                }
+            }
+            ChatMessageKind::Ctrl(ctrl) => {
+                // Optionnel : Comment gérer les messages de contrôle ?
+                // Souvent, on ne les transforme pas en "Message" de BDD,
+                // ou on crée une table différente.
+                // Ici, on pourrait gérer le cas 'OpenConv' s'il contient un message initial.
+                todo!("Gérer la conversion des messages de contrôle si nécessaire")
+            }
+        }
+    }
 }
 
 /// Represents a session in the database
