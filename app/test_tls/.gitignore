@@ -1,3 +1,4 @@
 *.pem
 *.der
 *.csr
+server/session_keys.log
