@@ -4882,6 +4882,10 @@ name = "sickgnal_insecure_tls"
 version = "0.1.0"
 dependencies = [
  "futures",
+ "rand 0.8.5",
+ "thiserror 2.0.18",
+ "tokio",
+ "x25519-dalek",
 ]
 
 [[package]]
@@ -5374,11 +5378,13 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "rustls-native-certs",
+ "sickgnal_insecure_tls",
  "thiserror 2.0.18",
  "tokio",
  "tokio-rustls",
  "tracing",
  "tracing-subscriber",
+ "x25519-dalek",
 ]
 
 [[package]]

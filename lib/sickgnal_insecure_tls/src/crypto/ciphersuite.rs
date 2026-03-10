@@ -1,0 +1,29 @@
+use crate::codec::Codec;
+
+#[derive(Debug, Clone)]
+#[repr(u16)]
+#[allow(non_camel_case_types)]
+pub enum CipherSuite {
+    TLS_AES_128_GCM_SHA256,
+    TLS_AES_256_GCM_SHA384,
+    TLS_CHACHA20_POLY1305_SHA256,
+    TLS_AES_128_CCM_SHA256,
+    TLS_AES_128_CCM_8_SHA256,
+}
+
+impl Codec for CipherSuite {
+    fn encode(&self, dest: &mut Vec<u8>) {
+        dest.push(0x13);
+        dest.push(match self {
+            CipherSuite::TLS_AES_128_GCM_SHA256 => 0x01,
+            CipherSuite::TLS_AES_256_GCM_SHA384 => 0x02,
+            CipherSuite::TLS_CHACHA20_POLY1305_SHA256 => 0x03,
+            CipherSuite::TLS_AES_128_CCM_SHA256 => 0x04,
+            CipherSuite::TLS_AES_128_CCM_8_SHA256 => 0x05,
+        });
+    }
+
+    fn decode(&self, buf: impl std::io::Read) -> Result<Self, crate::error::InvalidMessage> {
+        todo!()
+    }
+}

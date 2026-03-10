@@ -58,11 +58,19 @@ pub async fn main() -> Result<(), Error> {
 
     // TCP stream opening
 
-    info!("Connecting to {}:{}", args.host, args.port);
+    info!("===== Testing Custom TLS");
 
-    let tcp_stream = TcpStream::connect((args.host.clone(), args.port)).await?;
+    info!("Connecting to {}:{}", args.host, args.port);
+    let mut tcp_stream = TcpStream::connect((args.host.clone(), args.port)).await?;
 
     // Perform TLS handshake
+    sickgnal_insecure_tls::test(&mut tcp_stream).await.unwrap();
+
+    return Ok(());
+
+    info!("===== Testing Rustls");
+    info!("Connecting to {}:{}", args.host, args.port);
+    let tcp_stream = TcpStream::connect((args.host.clone(), args.port)).await?;
 
     let domain = ServerName::try_from(args.host).expect("Invalid DNS name");
 

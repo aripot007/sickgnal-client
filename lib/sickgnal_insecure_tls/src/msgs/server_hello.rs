@@ -1,0 +1,17 @@
+use crate::codec::Codec;
+
+/// ClientHello message
+///
+/// See [RFC8446 section 4.1.2](https://datatracker.ietf.org/doc/html/rfc8446#section-4.1.2)
+#[derive(Debug, Clone)]
+pub struct ServerHello {}
+
+impl Codec for ServerHello {
+    fn encode(&self, dest: &mut Vec<u8>) {
+        todo!()
+    }
+
+    fn decode(&self, buf: impl std::io::Read) -> Result<Self, crate::error::InvalidMessage> {
+        todo!()
+    }
+}
