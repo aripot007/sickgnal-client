@@ -1,7 +1,5 @@
 use crate::{
-    codec::Codec,
-    msgs::{client_hello::ClientHello, server_hello::ServerHello},
-    u24::U24,
+    codec::Codec, msgs::{client_hello::ClientHello, server_hello::ServerHello}, reader::Reader, u24::U24
 };
 
 /// HandshakeType enum taken from the RFC
@@ -26,7 +24,7 @@ impl Codec for HandshakeType {
         dest.push(*self as u8);
     }
 
-    fn decode(&self, buf: impl std::io::Read) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }
@@ -65,7 +63,7 @@ impl Codec for Handshake {
         dest.extend(bytes);
     }
 
-    fn decode(&self, buf: impl std::io::Read) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }

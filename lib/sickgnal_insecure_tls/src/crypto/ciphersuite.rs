@@ -1,4 +1,4 @@
-use crate::codec::Codec;
+use crate::{codec::Codec, reader::Reader};
 
 #[derive(Debug, Clone)]
 #[repr(u16)]
@@ -23,7 +23,7 @@ impl Codec for CipherSuite {
         });
     }
 
-    fn decode(&self, buf: impl std::io::Read) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }

@@ -1,7 +1,7 @@
 //! TLS Messages structs
 //!
 
-use crate::codec::Codec;
+use crate::{codec::Codec, reader::Reader};
 
 pub mod client_hello;
 pub mod handhake;
@@ -23,7 +23,7 @@ impl Codec for ProtocolVersion {
         dest.extend(u16::to_be_bytes(*self as u16))
     }
 
-    fn decode(&self, buf: impl std::io::Read) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }
@@ -60,7 +60,7 @@ impl Codec for ExtensionType {
         (*self as u16).encode(dest);
     }
 
-    fn decode(&self, buf: impl std::io::Read) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
     codec::{Codec, LengthSize, encode_length_prefixed_vector},
-    crypto::NamedGroup,
+    crypto::NamedGroup, reader::Reader,
 };
 
 #[derive(Debug, Clone)]
@@ -31,7 +31,7 @@ impl Codec for KeyShareEntry {
         }
     }
 
-    fn decode(&self, buf: impl std::io::Read) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }

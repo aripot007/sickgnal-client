@@ -1,4 +1,4 @@
-use crate::codec::Codec;
+use crate::{codec::Codec, reader::Reader};
 
 pub mod ciphersuite;
 pub mod keyshare;
@@ -42,7 +42,7 @@ impl Codec for SignatureScheme {
         (*self as u16).encode(dest);
     }
 
-    fn decode(&self, buf: impl std::io::Read) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }
@@ -72,7 +72,7 @@ impl Codec for NamedGroup {
         (*self as u16).encode(dest);
     }
 
-    fn decode(&self, buf: impl std::io::Read) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }

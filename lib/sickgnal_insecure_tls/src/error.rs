@@ -8,4 +8,7 @@ pub enum Error {
 }
 
 #[derive(Debug, Clone)]
-pub enum InvalidMessage {}
+pub enum InvalidMessage {
+    /// When the message was shorter than the expected length
+    TooShort,
+}

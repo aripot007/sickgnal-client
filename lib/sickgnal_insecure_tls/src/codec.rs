@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use crate::error::InvalidMessage;
+use crate::{error::InvalidMessage, reader::Reader};
 
 /// A trait to encode / decode something
 pub trait Codec: Sized {
@@ -8,7 +8,7 @@ pub trait Codec: Sized {
     fn encode(&self, dest: &mut Vec<u8>);
 
     /// Decode self by reading from the provided `reader`
-    fn decode(&self, buf: impl Read) -> Result<Self, InvalidMessage>;
+    fn decode(&self, buf: &mut Reader) -> Result<Self, InvalidMessage>;
 }
 
 /// Encode a length-prefixed vector with the given length field size
@@ -52,7 +52,7 @@ impl Codec for u8 {
         dest.push(*self);
     }
 
-    fn decode(&self, buf: impl Read) -> Result<Self, InvalidMessage> {
+    fn decode(&self, buf: &mut Reader) -> Result<Self, InvalidMessage> {
         todo!()
     }
 }
@@ -62,7 +62,7 @@ impl Codec for u16 {
         dest.extend(self.to_be_bytes());
     }
 
-    fn decode(&self, buf: impl Read) -> Result<Self, InvalidMessage> {
+    fn decode(&self, buf: &mut Reader) -> Result<Self, InvalidMessage> {
         todo!()
     }
 }
@@ -72,7 +72,7 @@ impl Codec for u32 {
         dest.extend(self.to_be_bytes());
     }
 
-    fn decode(&self, buf: impl Read) -> Result<Self, InvalidMessage> {
+    fn decode(&self, buf: &mut Reader) -> Result<Self, InvalidMessage> {
         todo!()
     }
 }

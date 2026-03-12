@@ -1,4 +1,4 @@
-use crate::codec::Codec;
+use crate::{codec::Codec, reader::Reader};
 
 pub mod record;
 
@@ -19,7 +19,7 @@ impl Codec for ContentType {
         dest.push(*self as u8);
     }
 
-    fn decode(&self, buf: impl std::io::Read) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }
