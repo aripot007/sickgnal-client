@@ -1,4 +1,4 @@
-use crate::{codec::Codec, reader::Reader};
+use crate::{codec::Codec, error::InvalidMessage, reader::Reader};
 
 pub mod record;
 
@@ -20,6 +20,24 @@ impl Codec for ContentType {
     }
 
     fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
-        todo!()
+        let val = buf.take(1)?;
+        ContentType::try_from(val[0])
+    }
+}
+
+impl TryFrom<u8> for ContentType {
+    type Error = InvalidMessage;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        use self::ContentType::*;
+        Ok(match value {
+            0 => Invalid,
+            20 => ChangeCipherSpec,
+            21 => Alert,
+            22 => Handshake,
+            23 => ApplicationData,
+            24 => Heartbeat,
+            _ => return Err(InvalidMessage::UnknownContentType)
+        })
     }
 }

@@ -11,4 +11,10 @@ pub enum Error {
 pub enum InvalidMessage {
     /// When the message was shorter than the expected length
     TooShort,
+
+    /// When the protocol version is not known
+    UnknownProtocolVersion,
+
+    /// When the content type is not known
+    UnknownContentType
 }

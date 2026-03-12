@@ -1,7 +1,7 @@
 //! TLS Messages structs
 //!
 
-use crate::{codec::Codec, reader::Reader};
+use crate::{codec::Codec, error::InvalidMessage, reader::Reader};
 
 pub mod client_hello;
 pub mod handhake;
@@ -23,8 +23,30 @@ impl Codec for ProtocolVersion {
         dest.extend(u16::to_be_bytes(*self as u16))
     }
 
-    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
-        todo!()
+    fn decode(&self, buf: &mut Reader) -> Result<Self, InvalidMessage> {
+        let mut bytes = [0; 2];
+        bytes.copy_from_slice(buf.take(2)?);
+
+        let val = u16::from_be_bytes(bytes);
+        
+        ProtocolVersion::try_from(val)
+    }
+}
+
+impl TryFrom<u16> for ProtocolVersion {
+    type Error = InvalidMessage;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        use self::ProtocolVersion::*;
+        Ok(match value {
+            0x0002 => SSLv2,
+            0x0300 => SSLv3,
+            0x0301 => TLSv1_0,
+            0x0302 => TLSv1_1,
+            0x0303 => TLSv1_2,
+            0x0304 => TLSv1_3,
+            _ => return Err(InvalidMessage::UnknownProtocolVersion),
+        })
     }
 }
 

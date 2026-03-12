@@ -1,7 +1,5 @@
 use crate::{
-    codec::Codec,
-    msgs::{ProtocolVersion, handhake::Handshake},
-    record_layer::ContentType,
+    codec::Codec, msgs::{ProtocolVersion, handhake::Handshake}, reader::Reader, record_layer::ContentType
 };
 
 /// A TLSPlaintext record
