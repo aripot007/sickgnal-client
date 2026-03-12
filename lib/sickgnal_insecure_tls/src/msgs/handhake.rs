@@ -24,7 +24,7 @@ impl Codec for HandshakeType {
         dest.push(*self as u8);
     }
 
-    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }
@@ -63,7 +63,7 @@ impl Codec for Handshake {
         dest.extend(bytes);
     }
 
-    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }

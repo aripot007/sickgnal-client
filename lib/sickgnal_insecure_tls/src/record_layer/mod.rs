@@ -19,7 +19,7 @@ impl Codec for ContentType {
         dest.push(*self as u8);
     }
 
-    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         let val = buf.take(1)?;
         ContentType::try_from(val[0])
     }

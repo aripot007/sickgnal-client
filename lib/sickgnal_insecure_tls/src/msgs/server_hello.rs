@@ -11,7 +11,7 @@ impl Codec for ServerHello {
         todo!()
     }
 
-    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }

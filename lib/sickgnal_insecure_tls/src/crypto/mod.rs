@@ -42,7 +42,7 @@ impl Codec for SignatureScheme {
         (*self as u16).encode(dest);
     }
 
-    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }
@@ -72,7 +72,7 @@ impl Codec for NamedGroup {
         (*self as u16).encode(dest);
     }
 
-    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }

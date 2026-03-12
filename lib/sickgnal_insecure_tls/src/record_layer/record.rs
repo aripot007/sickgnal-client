@@ -18,7 +18,7 @@ impl Codec for Record<Payload> {
         self.payload.encode(dest);
     }
 
-    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }
@@ -45,7 +45,7 @@ impl Codec for Payload {
         dest.extend(bytes);
     }
 
-    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }

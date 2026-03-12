@@ -15,7 +15,7 @@ impl Codec for U24 {
         dest.extend_from_slice(&bytes[1..]);
     }
 
-    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }

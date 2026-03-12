@@ -59,7 +59,7 @@ impl Codec for ClientHello {
         encode_length_prefixed_vector(dest, LengthSize::U16, &self.extensions); // extensions
     }
 
-    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }
@@ -80,7 +80,7 @@ impl Codec for Random {
         dest.extend(self.0);
     }
 
-    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }
@@ -138,7 +138,7 @@ impl Codec for ClientExtension {
         dest[header_start..header_end].copy_from_slice(&len.to_be_bytes());
     }
 
-    fn decode(&self, buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
+    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
     }
 }
