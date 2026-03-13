@@ -1,6 +1,7 @@
 use crate::{
     codec::{Codec, LengthSize, encode_length_prefixed_vector},
-    crypto::NamedGroup, reader::Reader,
+    crypto::NamedGroup,
+    reader::Reader,
 };
 
 #[derive(Debug, Clone)]

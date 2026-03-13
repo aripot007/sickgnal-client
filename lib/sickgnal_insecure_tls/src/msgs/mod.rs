@@ -7,9 +7,25 @@ pub mod client_hello;
 pub mod handhake;
 pub mod server_hello;
 
-#[derive(Debug, Clone, Copy)]
+/// A potential protocol version
+///
+/// Should be converted to [`ProtocolVersionName`] to check if its valid
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProtocolVersion(u16);
+
+#[allow(non_upper_case_globals, unused)]
+impl ProtocolVersion {
+    pub const SSLv2: Self = Self(0x0002);
+    pub const SSLv3: Self = Self(0x0300);
+    pub const TLSv1_0: Self = Self(0x0301);
+    pub const TLSv1_1: Self = Self(0x0302);
+    pub const TLSv1_2: Self = Self(0x0303);
+    pub const TLSv1_3: Self = Self(0x0304);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
-pub enum ProtocolVersion {
+pub enum ProtocolVersionName {
     SSLv2 = 0x0002,
     SSLv3 = 0x0300,
     TLSv1_0 = 0x0301,
@@ -20,25 +36,28 @@ pub enum ProtocolVersion {
 
 impl Codec for ProtocolVersion {
     fn encode(&self, dest: &mut Vec<u8>) {
-        dest.extend(u16::to_be_bytes(*self as u16))
+        dest.extend(u16::to_be_bytes(self.0))
     }
 
     fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
-        let mut bytes = [0; 2];
-        bytes.copy_from_slice(buf.take(2)?);
+        let val = u16::decode(buf)?;
 
-        let val = u16::from_be_bytes(bytes);
-        
-        ProtocolVersion::try_from(val)
+        Ok(ProtocolVersion(val))
     }
 }
 
-impl TryFrom<u16> for ProtocolVersion {
+impl From<ProtocolVersionName> for ProtocolVersion {
+    fn from(value: ProtocolVersionName) -> Self {
+        Self(value as u16)
+    }
+}
+
+impl TryFrom<ProtocolVersion> for ProtocolVersionName {
     type Error = InvalidMessage;
 
-    fn try_from(value: u16) -> Result<Self, Self::Error> {
-        use self::ProtocolVersion::*;
-        Ok(match value {
+    fn try_from(value: ProtocolVersion) -> Result<Self, Self::Error> {
+        use self::ProtocolVersionName::*;
+        Ok(match value.0 {
             0x0002 => SSLv2,
             0x0300 => SSLv3,
             0x0301 => TLSv1_0,

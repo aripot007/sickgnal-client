@@ -1,5 +1,8 @@
 use crate::{
-    codec::Codec, msgs::{ProtocolVersion, handhake::Handshake}, reader::Reader, record_layer::ContentType
+    codec::Codec,
+    msgs::{ProtocolVersion, handhake::Handshake},
+    reader::Reader,
+    record_layer::ContentType,
 };
 
 /// A TLSPlaintext record
@@ -30,6 +33,11 @@ pub enum Payload {
     Handshake(Handshake),
     ApplicationData,
 }
+
+/// Opaque bytes of an encoded payload
+///
+/// Corresponds to the opaque fragment received in an inbound message
+pub struct EncodedPayload(pub Vec<u8>);
 
 impl Codec for Payload {
     fn encode(&self, dest: &mut Vec<u8>) {

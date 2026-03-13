@@ -8,7 +8,6 @@ pub(crate) struct Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
-
     /// Create a new Reader from an underlying buffer
     pub fn new(buf: &'a [u8]) -> Self {
         Self { buf }
@@ -17,19 +16,19 @@ impl<'a> Reader<'a> {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.buf.is_empty()
-    } 
+    }
 
     /// Take exacly `count` bytes from the buffer
-    /// 
+    ///
     /// Returns a [`InvalidMessage::TooShort`] if the buffer does not contain
     /// enough bytes
     pub fn take(&mut self, count: usize) -> Result<&'a [u8], InvalidMessage> {
-        
-        let (consumed, remaining) = self.buf.split_at_checked(count)
+        let (consumed, remaining) = self
+            .buf
+            .split_at_checked(count)
             .ok_or(InvalidMessage::TooShort)?;
 
         self.buf = remaining;
         Ok(consumed)
     }
-
 }

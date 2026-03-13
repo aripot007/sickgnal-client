@@ -16,9 +16,9 @@ mod codec;
 mod crypto;
 pub mod error;
 mod msgs;
+pub(crate) mod reader;
 mod record_layer;
 mod u24;
-pub(crate) mod reader;
 
 pub async fn test<S: AsyncRead + AsyncWrite + Unpin>(tcp_stream: &mut S) -> Result<(), Error> {
     let secret = EphemeralSecret::random_from_rng(OsRng);

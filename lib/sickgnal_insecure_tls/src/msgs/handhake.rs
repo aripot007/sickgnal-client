@@ -1,5 +1,8 @@
 use crate::{
-    codec::Codec, msgs::{client_hello::ClientHello, server_hello::ServerHello}, reader::Reader, u24::U24
+    codec::Codec,
+    msgs::{client_hello::ClientHello, server_hello::ServerHello},
+    reader::Reader,
+    u24::U24,
 };
 
 /// HandshakeType enum taken from the RFC

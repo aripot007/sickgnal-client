@@ -3,7 +3,8 @@ use rand::{RngCore, rngs::OsRng};
 use crate::{
     codec::{Codec, LengthSize, encode_length_prefixed_vector},
     crypto::{NamedGroup, SignatureScheme, ciphersuite::CipherSuite, keyshare::KeyShareEntry},
-    msgs::{ExtensionType, ProtocolVersion}, reader::Reader,
+    msgs::{ExtensionType, ProtocolVersion},
+    reader::Reader,
 };
 
 /// ClientHello message

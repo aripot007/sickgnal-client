@@ -16,5 +16,14 @@ pub enum InvalidMessage {
     UnknownProtocolVersion,
 
     /// When the content type is not known
-    UnknownContentType
+    InvalidContentType,
+
+    /// When a record is too long
+    RecordOverflow,
+}
+
+impl From<InvalidMessage> for Error {
+    fn from(value: InvalidMessage) -> Self {
+        Error::InvalidMessage(value)
+    }
 }
