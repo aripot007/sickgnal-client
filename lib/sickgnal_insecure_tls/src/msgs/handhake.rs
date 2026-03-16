@@ -1,5 +1,6 @@
 use crate::{
     codec::Codec,
+    error::InvalidMessage,
     msgs::{client_hello::ClientHello, server_hello::ServerHello},
     reader::Reader,
     u24::U24,
@@ -27,8 +28,31 @@ impl Codec for HandshakeType {
         dest.push(*self as u8);
     }
 
-    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
-        todo!()
+    fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
+        let val = buf.take_byte()?;
+        HandshakeType::try_from(val)
+    }
+}
+
+impl TryFrom<u8> for HandshakeType {
+    type Error = InvalidMessage;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        use HandshakeType::*;
+        Ok(match value {
+            1 => ClientHello,
+            2 => ServerHello,
+            4 => NewSessionTicket,
+            5 => EndOfEarlyData,
+            8 => EncryptedExtensions,
+            11 => Certificate,
+            13 => CertificateRequest,
+            15 => CertificateVerify,
+            20 => Finished,
+            24 => KeyUpdate,
+            254 => MessageHash,
+            _ => return Err(InvalidMessage::InvalidHandshakeType),
+        })
     }
 }
 
@@ -67,6 +91,31 @@ impl Codec for Handshake {
     }
 
     fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
-        todo!()
+        // handshake_type
+        let msg_type = HandshakeType::decode(buf)?;
+
+        let length = U24::decode(buf)?;
+
+        // Try to take the payload length
+        let payload = buf.take(length.0 as usize)?;
+        let mut rd = Reader::new(&payload);
+
+        let handshake = match msg_type {
+            HandshakeType::ClientHello => Handshake::ClientHello(ClientHello::decode(&mut rd)?),
+            HandshakeType::ServerHello => Handshake::ServerHello(ServerHello::decode(&mut rd)?),
+
+            // Not supported yet
+            HandshakeType::NewSessionTicket => todo!(),
+            HandshakeType::EndOfEarlyData => todo!(),
+            HandshakeType::EncryptedExtensions => todo!(),
+            HandshakeType::Certificate => todo!(),
+            HandshakeType::CertificateRequest => todo!(),
+            HandshakeType::CertificateVerify => todo!(),
+            HandshakeType::Finished => todo!(),
+            HandshakeType::KeyUpdate => todo!(),
+            HandshakeType::MessageHash => todo!(),
+        };
+
+        Ok(handshake)
     }
 }

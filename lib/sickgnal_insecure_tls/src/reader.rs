@@ -31,4 +31,9 @@ impl<'a> Reader<'a> {
         self.buf = remaining;
         Ok(consumed)
     }
+
+    /// Take a single byte from the buffer
+    pub fn take_byte(&mut self) -> Result<u8, InvalidMessage> {
+        Ok(self.take(1)?[0])
+    }
 }

@@ -6,8 +6,10 @@ use crate::{
     codec::Codec,
     error::Error,
     msgs::{ProtocolVersion, client_hello::ClientHello, handhake::Handshake},
+    reader::Reader,
     record_layer::{
         ContentType,
+        deframer::Deframer,
         record::{Payload, Record},
     },
 };
@@ -40,13 +42,43 @@ pub async fn test<S: AsyncRead + AsyncWrite + Unpin>(tcp_stream: &mut S) -> Resu
 
     tcp_stream.write_all(&bytes).await.unwrap();
 
-    let mut response = [0; 2048];
+    let mut response = vec![0; 2048];
     if let Err(e) = tcp_stream.read(&mut response).await {
         println!("Error reading response : {}", e);
         return Ok(());
     }
 
     println!("Response : {}", hex(&response));
+
+    let mut deframer = Deframer::new(&mut response);
+
+    while let Some(res) = deframer.next() {
+        match res {
+            Err(e) => {
+                println!("Error deframing message : {}", e);
+                break;
+            }
+            Ok(msg) => {
+                println!("Got message : {:?}", msg);
+
+                if msg.typ == ContentType::Handshake {
+                    let mut reader = Reader::new(&msg.payload.0);
+
+                    let handshake = match Handshake::decode(&mut reader) {
+                        Ok(h) => h,
+                        Err(e) => {
+                            println!("Error decoding handshake : {:?}", e);
+                            continue;
+                        }
+                    };
+
+                    println!("Got handshake : {:?}", handshake);
+                } else {
+                    println!("Unsupported type {:?}", msg.typ)
+                }
+            }
+        }
+    }
 
     Ok(())
 }

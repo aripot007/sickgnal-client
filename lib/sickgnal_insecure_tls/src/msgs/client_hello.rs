@@ -13,7 +13,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub(crate) struct ClientHello {
     // uint16 legacy_version = 0x0302
-    pub random: Random,
+    pub random: ClientRandom,
 
     // opaque legacy_session_id<0..32> = 0x00
     pub cipher_suites: Vec<CipherSuite>,
@@ -43,7 +43,7 @@ impl ClientHello {
         )]));
 
         Self {
-            random: Random::new_random(),
+            random: ClientRandom::new_random(),
             cipher_suites: vec![CipherSuite::TLS_AES_128_GCM_SHA256],
             extensions: ext,
         }
@@ -66,9 +66,9 @@ impl Codec for ClientHello {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Random([u8; 32]);
+pub(crate) struct ClientRandom([u8; 32]);
 
-impl Random {
+impl ClientRandom {
     pub fn new_random() -> Self {
         let mut r = [0; 32];
         OsRng.fill_bytes(&mut r);
@@ -76,7 +76,7 @@ impl Random {
     }
 }
 
-impl Codec for Random {
+impl Codec for ClientRandom {
     fn encode(&self, dest: &mut Vec<u8>) {
         dest.extend(self.0);
     }

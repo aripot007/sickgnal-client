@@ -37,6 +37,7 @@ pub enum Payload {
 /// Opaque bytes of an encoded payload
 ///
 /// Corresponds to the opaque fragment received in an inbound message
+#[derive(Debug)]
 pub struct EncodedPayload(pub Vec<u8>);
 
 impl Codec for Payload {

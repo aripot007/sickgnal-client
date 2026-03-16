@@ -52,8 +52,9 @@ impl Codec for u8 {
         dest.push(*self);
     }
 
+    #[inline]
     fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
-        todo!()
+        buf.take_byte()
     }
 }
 
@@ -63,7 +64,9 @@ impl Codec for u16 {
     }
 
     fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
-        todo!()
+        let mut bytes: [u8; 2] = [0; 2];
+        bytes.clone_from_slice(buf.take(2)?);
+        Ok(u16::from_be_bytes(bytes))
     }
 }
 
@@ -73,6 +76,8 @@ impl Codec for u32 {
     }
 
     fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
-        todo!()
+        let mut bytes: [u8; 4] = [0; 4];
+        bytes.clone_from_slice(buf.take(4)?);
+        Ok(u32::from_be_bytes(bytes))
     }
 }

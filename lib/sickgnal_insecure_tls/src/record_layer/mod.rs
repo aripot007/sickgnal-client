@@ -4,7 +4,7 @@ pub mod deframer;
 pub mod record;
 
 /// Length of a record header in bytes
-pub(self) const RECORD_HEADER_LEN: usize = 4;
+pub(self) const RECORD_HEADER_LEN: usize = 5;
 
 /// The maximum length of a TLSPlaintext.fragment
 ///

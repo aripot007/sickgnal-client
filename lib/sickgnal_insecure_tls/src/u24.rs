@@ -16,6 +16,11 @@ impl Codec for U24 {
     }
 
     fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
-        todo!()
+        let mut bytes = [0; 4];
+
+        // Set the last 3 bytes from the reader
+        bytes[1..].copy_from_slice(buf.take(3)?);
+
+        Ok(Self(u32::from_be_bytes(bytes)))
     }
 }

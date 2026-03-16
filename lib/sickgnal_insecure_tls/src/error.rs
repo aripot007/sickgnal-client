@@ -15,8 +15,20 @@ pub enum InvalidMessage {
     /// When the protocol version is not known
     UnknownProtocolVersion,
 
+    /// When we don't support a protocol version
+    UnsupportedProtocolVersion,
+
     /// When the content type is not known
     InvalidContentType,
+
+    /// When the handshake type is invalid
+    InvalidHandshakeType,
+
+    /// When the cipher suite is invalid
+    InvalidCipherSuite,
+
+    /// When we receive a parameter with an invalid value
+    IllegalParameter,
 
     /// When a record is too long
     RecordOverflow,
