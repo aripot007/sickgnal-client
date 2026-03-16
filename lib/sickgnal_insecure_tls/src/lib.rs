@@ -46,10 +46,15 @@ pub async fn test<S: AsyncRead + AsyncWrite + Unpin>(tcp_stream: &mut S) -> Resu
     tcp_stream.write_all(&bytes).await.unwrap();
 
     let mut response = vec![0; 2048];
-    if let Err(e) = tcp_stream.read(&mut response).await {
-        println!("Error reading response : {}", e);
-        return Ok(());
-    }
+
+    let nb_read = match tcp_stream.read(&mut response).await {
+        Ok(n) => n,
+        Err(e) => {
+            println!("Error reading response : {}", e);
+            return Ok(());
+        }
+    };
+    response.truncate(nb_read);
 
     println!("Response : {}", hex(&response));
 
