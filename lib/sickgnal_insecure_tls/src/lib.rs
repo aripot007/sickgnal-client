@@ -22,6 +22,9 @@ pub(crate) mod reader;
 mod record_layer;
 mod u24;
 
+#[macro_use]
+pub(crate) mod macros;
+
 pub async fn test<S: AsyncRead + AsyncWrite + Unpin>(tcp_stream: &mut S) -> Result<(), Error> {
     let secret = EphemeralSecret::random_from_rng(OsRng);
 

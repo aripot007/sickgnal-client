@@ -1,58 +1,29 @@
 use crate::{
     codec::Codec,
     error::InvalidMessage,
+    macros::codec_enum,
     msgs::{client_hello::ClientHello, server_hello::ServerHello},
     reader::Reader,
     u24::U24,
 };
 
-/// HandshakeType enum taken from the RFC
-#[derive(Debug, Clone, Copy)]
-#[repr(u8)]
-pub enum HandshakeType {
-    ClientHello = 1,
-    ServerHello = 2,
-    NewSessionTicket = 4,
-    EndOfEarlyData = 5,
-    EncryptedExtensions = 8,
-    Certificate = 11,
-    CertificateRequest = 13,
-    CertificateVerify = 15,
-    Finished = 20,
-    KeyUpdate = 24,
-    MessageHash = 254,
-}
+codec_enum! {
 
-impl Codec for HandshakeType {
-    fn encode(&self, dest: &mut Vec<u8>) {
-        dest.push(*self as u8);
-    }
+    /// Type of handshake messages
+    pub struct HandshakeType(u8);
 
-    fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
-        let val = buf.take_byte()?;
-        HandshakeType::try_from(val)
-    }
-}
-
-impl TryFrom<u8> for HandshakeType {
-    type Error = InvalidMessage;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        use HandshakeType::*;
-        Ok(match value {
-            1 => ClientHello,
-            2 => ServerHello,
-            4 => NewSessionTicket,
-            5 => EndOfEarlyData,
-            8 => EncryptedExtensions,
-            11 => Certificate,
-            13 => CertificateRequest,
-            15 => CertificateVerify,
-            20 => Finished,
-            24 => KeyUpdate,
-            254 => MessageHash,
-            _ => return Err(InvalidMessage::InvalidHandshakeType),
-        })
+    pub enum HandshakeTypeName {
+        ClientHello = 1,
+        ServerHello = 2,
+        NewSessionTicket = 4,
+        EndOfEarlyData = 5,
+        EncryptedExtensions = 8,
+        Certificate = 11,
+        CertificateRequest = 13,
+        CertificateVerify = 15,
+        Finished = 20,
+        KeyUpdate = 24,
+        MessageHash = 254,
     }
 }
 
@@ -114,6 +85,8 @@ impl Codec for Handshake {
             HandshakeType::Finished => todo!(),
             HandshakeType::KeyUpdate => todo!(),
             HandshakeType::MessageHash => todo!(),
+
+            _ => return Err(InvalidMessage::InvalidHandshakeType),
         };
 
         Ok(handshake)

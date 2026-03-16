@@ -1,8 +1,4 @@
-use crate::{
-    codec::{Codec, LengthSize, encode_length_prefixed_vector},
-    crypto::NamedGroup,
-    reader::Reader,
-};
+use crate::{codec::Codec, crypto::NamedGroup, reader::Reader};
 
 #[derive(Debug, Clone)]
 pub(crate) enum KeyShareEntry {
