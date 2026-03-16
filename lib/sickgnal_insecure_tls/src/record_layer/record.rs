@@ -1,5 +1,8 @@
+use std::fmt::Debug;
+
 use crate::{
     codec::Codec,
+    hex,
     msgs::{ProtocolVersion, handhake::Handshake},
     reader::Reader,
     record_layer::ContentType,
@@ -37,7 +40,6 @@ pub enum Payload {
 /// Opaque bytes of an encoded payload
 ///
 /// Corresponds to the opaque fragment received in an inbound message
-#[derive(Debug)]
 pub struct EncodedPayload(pub Vec<u8>);
 
 impl Codec for Payload {
@@ -56,5 +58,11 @@ impl Codec for Payload {
 
     fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
+    }
+}
+
+impl Debug for EncodedPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "EncodedPayload[{}]", hex(&self.0))
     }
 }
