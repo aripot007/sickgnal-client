@@ -1,4 +1,9 @@
-use crate::{codec::Codec, crypto::NamedGroup, reader::Reader};
+use crate::{
+    codec::Codec,
+    crypto::{NamedGroup, NamedGroupName},
+    error::InvalidMessage,
+    reader::Reader,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) enum KeyShareEntry {
@@ -28,7 +33,27 @@ impl Codec for KeyShareEntry {
         }
     }
 
-    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
-        todo!()
+    fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
+        let group: NamedGroupName = NamedGroup::decode(buf)?
+            .try_into()
+            .map_err(|_| InvalidMessage::InvalidNamedGroup)?;
+
+        match group {
+            NamedGroupName::x25519 => {
+                let len = u16::decode(buf)?;
+
+                if len != 32 {
+                    return Err(InvalidMessage::IllegalParameter);
+                }
+
+                let mut bytes = [0; 32];
+                bytes.copy_from_slice(buf.take(len as usize)?);
+                let key = x25519_dalek::PublicKey::from(bytes);
+
+                Ok(KeyShareEntry::X25519(key))
+            }
+
+            _ => Err(InvalidMessage::UnsupportedNamedGroup),
+        }
     }
 }

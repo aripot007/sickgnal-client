@@ -1,5 +1,8 @@
 use crate::{
-    codec::Codec, crypto::ciphersuite::CipherSuite, error::InvalidMessage, msgs::ProtocolVersion,
+    codec::{Codec, LengthSize, decode_length_prefixed_vector},
+    crypto::{NamedGroup, ciphersuite::CipherSuite, keyshare::KeyShareEntry},
+    error::InvalidMessage,
+    msgs::{ExtensionType, ExtensionTypeName, ProtocolVersion},
     reader::Reader,
 };
 
@@ -25,8 +28,7 @@ pub struct ServerHelloPayload {
     // legacy_session_id_echo<0..32>;
     cipher_suite: CipherSuite,
     // uint8 legacy_compression_method = 0;
-
-    // extensions: TODO
+    extensions: Vec<ServerExtension>,
 }
 
 impl Codec for ServerHello {
@@ -68,11 +70,40 @@ impl Codec for ServerHello {
             return Err(InvalidMessage::IllegalParameter);
         }
 
-        // TODO: extensions
+        // Extensions
+        let len = u16::decode(buf)?;
+        let exts_payload = buf.take(len as usize)?;
+        let mut exts_reader = Reader::new(&exts_payload);
+
+        let mut extensions = Vec::new();
+
+        while !exts_reader.is_empty() {
+            let ext = ServerExtension::decode(&mut exts_reader, is_hello_retry)?;
+
+            // In a HelloRetryRequest, the only allowed extensions are
+            // key_share, cookie and supported_versions
+            if is_hello_retry {
+                match ext {
+                    ServerExtension::SupportedVersions(_)
+                    | ServerExtension::Cookie(_)
+                    | ServerExtension::KeyShareHelloRetryRequest(_) => extensions.push(ext),
+                    _ => return Err(InvalidMessage::IllegalParameter),
+                }
+
+            // Otherwise, the only allowed extensions are key_share and supported_versions
+            } else {
+                match ext {
+                    ServerExtension::SupportedVersions(_)
+                    | ServerExtension::KeyShareServerHello(_) => extensions.push(ext),
+                    _ => return Err(InvalidMessage::IllegalParameter),
+                }
+            }
+        }
 
         let payload = ServerHelloPayload {
             random,
             cipher_suite,
+            extensions,
         };
 
         if is_hello_retry {
@@ -116,5 +147,64 @@ impl Codec for ServerRandom {
         let mut random = [0; 32];
         random.copy_from_slice(buf.take(32)?);
         Ok(ServerRandom(random))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum ServerExtension {
+    SupportedVersions(ProtocolVersion),
+    Cookie(Vec<u8>),
+
+    /// KeyShare extension in a HelloRetryRequest message
+    KeyShareHelloRetryRequest(NamedGroup),
+
+    /// KeyShare extension in a ServerHello message
+    KeyShareServerHello(KeyShareEntry),
+}
+
+impl ServerExtension {
+    /// Decode a [`ServerExtension`] from a reader.
+    ///
+    /// The `is_retry_request` parameter is used to differentiate key_share extensions
+    /// in ServerHello and HelloRetryRequest messages
+    fn decode(buf: &mut Reader, is_retry_request: bool) -> Result<Self, InvalidMessage> {
+        let typ = ExtensionType::decode(buf)?;
+
+        let len = u16::decode(buf)?;
+        let mut buf = Reader::new(buf.take(len as usize)?);
+
+        let typ =
+            ExtensionTypeName::try_from(typ).map_err(|_| InvalidMessage::UnsupportedExtension)?;
+
+        Ok(match typ {
+            ExtensionTypeName::KeyShare => {
+                if is_retry_request {
+                    ServerExtension::KeyShareHelloRetryRequest(NamedGroup::decode(&mut buf)?)
+                } else {
+                    ServerExtension::KeyShareServerHello(KeyShareEntry::decode(&mut buf)?)
+                }
+            }
+
+            ExtensionTypeName::SupportedVersions => {
+                ServerExtension::SupportedVersions(ProtocolVersion::decode(&mut buf)?)
+            }
+
+            ExtensionTypeName::Cookie => {
+                let len = u16::decode(&mut buf)?;
+
+                // The cookie must not be empty
+                if len == 0 {
+                    return Err(InvalidMessage::IllegalParameter);
+                }
+
+                let bytes = Vec::from(buf.take(len as usize)?);
+
+                ServerExtension::Cookie(bytes)
+            }
+
+            // TODO: Handle server_name extension
+            // ExtensionTypeName::ServerName => todo!(),
+            _ => return Err(InvalidMessage::UnsupportedExtension),
+        })
     }
 }

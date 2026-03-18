@@ -18,6 +18,12 @@ pub enum InvalidMessage {
     /// When we don't support a protocol version
     UnsupportedProtocolVersion,
 
+    /// When we don't support or recognise an extension
+    UnsupportedExtension,
+
+    /// When we don't support a named group
+    UnsupportedNamedGroup,
+
     /// When the content type is not known
     InvalidContentType,
 
@@ -26,6 +32,9 @@ pub enum InvalidMessage {
 
     /// When the cipher suite is invalid
     InvalidCipherSuite,
+
+    /// When we receive an invalid [`NamedGroup`](crate::crypto::NamedGroup)
+    InvalidNamedGroup,
 
     /// When we receive a parameter with an invalid value
     IllegalParameter,
