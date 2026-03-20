@@ -4883,6 +4883,7 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "rand 0.8.5",
+ "sha2",
  "thiserror 2.0.18",
  "tokio",
  "x25519-dalek",

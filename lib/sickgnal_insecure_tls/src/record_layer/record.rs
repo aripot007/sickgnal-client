@@ -33,6 +33,7 @@ impl Codec for Record<Payload> {
 pub enum Payload {
     ChangeCipherSpec,
     Alert,
+    // FIXME: We need to have the untouched encoded payload for the transcript hash
     Handshake(Handshake),
     ApplicationData,
 }

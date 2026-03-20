@@ -7,6 +7,8 @@ use crate::{
     reader::Reader,
 };
 
+pub(crate) const OFFERED_CIPHERSUITE: CipherSuite = CipherSuite::TLS_AES_128_GCM_SHA256;
+
 /// ClientHello message
 ///
 /// See [RFC8446 section 4.1.2](https://datatracker.ietf.org/doc/html/rfc8446#section-4.1.2)
@@ -44,7 +46,7 @@ impl ClientHello {
 
         Self {
             random: ClientRandom::new_random(),
-            cipher_suites: vec![CipherSuite::TLS_AES_128_GCM_SHA256],
+            cipher_suites: vec![OFFERED_CIPHERSUITE],
             extensions: ext,
         }
     }

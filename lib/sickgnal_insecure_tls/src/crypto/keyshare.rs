@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{
     codec::Codec,
     crypto::{NamedGroup, NamedGroupName},
@@ -54,6 +56,28 @@ impl Codec for KeyShareEntry {
             }
 
             _ => Err(InvalidMessage::UnsupportedNamedGroup),
+        }
+    }
+}
+
+/// The secret corresponding to a [`KeyShareEntry`]
+pub(crate) enum KeyShareSecret {
+    X25519(x25519_dalek::EphemeralSecret),
+}
+
+impl KeyShareSecret {
+    /// Get the [`NamedGroup`] corresponding to this key share
+    pub fn named_group(&self) -> NamedGroup {
+        match self {
+            KeyShareSecret::X25519(_) => NamedGroup::x25519,
+        }
+    }
+}
+
+impl Debug for KeyShareSecret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::X25519(_) => f.debug_tuple("X25519").finish_non_exhaustive(),
         }
     }
 }

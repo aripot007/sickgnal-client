@@ -15,6 +15,7 @@ use crate::{
 };
 
 mod codec;
+mod connection;
 mod crypto;
 pub mod error;
 mod msgs;

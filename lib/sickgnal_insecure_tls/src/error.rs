@@ -5,10 +5,17 @@ pub enum Error {
     /// When we receive an invalid TLS message from the peer
     #[error("received an invalid message : {0:?}")]
     InvalidMessage(InvalidMessage),
+
+    /// When we receive a HelloRetryRequest, which we don't support yet
+    #[error("hello_retry_request are not supported yet")]
+    UnsupportedHelloRetryRequest,
 }
 
 #[derive(Debug, Clone)]
 pub enum InvalidMessage {
+    /// We received an unexpected message
+    UnexpectedMessage,
+
     /// When the message was shorter than the expected length
     TooShort,
 
@@ -41,6 +48,9 @@ pub enum InvalidMessage {
 
     /// When a record is too long
     RecordOverflow,
+
+    /// When we are missing an extension in the handshake
+    MissingExtension,
 }
 
 impl From<InvalidMessage> for Error {
