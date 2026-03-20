@@ -12,17 +12,34 @@ pub enum Message {
     ChangeCipherSpec,
     Alert,
     // FIXME: We need to have the untouched encoded payload for the transcript hash
-    Handshake(Handshake),
+    Handshake {
+        decoded: Handshake,
+
+        /// Ray handshake payload, used for the transcript hash
+        raw_bytes: Vec<u8>,
+    },
     ApplicationData,
+}
+
+impl Message {
+    pub fn handhake(handshake: Handshake) -> Self {
+        let mut raw_bytes = Vec::new();
+        handshake.encode(&mut raw_bytes);
+
+        Message::Handshake {
+            decoded: handshake,
+            raw_bytes,
+        }
+    }
 }
 
 impl Codec for Message {
     fn encode(&self, dest: &mut Vec<u8>) {
-        let mut bytes = Vec::new();
+        let mut bytes: Vec<u8> = Vec::new();
         match self {
             Message::ChangeCipherSpec => todo!(),
             Message::Alert => todo!(),
-            Message::Handshake(x) => x.encode(&mut bytes),
+            Message::Handshake { raw_bytes, .. } => bytes.extend(raw_bytes),
             Message::ApplicationData => todo!(),
         }
         let length: u16 = bytes.len().try_into().expect("payload too large");

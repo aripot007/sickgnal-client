@@ -32,7 +32,7 @@ pub async fn test<S: AsyncRead + AsyncWrite + Unpin>(tcp_stream: &mut S) -> Resu
     let record = Record {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
-        payload: Message::Handshake(h),
+        payload: Message::handhake(h),
     };
 
     let mut bytes = Vec::new();

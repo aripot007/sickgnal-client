@@ -85,7 +85,7 @@ pub(crate) enum State {
 pub struct Output;
 
 impl State {
-    /// Handle an incoming [`Payload`]
+    /// Handle an incoming [`Message`]
     pub fn handle(self, input: Message, output: &mut Output) -> Result<Self, Error> {
         // Simply pass the call to the underlying state
         match self {
@@ -113,11 +113,14 @@ pub(super) struct WaitServerHelloState {
 
 impl WaitServerHelloState {
     pub fn handle(self, input: Message, output: &mut Output) -> Result<State, Error> {
-        let sh = match input {
+        let (sh_bytes, sh) = match input {
             // We only expect ServerHello or HelloRetryRequest messages here
-            Message::Handshake(Handshake::ServerHello(hello)) => {
+            Message::Handshake {
+                decoded: Handshake::ServerHello(hello),
+                raw_bytes,
+            } => {
                 match hello {
-                    ServerHello::ServerHello(h) => h,
+                    ServerHello::ServerHello(h) => (raw_bytes, h),
 
                     // FIXME: We don't support HelloRetryRequests yet
                     ServerHello::HelloRetryRequest(_) => {
@@ -173,8 +176,7 @@ impl WaitServerHelloState {
         // Compute the running transcript hash now that we know the ciphersuite
         let mut transcript_hasher = Sha256::new();
         transcript_hasher.update(self.transcript_hash_buffer);
-
-        // TODO: Add the ServerHello to the transcript hash
+        transcript_hasher.update(sh_bytes);
 
         let next_state = WaitEncryptedExtensionsState {
             transcript_hasher,
