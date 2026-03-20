@@ -5,13 +5,9 @@ use x25519_dalek::{EphemeralSecret, PublicKey};
 use crate::{
     codec::Codec,
     error::Error,
-    msgs::{ProtocolVersion, client_hello::ClientHello, handhake::Handshake},
+    msgs::{Message, ProtocolVersion, client_hello::ClientHello, handhake::Handshake},
     reader::Reader,
-    record_layer::{
-        ContentType,
-        deframer::Deframer,
-        record::{Payload, Record},
-    },
+    record_layer::{ContentType, deframer::Deframer, record::Record},
 };
 
 mod codec;
@@ -36,7 +32,7 @@ pub async fn test<S: AsyncRead + AsyncWrite + Unpin>(tcp_stream: &mut S) -> Resu
     let record = Record {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
-        payload: Payload::Handshake(h),
+        payload: Message::Handshake(h),
     };
 
     let mut bytes = Vec::new();

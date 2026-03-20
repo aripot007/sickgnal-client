@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use crate::{
     codec::Codec,
     hex,
-    msgs::{ProtocolVersion, handhake::Handshake},
+    msgs::{Message, ProtocolVersion, handhake::Handshake},
     reader::Reader,
     record_layer::ContentType,
 };
@@ -17,7 +17,7 @@ pub struct Record<P> {
     pub payload: P,
 }
 
-impl Codec for Record<Payload> {
+impl Codec for Record<Message> {
     fn encode(&self, dest: &mut Vec<u8>) {
         self.typ.encode(dest);
         self.version.encode(dest);
@@ -29,38 +29,10 @@ impl Codec for Record<Payload> {
     }
 }
 
-#[derive(Debug)]
-pub enum Payload {
-    ChangeCipherSpec,
-    Alert,
-    // FIXME: We need to have the untouched encoded payload for the transcript hash
-    Handshake(Handshake),
-    ApplicationData,
-}
-
 /// Opaque bytes of an encoded payload
 ///
 /// Corresponds to the opaque fragment received in an inbound message
 pub struct EncodedPayload(pub Vec<u8>);
-
-impl Codec for Payload {
-    fn encode(&self, dest: &mut Vec<u8>) {
-        let mut bytes = Vec::new();
-        match self {
-            Payload::ChangeCipherSpec => todo!(),
-            Payload::Alert => todo!(),
-            Payload::Handshake(x) => x.encode(&mut bytes),
-            Payload::ApplicationData => todo!(),
-        }
-        let length: u16 = bytes.len().try_into().expect("payload too large");
-        dest.extend(length.to_be_bytes());
-        dest.extend(bytes);
-    }
-
-    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
-        todo!()
-    }
-}
 
 impl Debug for EncodedPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

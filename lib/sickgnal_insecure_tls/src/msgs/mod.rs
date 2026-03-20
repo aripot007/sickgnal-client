@@ -1,11 +1,39 @@
 //! TLS Messages structs
 //!
 
-use crate::macros::codec_enum;
+use crate::{codec::Codec, macros::codec_enum, msgs::handhake::Handshake, reader::Reader};
 
 pub mod client_hello;
 pub mod handhake;
 pub mod server_hello;
+
+#[derive(Debug)]
+pub enum Message {
+    ChangeCipherSpec,
+    Alert,
+    // FIXME: We need to have the untouched encoded payload for the transcript hash
+    Handshake(Handshake),
+    ApplicationData,
+}
+
+impl Codec for Message {
+    fn encode(&self, dest: &mut Vec<u8>) {
+        let mut bytes = Vec::new();
+        match self {
+            Message::ChangeCipherSpec => todo!(),
+            Message::Alert => todo!(),
+            Message::Handshake(x) => x.encode(&mut bytes),
+            Message::ApplicationData => todo!(),
+        }
+        let length: u16 = bytes.len().try_into().expect("payload too large");
+        dest.extend(length.to_be_bytes());
+        dest.extend(bytes);
+    }
+
+    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
+        todo!()
+    }
+}
 
 codec_enum! {
 

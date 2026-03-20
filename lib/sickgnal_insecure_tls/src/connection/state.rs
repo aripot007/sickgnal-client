@@ -6,12 +6,11 @@ use crate::{
     crypto::keyshare::{KeyShareEntry, KeyShareSecret},
     error::{Error, InvalidMessage},
     msgs::{
-        ProtocolVersion,
+        Message, ProtocolVersion,
         client_hello::OFFERED_CIPHERSUITE,
         handhake::Handshake,
         server_hello::{ServerHello, ServerKeyShare},
     },
-    record_layer::record::Payload,
 };
 
 /// Represents the state of the TLS connection
@@ -87,7 +86,7 @@ pub struct Output;
 
 impl State {
     /// Handle an incoming [`Payload`]
-    pub fn handle(self, input: Payload, output: &mut Output) -> Result<Self, Error> {
+    pub fn handle(self, input: Message, output: &mut Output) -> Result<Self, Error> {
         // Simply pass the call to the underlying state
         match self {
             State::Start => todo!(),
@@ -113,10 +112,10 @@ pub(super) struct WaitServerHelloState {
 }
 
 impl WaitServerHelloState {
-    pub fn handle(self, input: Payload, output: &mut Output) -> Result<State, Error> {
+    pub fn handle(self, input: Message, output: &mut Output) -> Result<State, Error> {
         let sh = match input {
             // We only expect ServerHello or HelloRetryRequest messages here
-            Payload::Handshake(Handshake::ServerHello(hello)) => {
+            Message::Handshake(Handshake::ServerHello(hello)) => {
                 match hello {
                     ServerHello::ServerHello(h) => h,
 
@@ -204,7 +203,7 @@ impl Debug for WaitEncryptedExtensionsState {
 }
 
 impl WaitEncryptedExtensionsState {
-    pub fn handle(self, input: Payload, output: &mut Output) -> Result<State, Error> {
+    pub fn handle(self, input: Message, output: &mut Output) -> Result<State, Error> {
         todo!()
     }
 }

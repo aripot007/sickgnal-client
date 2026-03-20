@@ -5,7 +5,7 @@ use crate::{
     error::Error,
     record_layer::{
         deframer::Deframer,
-        record::{EncodedPayload, Payload, Record},
+        record::{EncodedPayload, Record},
     },
 };
 
