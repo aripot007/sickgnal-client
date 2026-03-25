@@ -9,7 +9,8 @@ use crate::{
     msgs::ProtocolVersion,
     reader::Reader,
     record_layer::{
-        ContentType, ContentTypeName, FRAGMENT_MAX_LEN, RECORD_HEADER_LEN,
+        CIPHERTEXT_FRAGMENT_MAX_LEN, ContentType, ContentTypeName, PLAINTEXT_FRAGMENT_MAX_LEN,
+        RECORD_HEADER_LEN,
         record::{EncodedPayload, Record},
     },
 };
@@ -97,10 +98,19 @@ fn parse_record_header(
 
     let length = u16::decode(buf).map_err(|_| ParsingError::TooShortForHeader)?;
 
-    // "The length MUST NOT exceed 2^14 bytes"
-    if length > FRAGMENT_MAX_LEN {
-        return Err(ParsingError::RecordTooLong);
+    // The length limit is different for appli
+    if content_type == ContentType::ApplicationData {
+        if length > CIPHERTEXT_FRAGMENT_MAX_LEN {
+            return Err(ParsingError::RecordTooLong);
+        }
+    } else {
+        if length > PLAINTEXT_FRAGMENT_MAX_LEN {
+            return Err(ParsingError::RecordTooLong);
+        }
     }
+
+    // "The length MUST NOT exceed 2^14 bytes"
+    if length > CIPHERTEXT_FRAGMENT_MAX_LEN {}
 
     Ok((content_type, version, length))
 }

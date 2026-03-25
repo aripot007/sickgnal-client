@@ -11,7 +11,14 @@ pub(self) const RECORD_HEADER_LEN: usize = 5;
 /// "The length MUST NOT exceed 2^14 bytes. An
 ///  endpoint that receives a record that exceeds this length MUST
 ///  terminate the connection with a "record_overflow" alert."
-pub(self) const FRAGMENT_MAX_LEN: u16 = 2 << 14;
+pub(self) const PLAINTEXT_FRAGMENT_MAX_LEN: u16 = 2 << 14;
+
+/// The maximum length of a TLSCiphertext.fragment
+///
+/// "The length MUST NOT exceed 2^14 bytes. An
+///  endpoint that receives a record that exceeds this length MUST
+///  terminate the connection with a "record_overflow" alert."
+pub(self) const CIPHERTEXT_FRAGMENT_MAX_LEN: u16 = (2 << 14) + 256;
 
 codec_enum! {
 

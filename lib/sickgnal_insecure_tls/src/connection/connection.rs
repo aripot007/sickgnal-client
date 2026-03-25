@@ -63,6 +63,14 @@ impl Connection {
         todo!()
     }
 
+    /// Process the new records left in the input buffer
+    fn process_new_records(&mut self) -> Result<(), Error> {
+        let mut deframer = Deframer::new(&mut self.input_buffer);
+
+        while let Some(record) = deframer.next().transpose()? {}
+        Ok(())
+    }
+
     /// Process a TLS record we received
     fn process_record(&mut self, record: Record<EncodedPayload>) -> Result<(), ()> {
         // FIXME: The state machine should be used to process messages, not records
