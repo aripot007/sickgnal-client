@@ -91,4 +91,12 @@ impl Codec for Handshake {
 
         Ok(handshake)
     }
+
+    #[inline]
+    fn encoded_length_hint(&self) -> Option<usize> {
+        match self {
+            Handshake::ClientHello(ch) => ch.encoded_length_hint(),
+            Handshake::ServerHello(sh) => sh.encoded_length_hint(),
+        }
+    }
 }

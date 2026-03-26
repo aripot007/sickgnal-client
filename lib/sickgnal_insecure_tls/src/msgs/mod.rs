@@ -1,7 +1,10 @@
 //! TLS Messages structs
 //!
 
-use crate::{codec::Codec, macros::codec_enum, msgs::handhake::Handshake, reader::Reader};
+use crate::{
+    codec::Codec, macros::codec_enum, msgs::handhake::Handshake, reader::Reader,
+    record_layer::ContentTypeName,
+};
 
 pub mod client_hello;
 pub mod handhake;
@@ -11,14 +14,13 @@ pub mod server_hello;
 pub enum Message {
     ChangeCipherSpec,
     Alert,
-    // FIXME: We need to have the untouched encoded payload for the transcript hash
     Handshake {
         decoded: Handshake,
 
-        /// Ray handshake payload, used for the transcript hash
+        /// Raw handshake payload, used for the transcript hash
         raw_bytes: Vec<u8>,
     },
-    ApplicationData,
+    ApplicationData(Vec<u8>),
 }
 
 impl Message {
@@ -31,16 +33,34 @@ impl Message {
             raw_bytes,
         }
     }
+
+    #[inline]
+    pub fn is_application_data(&self) -> bool {
+        matches!(self, Message::ApplicationData(..))
+    }
+
+    /// Get the [`ContentTypeName`] of this message
+    #[inline]
+    pub fn content_type(&self) -> ContentTypeName {
+        use ContentTypeName::*;
+        match self {
+            Message::ChangeCipherSpec => ChangeCipherSpec,
+            Message::Alert => Alert,
+            Message::Handshake { .. } => Handshake,
+            Message::ApplicationData(..) => ApplicationData,
+        }
+    }
 }
 
 impl Codec for Message {
+    // FIXME: remove bytes allocation
     fn encode(&self, dest: &mut Vec<u8>) {
         let mut bytes: Vec<u8> = Vec::new();
         match self {
             Message::ChangeCipherSpec => todo!(),
             Message::Alert => todo!(),
             Message::Handshake { raw_bytes, .. } => bytes.extend(raw_bytes),
-            Message::ApplicationData => todo!(),
+            Message::ApplicationData(..) => todo!(),
         }
         let length: u16 = bytes.len().try_into().expect("payload too large");
         dest.extend(length.to_be_bytes());
@@ -49,6 +69,22 @@ impl Codec for Message {
 
     fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         todo!()
+    }
+
+    fn encoded_length_hint(&self) -> Option<usize> {
+        match self {
+            Message::ChangeCipherSpec => Some(1),
+            // FIXME: use size from alert when defined
+            Message::Alert => Some(2),
+            Message::Handshake { raw_bytes, .. } => {
+                if raw_bytes.is_empty() {
+                    None
+                } else {
+                    Some(raw_bytes.len())
+                }
+            }
+            Message::ApplicationData(bytes) => Some(bytes.len()),
+        }
     }
 }
 

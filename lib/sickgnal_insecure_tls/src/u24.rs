@@ -23,4 +23,9 @@ impl Codec for U24 {
 
         Ok(Self(u32::from_be_bytes(bytes)))
     }
+
+    #[inline]
+    fn encoded_length_hint(&self) -> Option<usize> {
+        Some(3)
+    }
 }

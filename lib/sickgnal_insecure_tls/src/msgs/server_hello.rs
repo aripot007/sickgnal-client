@@ -147,6 +147,11 @@ impl Codec for ServerRandom {
         random.copy_from_slice(buf.take(32)?);
         Ok(ServerRandom(random))
     }
+
+    #[inline]
+    fn encoded_length_hint(&self) -> Option<usize> {
+        Some(32)
+    }
 }
 
 #[derive(Debug, Clone)]

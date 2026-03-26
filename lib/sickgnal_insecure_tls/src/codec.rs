@@ -2,11 +2,22 @@ use crate::{error::InvalidMessage, reader::Reader, u24::U24};
 
 /// A trait to encode / decode something
 pub trait Codec: Sized {
+    /// The encoded length in bytes, if it is known at compile time
+    const LENGTH_HINT: Option<usize> = None;
+
     /// Encode self by appending it to the `dest` buffer
     fn encode(&self, dest: &mut Vec<u8>);
 
     /// Decode self by reading from the provided `reader`
     fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage>;
+
+    /// Returns the encoded length in bytes, if it is known before
+    /// encoding.
+    ///
+    /// Returns [`Codec::LENGTH_HINT`] by default
+    fn encoded_length_hint(&self) -> Option<usize> {
+        Self::LENGTH_HINT
+    }
 }
 
 /// Encode a length-prefixed vector with the given length field size
@@ -82,6 +93,11 @@ impl Codec for u8 {
     fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
         buf.take_byte()
     }
+
+    #[inline]
+    fn encoded_length_hint(&self) -> Option<usize> {
+        Some(1)
+    }
 }
 
 impl Codec for u16 {
@@ -94,6 +110,11 @@ impl Codec for u16 {
         bytes.clone_from_slice(buf.take(2)?);
         Ok(u16::from_be_bytes(bytes))
     }
+
+    #[inline]
+    fn encoded_length_hint(&self) -> Option<usize> {
+        Some(2)
+    }
 }
 
 impl Codec for u32 {
@@ -105,5 +126,10 @@ impl Codec for u32 {
         let mut bytes: [u8; 4] = [0; 4];
         bytes.clone_from_slice(buf.take(4)?);
         Ok(u32::from_be_bytes(bytes))
+    }
+
+    #[inline]
+    fn encoded_length_hint(&self) -> Option<usize> {
+        Some(4)
     }
 }
