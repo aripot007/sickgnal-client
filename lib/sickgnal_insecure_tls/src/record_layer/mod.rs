@@ -4,26 +4,26 @@ pub mod deframer;
 pub mod record;
 
 /// Length of a record header in bytes
-pub(self) const RECORD_HEADER_LEN: usize = 5;
+pub(crate) const RECORD_HEADER_LEN: usize = 5;
 
 /// The maximum length of a TLSPlaintext.fragment
 ///
 /// "The length MUST NOT exceed 2^14 bytes. An
 ///  endpoint that receives a record that exceeds this length MUST
 ///  terminate the connection with a "record_overflow" alert."
-pub(self) const PLAINTEXT_FRAGMENT_MAX_LEN: u16 = 2 << 14;
+pub(crate) const PLAINTEXT_FRAGMENT_MAX_LEN: u16 = 2 << 14;
 
 /// The maximum length of a TLSCiphertext.fragment
 ///
 /// "The length MUST NOT exceed 2^14 bytes. An
 ///  endpoint that receives a record that exceeds this length MUST
 ///  terminate the connection with a "record_overflow" alert."
-pub(self) const CIPHERTEXT_FRAGMENT_MAX_LEN: u16 = (2 << 14) + 256;
+pub(crate) const CIPHERTEXT_FRAGMENT_MAX_LEN: u16 = (2 << 14) + 256;
 
 codec_enum! {
 
     /// The content type of a record.
-    pub struct ContentType(pub u8);
+    pub struct ContentType(pub(crate) u8);
 
     #[allow(non_camel_case_types)]
     pub enum ContentTypeName {

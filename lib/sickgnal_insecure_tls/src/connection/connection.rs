@@ -1,7 +1,7 @@
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::{
-    connection::state::State,
+    connection::{receiver::Receiver, sender::Sender, state::State},
     error::Error,
     record_layer::{
         deframer::Deframer,
@@ -18,6 +18,8 @@ const INPUT_BUF_SIZE: usize = 2 << 14;
 pub struct Connection {
     input_buffer: Vec<u8>,
     state: State,
+    receiver: Receiver,
+    sender: Sender,
 }
 
 impl Connection {
@@ -26,6 +28,8 @@ impl Connection {
         Self {
             input_buffer: vec![0; INPUT_BUF_SIZE],
             state: State::Start,
+            receiver: Receiver::new(),
+            sender: Sender::new(),
         }
     }
 

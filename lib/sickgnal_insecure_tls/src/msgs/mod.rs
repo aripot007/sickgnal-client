@@ -91,7 +91,7 @@ impl Codec for Message {
 codec_enum! {
 
     /// A protocol version
-    pub struct ProtocolVersion(u16);
+    pub struct ProtocolVersion(pub(crate) u16);
 
     pub enum ProtocolVersionName {
         SSLv2 = 0x0002,
