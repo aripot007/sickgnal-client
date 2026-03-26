@@ -495,10 +495,10 @@ where
         let sess = E2ESession {
             correspondant_id: sender_id,
             sending_key_id: kex_data.receive_key_id,
-            sending_key: recv_key,
+            sending_key: send_key,
             key_msg_count,
             receiving_key_id: kex_data.send_key_id,
-            receiving_key: send_key,
+            receiving_key: recv_key,
         };
 
         self.storage.save_session(&sess)?;
