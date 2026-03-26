@@ -363,12 +363,6 @@ where
             .encrypt(&nonce, payload)
             .map_err(encrypted_payload::Error::from)?;
 
-        let encrypted_payload = EncryptedPayload {
-            nonce: nonce.into(),
-            key_id: send_key_id,
-            ciphertext,
-        };
-
         // Construct the message and the session
 
         let kex_data = KeyExchangeData {
@@ -377,7 +371,8 @@ where
             recipient_prekey_id: prekey_id,
             send_key_id,
             receive_key_id,
-            msg_ciphertext: encrypted_payload,
+            nonce: nonce.into(),
+            ciphertext,
         };
 
         let message = E2EMessage::SendInitialMessage {
@@ -473,12 +468,12 @@ where
         .concat();
 
         let payload = Payload {
-            msg: &kex_data.msg_ciphertext.ciphertext,
+            msg: &kex_data.ciphertext,
             aad,
         };
 
         let bytes = aead
-            .decrypt(&kex_data.msg_ciphertext.nonce.into(), payload)
+            .decrypt(&kex_data.nonce.into(), payload)
             .map_err(encrypted_payload::Error::from)?;
 
         let payload = PayloadMessage::try_from_bytes(&bytes)?;
