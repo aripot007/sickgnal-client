@@ -347,10 +347,10 @@ where
         let nonce = XChaCha20Poly1305::generate_nonce(&mut self.rng);
 
         let aad = &[
-            idk.as_bytes().as_slice(),              // I_A
-            bundle.identity_keys.x25519.as_bytes(), // I_B
-            send_key_id.as_bytes(),                 // i
-            receive_key_id.as_bytes(),              // j
+            public_identity_key.as_bytes().as_slice(), // I_A
+            bundle.identity_keys.x25519.as_bytes(),    // I_B
+            send_key_id.as_bytes(),                    // i
+            receive_key_id.as_bytes(),                 // j
         ]
         .concat();
 
