@@ -355,8 +355,8 @@ pub struct PreKeyBundle {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserProfile {
     /// Id of the user
-    id: Uuid,
-    username: String,
+    pub id: Uuid,
+    pub username: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -396,7 +396,7 @@ pub struct KeyExchangeData {
     pub ephemeral_prekey: x25519_dalek::PublicKey,
 
     /// Ephemeral prekey id of the recipient key used, if any
-    #[serde(rename = "kid")]
+    #[serde(rename = "ekid")]
     pub recipient_prekey_id: Option<Uuid>,
 
     /// Initial sending key id of the sender
@@ -407,9 +407,13 @@ pub struct KeyExchangeData {
     #[serde(rename = "j")]
     pub receive_key_id: Uuid,
 
-    /// Initial message ciphertext
-    #[serde(flatten)]
-    pub msg_ciphertext: EncryptedPayload,
+    /// Nonce used for message encryption
+    #[serde(with = "base64nonce")]
+    pub nonce: Nonce,
+
+    /// Message ciphertext
+    #[serde(rename = "msg", with = "base64json")]
+    pub(in crate::e2e) ciphertext: Vec<u8>,
 }
 
 // endregion: Struct definition

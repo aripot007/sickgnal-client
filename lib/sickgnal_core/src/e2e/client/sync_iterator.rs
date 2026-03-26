@@ -274,7 +274,7 @@ where
 
         // Session not encountered yet
         } else if let Some(sess) = self.client.state.sessions().get(&sender_id) {
-            let keys = HashMap::from([(sender_id, sess.receiving_key)]);
+            let keys = HashMap::from([(sess.receiving_key_id, sess.receiving_key)]);
             self.session_keys.insert(
                 sender_id,
                 SessionKeys {

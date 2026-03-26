@@ -23,8 +23,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     peer_user_id TEXT NOT NULL UNIQUE,  -- Each peer can only have one conversation
     peer_name TEXT NOT NULL,
     last_message_at TEXT,               -- ISO 8601 timestamp
-    unread_count INTEGER NOT NULL DEFAULT 0,
-    FOREIGN KEY (peer_user_id) REFERENCES accounts(user_id)
+    unread_count INTEGER NOT NULL DEFAULT 0
 );
 
 -- Messages table: stores all messages for all conversations
@@ -45,8 +44,7 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS sessions (
     peer_user_id TEXT PRIMARY KEY NOT NULL,
     session_data_json BLOB NOT NULL,    -- Encrypted session data (serialized JSON)
-    updated_at TEXT NOT NULL,           -- ISO 8601 timestamp
-    FOREIGN KEY (peer_user_id) REFERENCES accounts(user_id)
+    updated_at TEXT NOT NULL            -- ISO 8601 timestamp
 );
 
 -- Keys table: stores various cryptographic keys
