@@ -355,8 +355,8 @@ pub struct PreKeyBundle {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserProfile {
     /// Id of the user
-    id: Uuid,
-    username: String,
+    pub id: Uuid,
+    pub username: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
