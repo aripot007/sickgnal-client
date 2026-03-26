@@ -131,8 +131,9 @@ where
             return Ok(msg);
         }
 
-        let msg = E2EMessage::ConversationMessage {
-            sender_id: self.account.id,
+        let msg = E2EMessage::SendMessage {
+            token: self.account.token.clone(),
+            recipient_id: to,
             msg_ciphertext,
         };
 
