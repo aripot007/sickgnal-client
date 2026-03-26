@@ -4,6 +4,7 @@ members = [
     "lib/sickgnal_sdk",
     "lib/sickgnal_insecure_tls",
     "app/sickgnal_cli",
+    "app/sickgnal_test",
 ]
 resolver = "2"
 
