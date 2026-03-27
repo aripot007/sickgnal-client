@@ -71,6 +71,15 @@ where
     S: E2EStorageBackend + Send,
     R: E2EMessageReader,
 {
+    /// Cleanly shutdown the worker
+    fn shutdown(&mut self) {
+        self.out_channel.close_channel();
+
+        // Close the oneshot channels to prevent the client from hanging
+        let mut state = self.state.lock().unwrap();
+        state.waiting_requests.clear();
+    }
+
     /// Main worker loop
     async fn main_loop(&mut self) {
         'main: loop {
@@ -85,13 +94,6 @@ where
             let packet = match self.reader.receive().await {
                 Ok(packet) => packet,
                 Err(err) => {
-                    let msg = format!("{}", err);
-                    // IO errors (connection closed/reset) are fatal
-                    // Serialization errors are recoverable — skip the bad message
-                    if msg.contains("Serialization error") {
-                        println!("Skipping unreadable message: {}", err);
-                        continue;
-                    }
                     println!("Reader error : {}", err);
                     break;
                 }
@@ -134,6 +136,7 @@ where
 
         // TODO: Clean shutdown / send error to client ?
         println!("Stopping receiver");
+        self.shutdown();
     }
 
     /// Process a [`E2EMessage`]
