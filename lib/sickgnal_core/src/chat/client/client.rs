@@ -98,10 +98,12 @@ where
                         Ok(Some(conv)) => {
                             let message = Message::from(msg);
 
-                            storage.create_message(&message).expect_err(
-                                format!("Unable to store the message: {}", message.content)
-                                    .as_str(),
-                            );
+                            storage.create_message(&message).unwrap_or_else(|e| {
+                                eprintln!(
+                                    "Unable to store the message: {}: {}",
+                                    message.content, e
+                                );
+                            });
                             let _ = event_tx.send(Event::NewMessage(conv.id, message));
                         }
                         Ok(None) => {
