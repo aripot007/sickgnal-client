@@ -85,7 +85,13 @@ where
             let packet = match self.reader.receive().await {
                 Ok(packet) => packet,
                 Err(err) => {
-                    // TODO: Better logging
+                    let msg = format!("{}", err);
+                    // IO errors (connection closed/reset) are fatal
+                    // Serialization errors are recoverable — skip the bad message
+                    if msg.contains("Serialization error") {
+                        println!("Skipping unreadable message: {}", err);
+                        continue;
+                    }
                     println!("Reader error : {}", err);
                     break;
                 }
@@ -176,10 +182,13 @@ where
             .handle_open_session(sender_id, &data)?;
 
         // Get the initial chat message
-        let m = match payload {
+        let mut m = match payload {
             PayloadMessage::ChatMessage(m) => m,
             PayloadMessage::E2EMessage(m) => return Err(Error::UnexpectedE2EMessage(m)),
         };
+
+        // Set the sender_id from the E2E envelope (it's skipped during deserialization)
+        m.sender_id = sender_id;
 
         if !matches!(
             m.kind,
@@ -212,7 +221,10 @@ where
             .decrypt_payload(sender_id, &ciphertext);
 
         match payload_res {
-            Ok(PayloadMessage::ChatMessage(m)) => self.out_channel.send(m).await?,
+            Ok(PayloadMessage::ChatMessage(mut m)) => {
+                m.sender_id = sender_id;
+                self.out_channel.send(m).await?;
+            }
 
             // Handle key rotation
             Ok(PayloadMessage::E2EMessage(E2EMessage::KeyRotation {
