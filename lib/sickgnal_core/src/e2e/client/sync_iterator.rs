@@ -77,7 +77,7 @@ struct SessionKeys {
 
 impl<'c, Storage, MsgStream> SyncIterator<'c, Storage, MsgStream>
 where
-    Storage: E2EStorageBackend + Send,
+    Storage: E2EStorageBackend + Send + 'static,
     MsgStream: E2EMessageStream + Send,
 {
     pub(super) fn new(client: &'c mut E2EClient<Storage, MsgStream>) -> Self {

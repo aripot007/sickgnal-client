@@ -124,7 +124,10 @@ where
             }
         }
 
-        e2e_client.start_async_workers()
+        match e2e_client.start_async_workers().await {
+            Ok(vals) => vals,
+            Err(err) => todo!(),
+        }
     }
 
     /// Get the current connection state
