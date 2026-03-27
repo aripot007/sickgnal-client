@@ -71,4 +71,12 @@ impl AccountFile {
     pub fn exists(&self) -> bool {
         self.path.exists()
     }
+
+    /// Supprime le fichier de compte local
+    pub fn delete(&self) -> Result<()> {
+        if self.path.exists() {
+            std::fs::remove_file(&self.path).map_err(Error::from)?;
+        }
+        Ok(())
+    }
 }

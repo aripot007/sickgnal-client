@@ -9,6 +9,10 @@ pub enum Error {
     #[error("Client error: {0}")]
     Client(#[from] sickgnal_core::chat::client::Error),
 
+    /// Error originating from the E2E protocol layer
+    #[error("E2E error: {0}")]
+    E2E(#[from] sickgnal_core::e2e::client::Error),
+
     /// Error originating from the SDK storage layer (config, SQLite setup)
     #[error("Storage error: {0}")]
     Storage(#[from] sickgnal_core::chat::storage::Error),

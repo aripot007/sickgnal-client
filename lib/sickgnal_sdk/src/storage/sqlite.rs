@@ -596,7 +596,7 @@ impl StorageBackend for Sqlite {
 
         let sql = format!(
             "SELECT id, conversation_id, sender_id, content, timestamp, status, reply_to_id, local_id
-             FROM messages WHERE conversation_id = ?1 ORDER BY timestamp DESC {}{}",
+             FROM messages WHERE conversation_id = ?1 ORDER BY timestamp ASC {}{}",
             limit.map(|_| "LIMIT ?2").unwrap_or(""),
             offset.map(|_| "OFFSET ?3").unwrap_or(""),
         );
