@@ -1,224 +1,227 @@
-use async_std::net::TcpStream;
-use sickgnal_core::chat::message::ChatMessage;
-use sickgnal_core::chat::storage::StorageBackend;
-use sickgnal_core::e2e::client::E2EClient;
-use sickgnal_core::e2e::message_stream::raw_json::RawJsonMessageStream;
-use sickgnal_sdk::storage::{Config, Sqlite};
+use std::path::Path;
+use std::thread;
+use std::time::Duration;
+
+use futures::channel::mpsc;
+use sickgnal_core::chat::client::Event as SdkEvent;
 use uuid::Uuid;
 
-const DEFAULT_SERVER_ADDR: &str = "127.0.0.1:8081";
+// Import SdkBridge from the TUI crate
+// Since we can't import from another binary crate, we replicate the exact
+// TUI user flow by using the same SDK components the TUI uses.
+use sickgnal_sdk::account::AccountFile;
+use sickgnal_sdk::client::SdkClient;
+
+mod sdk_bridge_test;
+
+const DEFAULT_SERVER_ADDR: &str = "127.0.0.1:8080";
 
 fn server_addr() -> String {
     std::env::var("SICKGNAL_SERVER").unwrap_or_else(|_| DEFAULT_SERVER_ADDR.to_string())
 }
 
-/// Create a fresh E2EClient with a new account.
-async fn create_client(
-    username: &str,
-    temp_dir: &std::path::Path,
-) -> E2EClient<Sqlite, RawJsonMessageStream<TcpStream>> {
-    let user_dir = temp_dir.join(username);
-    std::fs::create_dir_all(&user_dir).expect("create user dir");
-
-    let config = Config::new(user_dir.clone(), "testpassword", None).expect("create config");
-    let mut storage = Sqlite::new(config).expect("create sqlite storage");
-    storage.initialize().expect("initialize storage");
+fn main() {
+    // NOT #[tokio::main] - SdkBridge creates its own runtime,
+    // and block_on inside an existing runtime panics.
 
     let addr = server_addr();
-    let stream = TcpStream::connect(&addr)
-        .await
-        .expect("connect to server");
-    let msg_stream = RawJsonMessageStream::new(stream);
-
-    E2EClient::create_account(username.to_string(), storage, msg_stream)
-        .await
-        .expect("create account")
-}
-
-/// Load an existing E2EClient with a new TCP connection (reuses the same storage).
-async fn reconnect_client(
-    account: sickgnal_core::e2e::client::Account,
-    temp_dir: &std::path::Path,
-    username: &str,
-) -> E2EClient<Sqlite, RawJsonMessageStream<TcpStream>> {
-    let user_dir = temp_dir.join(username);
-
-    let config = Config::new(user_dir.clone(), "testpassword", None).expect("create config");
-    let mut storage = Sqlite::new(config).expect("create sqlite storage");
-    storage.initialize().expect("initialize storage");
-
-    let addr = server_addr();
-    let stream = TcpStream::connect(&addr)
-        .await
-        .expect("reconnect to server");
-    let msg_stream = RawJsonMessageStream::new(stream);
-
-    E2EClient::load(account, storage, msg_stream).expect("load account")
-}
-
-#[tokio::main]
-async fn main() {
-    let addr = server_addr();
-    println!("=== Sickgnal E2E Integration Test ===");
-    println!("Server: {}", addr);
+    println!("=== TUI SdkBridge Integration Test ===");
+    println!("Server: {addr}");
     println!();
 
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let temp_path = temp_dir.path().to_path_buf();
 
+    let suffix = Uuid::new_v4().to_string()[..8].to_string();
+    let alice_name = format!("alice_{suffix}");
+    let bob_name = format!("bob_{suffix}");
+    let password = "testpassword";
+
     // ================================================================
-    // Step 1: Alice creates an account
+    // Step 1: Create Alice's account (same as TUI sign-up)
     // ================================================================
-    println!("[1] Alice: Creating account...");
-    let mut alice = create_client("alice_test", &temp_path).await;
-    let alice_account = alice.account().clone();
-    println!(
-        "    OK - Alice account created: id={}, username={}",
-        alice_account.id, alice_account.username
-    );
-    assert!(!alice_account.id.is_nil(), "Alice ID should not be nil");
+    println!("[1] Creating accounts...");
+    let alice_dir = temp_path.join(&alice_name);
+    std::fs::create_dir_all(&alice_dir).unwrap();
+    let alice_af = AccountFile::new(alice_dir.clone()).unwrap();
+    alice_af.create(&alice_name, password).unwrap();
+
+    let mut alice = sdk_bridge_test::SdkBridge::connect(
+        alice_name.clone(),
+        password.to_string(),
+        alice_dir.clone(),
+        false,
+    )
+    .expect("Alice connect");
+    let alice_id = alice.my_user_id();
+    println!("    Alice connected: id={alice_id}");
+
+    // Create Bob's account
+    let bob_dir = temp_path.join(&bob_name);
+    std::fs::create_dir_all(&bob_dir).unwrap();
+    let bob_af = AccountFile::new(bob_dir.clone()).unwrap();
+    bob_af.create(&bob_name, password).unwrap();
+
+    let mut bob = sdk_bridge_test::SdkBridge::connect(
+        bob_name.clone(),
+        password.to_string(),
+        bob_dir.clone(),
+        false,
+    )
+    .expect("Bob connect");
+    let bob_id = bob.my_user_id();
+    println!("    Bob connected: id={bob_id}");
+    assert_ne!(alice_id, bob_id);
+    println!("    OK");
+    println!();
+
+    // Take event receivers
+    let mut alice_event_rx = alice.take_event_rx();
+    let mut bob_event_rx = bob.take_event_rx();
+
+    // ================================================================
+    // Step 2: Alice starts a conversation with Bob (profile lookup + create)
+    // ================================================================
+    println!("[2] Alice: Starting conversation with Bob...");
+    let conv = alice
+        .start_conversation(bob_name.clone())
+        .expect("Alice start conversation with Bob");
+    assert_eq!(conv.peer_user_id, bob_id);
+    println!("    OK - Conversation created: id={}, peer={}", conv.id, conv.peer_name);
+    println!();
+
+    // ================================================================
+    // Step 3: Alice sends first message (SdkBridge handles OpenConv)
+    // ================================================================
+    println!("[3] Alice: Sending first message...");
+    let msg = alice
+        .send_message(conv.id, "Hello Bob from Alice!".to_string())
+        .expect("Alice send first message");
+    println!("    OK - Message sent: '{}'", msg.content);
+    println!();
+
+    // ================================================================
+    // Step 4: Bob receives Alice's message via instant relay event
+    // ================================================================
+    println!("[4] Bob: Waiting for Alice's message...");
+    let received = wait_for_message(&mut bob_event_rx, Duration::from_secs(5));
     assert!(
-        !alice_account.token.is_empty(),
-        "Alice token should not be empty"
+        received.is_some(),
+        "Bob should have received Alice's message via instant relay"
     );
-    println!();
-
-    // ================================================================
-    // Step 2: Bob creates an account
-    // ================================================================
-    println!("[2] Bob: Creating account...");
-    let mut bob = create_client("bob_test", &temp_path).await;
-    let bob_account = bob.account().clone();
+    let (recv_conv_id, recv_msg) = received.unwrap();
     println!(
-        "    OK - Bob account created: id={}, username={}",
-        bob_account.id, bob_account.username
+        "    OK - Received: '{}' (conv_id={})",
+        recv_msg.content, recv_conv_id
     );
-    assert!(!bob_account.id.is_nil(), "Bob ID should not be nil");
     assert!(
-        !bob_account.token.is_empty(),
-        "Bob token should not be empty"
-    );
-    assert_ne!(alice_account.id, bob_account.id, "Alice and Bob should have different IDs");
-    println!();
-
-    // ================================================================
-    // Step 3: Alice sends an initial (OpenConv) message to Bob
-    // ================================================================
-    println!("[3] Alice: Sending initial message to Bob...");
-    let conversation_id = Uuid::new_v4();
-    let chat_msg = ChatMessage::new_open_conv_with_id(
-        Some(conversation_id),
-        Some("Hello Bob from Alice!"),
-    );
-    alice
-        .send(bob_account.id, chat_msg)
-        .await
-        .expect("Alice send message to Bob");
-    println!("    OK - Message sent (conversation_id={})", conversation_id);
-    println!();
-
-    // ================================================================
-    // Step 4: Bob syncs and receives Alice's message
-    // ================================================================
-    println!("[4] Bob: Syncing messages...");
-    // Bob needs to reconnect (new TCP connection for sync since the old stream
-    // is consumed by the previous client). Actually, Bob's client is still alive,
-    // so let's sync directly.
-    let mut sync = bob.sync();
-    let mut bob_received_msgs = Vec::new();
-    while let Some(msg) = sync.next().await.expect("Bob sync next") {
-        println!("    Received message: {:?}", msg);
-        bob_received_msgs.push(msg);
-    }
-    drop(sync);
-
-    assert!(
-        !bob_received_msgs.is_empty(),
-        "Bob should have received at least one message"
-    );
-    println!(
-        "    OK - Bob received {} message(s)",
-        bob_received_msgs.len()
+        recv_msg.content.contains("Hello Bob from Alice!"),
+        "Message content should match"
     );
     println!();
 
     // ================================================================
-    // Step 5: Bob sends a reply to Alice
+    // Step 5: Alice sends a second message (existing session)
     // ================================================================
-    println!("[5] Bob: Sending reply to Alice...");
-    let reply_msg = ChatMessage::new_text(conversation_id, "Hello Alice from Bob!");
-    bob.send(alice_account.id, reply_msg)
-        .await
-        .expect("Bob send reply to Alice");
-    println!("    OK - Reply sent");
-    println!();
-
-    // ================================================================
-    // Step 6: Alice syncs and receives Bob's reply
-    // ================================================================
-    println!("[6] Alice: Syncing messages...");
-    // Alice syncs on the same connection (session keys are in memory)
-    let mut sync = alice.sync();
-    let mut alice_received_msgs = Vec::new();
-    while let Some(msg) = sync.next().await.expect("Alice sync next") {
-        println!("    Received message: {:?}", msg);
-        alice_received_msgs.push(msg);
-    }
-    drop(sync);
-
-    assert!(
-        !alice_received_msgs.is_empty(),
-        "Alice should have received at least one message"
-    );
-    println!(
-        "    OK - Alice received {} message(s)",
-        alice_received_msgs.len()
-    );
-    println!();
-
-    // ================================================================
-    // Step 7: Alice sends a second message (using existing session, no new X3DH)
-    // ================================================================
-    println!("[7] Alice: Sending second message to Bob (existing session)...");
-    let msg2 = ChatMessage::new_text(conversation_id, "Second message from Alice!");
-    alice
-        .send(bob_account.id, msg2)
-        .await
+    println!("[5] Alice: Sending second message...");
+    let msg2 = alice
+        .send_message(conv.id, "Second message!".to_string())
         .expect("Alice send second message");
-    println!("    OK - Second message sent");
+    println!("    OK - Message sent: '{}'", msg2.content);
     println!();
 
     // ================================================================
-    // Step 8: Bob syncs again and receives Alice's second message
+    // Step 6: Bob receives the second message
     // ================================================================
-    println!("[8] Bob: Syncing second batch...");
-    let mut sync = bob.sync();
-    let mut bob_received_msgs_2 = Vec::new();
-    while let Some(msg) = sync.next().await.expect("Bob sync second batch") {
-        println!("    Received message: {:?}", msg);
-        bob_received_msgs_2.push(msg);
-    }
-    drop(sync);
-
+    println!("[6] Bob: Waiting for second message...");
+    let received2 = wait_for_message(&mut bob_event_rx, Duration::from_secs(5));
     assert!(
-        !bob_received_msgs_2.is_empty(),
+        received2.is_some(),
         "Bob should have received Alice's second message"
     );
-    println!(
-        "    OK - Bob received {} message(s) in second sync",
-        bob_received_msgs_2.len()
+    let (_, recv_msg2) = received2.unwrap();
+    println!("    OK - Received: '{}'", recv_msg2.content);
+    assert!(
+        recv_msg2.content.contains("Second message!"),
+        "Second message content should match"
     );
     println!();
 
     // ================================================================
-    // Summary
+    // Step 7: Bob starts a conversation with Alice and replies
+    // ================================================================
+    println!("[7] Bob: Starting conversation with Alice and replying...");
+    let bob_conv = bob
+        .start_conversation(alice_name.clone())
+        .expect("Bob start conversation with Alice");
+    let reply = bob
+        .send_message(bob_conv.id, "Hello Alice from Bob!".to_string())
+        .expect("Bob send reply");
+    println!("    OK - Reply sent: '{}'", reply.content);
+    println!();
+
+    // ================================================================
+    // Step 8: Alice receives Bob's reply via instant relay
+    // ================================================================
+    println!("[8] Alice: Waiting for Bob's reply...");
+    let received_reply = wait_for_message(&mut alice_event_rx, Duration::from_secs(5));
+    assert!(
+        received_reply.is_some(),
+        "Alice should have received Bob's reply via instant relay"
+    );
+    let (_, reply_msg) = received_reply.unwrap();
+    println!("    OK - Received: '{}'", reply_msg.content);
+    assert!(
+        reply_msg.content.contains("Hello Alice from Bob!"),
+        "Reply content should match"
+    );
+    println!();
+
+    // ================================================================
+    // Done
     // ================================================================
     println!("=== ALL TESTS PASSED ===");
-    println!("  - Account creation: OK");
-    println!("  - Pre-key upload: OK (done automatically by create_account)");
-    println!("  - Initial message (X3DH key exchange + encrypted): OK");
-    println!("  - Message sync and decryption: OK");
-    println!("  - Reply (reverse session): OK");
-    println!("  - Existing session reuse: OK");
-    println!("  - Second sync: OK");
+    println!("  - Account creation + SdkBridge::connect (both users): OK");
+    println!("  - start_conversation (profile lookup + local creation): OK");
+    println!("  - send_message first message (auto OpenConv via SdkHandle): OK");
+    println!("  - Receive message via instant relay event: OK");
+    println!("  - send_message second message (existing session): OK");
+    println!("  - Receive second message via instant relay event: OK");
+    println!("  - Reply from Bob via SdkBridge: OK");
+    println!("  - Receive reply via instant relay event: OK");
+}
+
+/// Wait for a NewMessage or MessageForUnknownConversation event.
+fn wait_for_message(
+    rx: &mut mpsc::Receiver<SdkEvent>,
+    timeout: Duration,
+) -> Option<(Uuid, sickgnal_core::chat::storage::Message)> {
+    let deadline = std::time::Instant::now() + timeout;
+
+    loop {
+        if std::time::Instant::now() > deadline {
+            return None;
+        }
+
+        match rx.try_next() {
+            Ok(Some(SdkEvent::NewMessage(conv_id, msg))) => {
+                return Some((conv_id, msg));
+            }
+            Ok(Some(SdkEvent::MessageForUnknownConversation(msg))) => {
+                return Some((msg.conversation_id, msg));
+            }
+            Ok(Some(_other)) => {
+                // Skip non-message events
+                continue;
+            }
+            Ok(None) => {
+                // Channel closed
+                return None;
+            }
+            Err(_) => {
+                // No event yet, wait a bit
+                thread::sleep(Duration::from_millis(50));
+            }
+        }
+    }
 }
