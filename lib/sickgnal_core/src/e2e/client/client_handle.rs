@@ -46,6 +46,33 @@ where
         self.client_state.lock().unwrap().account.clone()
     }
 
+    /// Check if an E2E session exists with a given peer.
+    pub fn has_session(&self, peer_id: Uuid) -> bool {
+        self.client_state
+            .lock()
+            .unwrap()
+            .sessions()
+            .contains_key(&peer_id)
+    }
+
+    /// Enable instant relay on the server.
+    ///
+    /// Once enabled, the server pushes new messages directly over this connection
+    /// instead of storing them for later sync. Also flushes any stored messages.
+    pub async fn enable_instant_relay(&mut self) -> Result<()> {
+        let rq = {
+            let state = self.client_state.lock().unwrap();
+            E2EMessage::EnableInstantRelay {
+                token: state.token().clone(),
+            }
+        };
+
+        match self.request(rq).await? {
+            E2EMessage::Ok => Ok(()),
+            m => Err(Error::UnexpectedE2EMessage(m)),
+        }
+    }
+
     /// Send a [`ChatMessage`] to a user.
     ///
     /// Opens a new session if necessary
