@@ -1,0 +1,16 @@
+[package]
+name = "sickgnal_tui"
+version = "0.1.0"
+edition = "2024"
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+sickgnal_sdk = { path = "../../lib/sickgnal_sdk", version = "0.1.0" }
+sickgnal_core = { path = "../../lib/sickgnal_core", version = "0.1.0" }
+tokio = { version = "1.49.0", features = ["full"] }
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+uuid = { version = "1.20.0", features = ["serde", "v4"] }
+chrono = { version = "0.4.44", features = ["serde"] }
+futures = "0.3.32"
