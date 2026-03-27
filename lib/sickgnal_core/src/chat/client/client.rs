@@ -161,7 +161,7 @@ where
             timestamp: Utc::now(),
             status: MessageStatus::Sending,
             reply_to_id: None,
-            local_id: Some(format!("local_{}", Uuid::new_v4()).clone()),
+            local_id: Some(format!("local_{}", Uuid::new_v4())),
         };
 
         // Save message to storage with "sending" status
