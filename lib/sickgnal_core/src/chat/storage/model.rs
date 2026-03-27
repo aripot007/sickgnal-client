@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    chat::message::{ChatMessage, ChatMessageKind, Content},
+    chat::message::{ChatMessage, ChatMessageKind, Content, ControlMessage},
     e2e,
 };
 
@@ -84,12 +84,50 @@ impl From<ChatMessage> for Message {
                     local_id: None, // Rempli manuellement si c'est un message sortant
                 }
             }
-            ChatMessageKind::Ctrl(ctrl) => {
-                // Optionnel : Comment gérer les messages de contrôle ?
-                // Souvent, on ne les transforme pas en "Message" de BDD,
-                // ou on crée une table différente.
-                // Ici, on pourrait gérer le cas 'OpenConv' s'il contient un message initial.
-                todo!("Gérer la conversion des messages de contrôle si nécessaire")
+            ChatMessageKind::Ctrl(_ctrl) => {
+                // Extract a displayable text from control messages
+                let (id, content, reply_to_id) = match &_ctrl {
+                    ControlMessage::OpenConv {
+                        initial_message: Some(msg),
+                    } => {
+                        let text = match &msg.content {
+                            Content::Text(txt) => txt.clone(),
+                        };
+                        (msg.id, text, msg.reply_to)
+                    }
+                    ControlMessage::OpenConv {
+                        initial_message: None,
+                    } => (Uuid::new_v4(), String::new(), None),
+                    ControlMessage::EditMsg { id, new_content } => {
+                        let text = match new_content {
+                            Content::Text(txt) => format!("[edited] {txt}"),
+                        };
+                        (*id, text, None)
+                    }
+                    ControlMessage::DeleteMsg { id } => {
+                        (*id, "[message deleted]".to_string(), None)
+                    }
+                    ControlMessage::AckReception { id } => {
+                        (*id, String::new(), None)
+                    }
+                    ControlMessage::AckRead { id } => {
+                        (*id, String::new(), None)
+                    }
+                    ControlMessage::IsTyping => {
+                        (Uuid::new_v4(), String::new(), None)
+                    }
+                };
+
+                Self {
+                    id,
+                    conversation_id: value.conversation_id,
+                    sender_id: value.sender_id,
+                    content,
+                    timestamp: value.issued_at,
+                    status: MessageStatus::Sent,
+                    reply_to_id,
+                    local_id: None,
+                }
             }
         }
     }
