@@ -1,8 +1,10 @@
 //! TLS Messages structs
 //!
 
+use std::fmt::Debug;
+
 use crate::{
-    codec::Codec, macros::codec_enum, msgs::handhake::Handshake, reader::Reader,
+    codec::Codec, hex, macros::codec_enum, msgs::handhake::Handshake, reader::Reader,
     record_layer::ContentTypeName,
 };
 
@@ -10,7 +12,6 @@ pub mod client_hello;
 pub mod handhake;
 pub mod server_hello;
 
-#[derive(Debug)]
 pub enum Message {
     ChangeCipherSpec,
     Alert,
@@ -80,6 +81,21 @@ impl Codec for Message {
                 }
             }
             Message::ApplicationData(bytes) => Some(bytes.len()),
+        }
+    }
+}
+
+impl Debug for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ChangeCipherSpec => write!(f, "ChangeCipherSpec"),
+            Self::Alert => write!(f, "Alert"),
+            Self::ApplicationData(arg0) => f.debug_tuple("ApplicationData").field(arg0).finish(),
+            Self::Handshake { decoded, raw_bytes } => f
+                .debug_struct("Handshake")
+                .field("decoded", decoded)
+                .field("raw_bytes", &hex(raw_bytes))
+                .finish(),
         }
     }
 }

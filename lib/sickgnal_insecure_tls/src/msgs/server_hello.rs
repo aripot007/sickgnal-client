@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{
     codec::Codec,
     crypto::{NamedGroup, ciphersuite::CipherSuite, keyshare::KeyShareEntry},
@@ -113,7 +115,7 @@ impl Codec for ServerHello {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct ServerRandom([u8; 32]);
 
 impl ServerRandom {
@@ -151,6 +153,17 @@ impl Codec for ServerRandom {
     #[inline]
     fn encoded_length_hint(&self) -> Option<usize> {
         Some(32)
+    }
+}
+
+impl Debug for ServerRandom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self == &Self::HELLO_RETRY_REQUEST_RANDOM {
+            write!(f, "HELLO_RETRY_REQUEST_RANDOM")
+        } else {
+            let hex: String = self.0.iter().map(|d| format!("{:02x}", d)).collect();
+            write!(f, "{}", hex)
+        }
     }
 }
 

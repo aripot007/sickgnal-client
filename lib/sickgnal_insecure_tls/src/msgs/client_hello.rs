@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use rand::{RngCore, rngs::OsRng};
 
 use crate::{
@@ -5,6 +7,7 @@ use crate::{
     codec::{Codec, LengthSize, encode_length_prefixed_vector},
     connection::ServerName,
     crypto::{NamedGroup, SignatureScheme, ciphersuite::CipherSuite, keyshare::KeyShareEntry},
+    hex,
     msgs::{ExtensionType, ProtocolVersion},
     reader::Reader,
 };
@@ -75,7 +78,7 @@ impl Codec for ClientHello {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct ClientRandom([u8; 32]);
 
 impl ClientRandom {
@@ -83,6 +86,13 @@ impl ClientRandom {
         let mut r = [0; 32];
         OsRng.fill_bytes(&mut r);
         Self(r)
+    }
+}
+
+impl Debug for ClientRandom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let hex: String = self.0.iter().map(|d| format!("{:02x}", d)).collect();
+        write!(f, "{}", hex)
     }
 }
 

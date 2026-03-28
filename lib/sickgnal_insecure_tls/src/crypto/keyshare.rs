@@ -4,10 +4,11 @@ use crate::{
     codec::Codec,
     crypto::{NamedGroup, NamedGroupName},
     error::InvalidMessage,
+    hex,
     reader::Reader,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) enum KeyShareEntry {
     X25519(x25519_dalek::PublicKey),
 }
@@ -64,6 +65,17 @@ impl Codec for KeyShareEntry {
             KeyShareEntry::X25519(_) => size_of::<u16>() + 32,
         };
         Some(NamedGroup::LENGTH_HINT.unwrap() + payload_len)
+    }
+}
+
+impl Debug for KeyShareEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::X25519(arg0) => f
+                .debug_tuple("X25519")
+                .field(&hex(arg0.as_bytes()))
+                .finish(),
+        }
     }
 }
 
