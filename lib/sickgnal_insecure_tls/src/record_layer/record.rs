@@ -21,7 +21,14 @@ impl Codec for Record<Message> {
     fn encode(&self, dest: &mut Vec<u8>) {
         self.typ.encode(dest);
         self.version.encode(dest);
+        // keep space for the length
+        let len_start = dest.len();
+        u16::encode(&0, dest);
         self.payload.encode(dest);
+
+        let payload_len = dest.len() - (len_start + 2);
+
+        dest[len_start..len_start + 2].copy_from_slice(&u16::to_be_bytes(payload_len as u16));
     }
 
     fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {

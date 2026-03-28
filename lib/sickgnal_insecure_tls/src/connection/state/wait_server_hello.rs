@@ -17,10 +17,10 @@ use crate::{
 pub(super) struct WaitServerHelloState {
     /// Contains the handshake messages that need to be hashed
     /// to compute the Transcript Hash
-    transcript_hash_buffer: Vec<u8>,
+    pub(super) transcript_hash_buffer: Vec<u8>,
 
     /// The secrets for the key_share we sent
-    key_share_secrets: Vec<KeyShareSecret>,
+    pub(super) key_share_secrets: Vec<KeyShareSecret>,
 }
 
 impl WaitServerHelloState {

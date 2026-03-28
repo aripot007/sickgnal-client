@@ -55,16 +55,12 @@ impl Message {
 impl Codec for Message {
     // FIXME: remove bytes allocation
     fn encode(&self, dest: &mut Vec<u8>) {
-        let mut bytes: Vec<u8> = Vec::new();
         match self {
             Message::ChangeCipherSpec => todo!(),
             Message::Alert => todo!(),
-            Message::Handshake { raw_bytes, .. } => bytes.extend(raw_bytes),
+            Message::Handshake { raw_bytes, .. } => dest.extend(raw_bytes),
             Message::ApplicationData(..) => todo!(),
         }
-        let length: u16 = bytes.len().try_into().expect("payload too large");
-        dest.extend(length.to_be_bytes());
-        dest.extend(bytes);
     }
 
     fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {

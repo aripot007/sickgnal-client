@@ -1,3 +1,5 @@
+use tracing::trace;
+
 use crate::{
     codec::Codec,
     connection::encryption_state::EncryptionState,
@@ -6,23 +8,32 @@ use crate::{
     record_layer::{CIPHERTEXT_FRAGMENT_MAX_LEN, ContentType, record::Record},
 };
 
+/// Initial output buffer size
+///
+/// We use 16KB so it can (almost) hold a full max-sized TLS record
+const OUTPUT_BUF_SIZE: usize = 2 << 14;
+
 /// Encrypts, fragments and sends TLS records
 #[derive(Debug)]
 pub struct Sender {
     encryption_state: EncryptionState,
+    pub(super) output_buffer: Vec<u8>,
 }
 
 impl Sender {
     pub fn new() -> Self {
         Self {
             encryption_state: EncryptionState::new(),
+            output_buffer: Vec::with_capacity(OUTPUT_BUF_SIZE),
         }
     }
 
-    pub fn send(&mut self, msg: Message, dest: &mut Vec<u8>) {
+    pub fn send(&mut self, msg: Message) {
+        trace!("Sending message {:?}", msg);
+
         // Rekey if necessary
         if self.encryption_state.needs_rekey() {
-            self.rekey(dest);
+            self.rekey();
         }
 
         let mut payload = match msg.encoded_length_hint() {
@@ -45,12 +56,13 @@ impl Sender {
         // 214 GB (!). If they have the budget for that much RAM, they probably shouldn't be
         // using this anyway ...
         for fragment in fragments {
-            self.encryption_state.encrypt(fragment, typ, dest);
+            self.encryption_state
+                .encrypt(fragment, typ, &mut self.output_buffer);
         }
     }
 
     /// Update the key and send a KeyUpdate message
-    fn rekey(&mut self, dest: &mut Vec<u8>) {
+    fn rekey(&mut self) {
         todo!()
     }
 }

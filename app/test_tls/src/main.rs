@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use clap::Parser;
+use sickgnal_insecure_tls::client::ClientConfig as IClientConfig;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -60,11 +61,20 @@ pub async fn main() -> Result<(), Error> {
 
     info!("===== Testing Custom TLS");
 
+    let custom_config = IClientConfig::new();
+
     info!("Connecting to {}:{}", args.host, args.port);
-    let mut tcp_stream = TcpStream::connect((args.host.clone(), args.port)).await?;
+    let tcp_stream = TcpStream::connect((args.host.clone(), args.port)).await?;
 
     // Perform TLS handshake
-    sickgnal_insecure_tls::test(&mut tcp_stream).await.unwrap();
+    info!("Starting TLS handshake");
+    let mut tls_stream = custom_config.connect(args.host.clone(), tcp_stream).await?;
+
+    sickgnal_insecure_tls::test_read_response(&mut tls_stream)
+        .await
+        .unwrap();
+
+    drop(tls_stream);
 
     return Ok(());
 

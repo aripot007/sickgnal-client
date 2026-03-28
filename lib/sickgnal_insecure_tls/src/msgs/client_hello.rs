@@ -1,7 +1,9 @@
 use rand::{RngCore, rngs::OsRng};
 
 use crate::{
+    client::ClientConfig,
     codec::{Codec, LengthSize, encode_length_prefixed_vector},
+    connection::ServerName,
     crypto::{NamedGroup, SignatureScheme, ciphersuite::CipherSuite, keyshare::KeyShareEntry},
     msgs::{ExtensionType, ProtocolVersion},
     reader::Reader,
@@ -29,7 +31,11 @@ pub(crate) struct ClientHello {
 
 impl ClientHello {
     /// Create a ClientHello message with the supported defaults
-    pub(crate) fn new(x25519_public_key: x25519_dalek::PublicKey) -> Self {
+    pub(crate) fn new(
+        x25519_public_key: x25519_dalek::PublicKey,
+        config: &ClientConfig,
+        server_name: &ServerName,
+    ) -> Self {
         let mut ext = Vec::new();
 
         ext.push(ClientExtension::SupportedVersions);
@@ -43,6 +49,8 @@ impl ClientHello {
         ext.push(ClientExtension::KeyShare(vec![KeyShareEntry::X25519(
             x25519_public_key,
         )]));
+
+        // TODO: Add SNI
 
         Self {
             random: ClientRandom::new_random(),

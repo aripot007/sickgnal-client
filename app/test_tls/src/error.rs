@@ -12,4 +12,7 @@ pub enum Error {
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error("custom tls error : {0}")]
+    CustomTls(#[from] sickgnal_insecure_tls::error::Error),
 }

@@ -1,12 +1,20 @@
 mod wait_encrypted_extensions;
 mod wait_server_hello;
 
+use rand::rngs::OsRng;
 use wait_encrypted_extensions::*;
 use wait_server_hello::*;
+use x25519_dalek::{EphemeralSecret, PublicKey};
 
 use std::fmt::Debug;
 
-use crate::{error::Error, msgs::Message};
+use crate::{
+    client::ClientConfig,
+    connection::{Connection, ServerName, sender::Sender},
+    crypto::keyshare::KeyShareSecret,
+    error::Error,
+    msgs::{Message, client_hello::ClientHello, handhake::Handshake},
+};
 
 /// Represents the state of the TLS connection
 ///
@@ -76,10 +84,53 @@ pub(crate) enum State {
     Connected,
 }
 
-// TODO: Implement an output type for the state machine
-pub struct Output;
+pub struct Output<'conn> {
+    pub(super) sender: &'conn mut Sender,
+}
+
+impl<'conn> Output<'conn> {
+    pub fn send(&mut self, msg: Message) {
+        self.sender.send(msg)
+    }
+}
 
 impl State {
+    /// Perform a TLS handshake
+    pub fn handshake(
+        self,
+        config: &ClientConfig,
+        server_name: &ServerName,
+        output: &mut Output,
+    ) -> Result<Self, Error> {
+        if !matches!(self, State::Start) {
+            return Err(Error::InvalidState);
+        }
+
+        let secret = EphemeralSecret::random_from_rng(OsRng);
+
+        let hello = ClientHello::new(PublicKey::from(&secret), config, server_name);
+
+        let ch = Handshake::ClientHello(hello);
+
+        let msg = Message::handhake(ch);
+
+        // Save the handshake for the transcript
+        let transcript_hash_buffer = match &msg {
+            Message::Handshake { raw_bytes, .. } => raw_bytes.clone(),
+            _ => panic!("Message::handshake(..) should return a handshake"),
+        };
+
+        // send the handshake
+        output.send(msg);
+
+        let next = WaitServerHelloState {
+            transcript_hash_buffer,
+            key_share_secrets: vec![KeyShareSecret::X25519(secret)],
+        };
+
+        Ok(State::WaitServerHello(next))
+    }
+
     /// Handle an incoming [`Message`]
     pub fn handle(self, input: Message, output: &mut Output) -> Result<Self, Error> {
         // Simply pass the call to the underlying state
@@ -91,6 +142,20 @@ impl State {
             State::WaitCertificateVerify => todo!(),
             State::WaitFinished => todo!(),
             State::Connected => todo!(),
+        }
+    }
+
+    /// Returns `true` when the state needs to read data
+    pub fn wants_read(&self) -> bool {
+        match self {
+            State::Start => false,
+
+            State::WaitServerHello(..)
+            | State::WaitEncryptedExtensions(..)
+            | State::WaitCertificate
+            | State::WaitCertificateVerify
+            | State::WaitFinished
+            | State::Connected => true,
         }
     }
 }

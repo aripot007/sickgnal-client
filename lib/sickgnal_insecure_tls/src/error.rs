@@ -6,9 +6,29 @@ pub enum Error {
     #[error("received an invalid message : {0:?}")]
     InvalidMessage(InvalidMessage),
 
+    #[error("io error : {0}")]
+    IoError(std::io::ErrorKind),
+
+    /// When we are trying to do something invalid for the state we are in
+    #[error("invalid state")]
+    InvalidState,
+
+    /// When we got an error during the handshake and still try
+    /// to use the [`Connection`]
+    ///
+    /// [`Connection`]: crate::connection::Connection
+    #[error("invalid state : unfinished handshake")]
+    UnfinishedHandshake,
+
     /// When we receive a HelloRetryRequest, which we don't support yet
     #[error("hello_retry_request are not supported yet")]
     UnsupportedHelloRetryRequest,
+}
+
+impl From<std::io::Error> for Error {
+    fn from(error: std::io::Error) -> Self {
+        Error::IoError(error.kind())
+    }
 }
 
 #[derive(Debug, Clone)]
