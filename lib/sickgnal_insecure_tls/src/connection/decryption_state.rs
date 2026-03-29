@@ -1,11 +1,14 @@
 use std::fmt::Debug;
 use std::iter::zip;
 
-use aes_gcm::AeadInPlace;
 use aes_gcm::aes::cipher::Unsigned;
-use aes_gcm::{AeadCore, Aes128Gcm};
-use sha2::digest::generic_array::GenericArray;
+use aes_gcm::{AeadCore, Aes128Gcm, KeyInit};
+use aes_gcm::{AeadInPlace, KeySizeUser};
+use hkdf::Hkdf;
+use sha2::Sha256;
+use tracing::trace;
 
+use crate::crypto::derive_secret_with_length;
 use crate::error::{Error, InvalidMessage};
 use crate::hex;
 use crate::msgs::Message;
@@ -13,10 +16,14 @@ use crate::reader::Reader;
 use crate::record_layer::ContentType;
 use crate::record_layer::record::{EncodedPayload, Record};
 
+const KEY_SIZE: usize = <Aes128Gcm as KeySizeUser>::KeySize::USIZE;
+const NONCE_SIZE: usize = <Aes128Gcm as AeadCore>::NonceSize::USIZE;
+
 /// Handles decrypting records
 ///
 /// We only handle the TLS_AES_128_GCM_SHA256 ciphersuite
 #[derive(Debug)]
+#[expect(private_interfaces)]
 pub(crate) enum DecryptionState {
     Disabled,
     Enabled(InnerState),
@@ -31,6 +38,18 @@ impl DecryptionState {
     #[inline]
     pub fn enabled(&self) -> bool {
         matches!(self, Self::Enabled(..))
+    }
+
+    /// Set the new Secret to use for traffic key calculation
+    ///
+    /// This recomputes the traffic keys and enables decryption if it was not enabled
+    ///
+    /// # Panic
+    ///
+    /// Panics if `secret` does not have a valid size for a PRK
+    pub fn set_new_traffic_secret(&mut self, secret: &[u8]) {
+        trace!("new traffic secret");
+        *self = DecryptionState::Enabled(InnerState::new(secret))
     }
 
     /// Decrypt an encrypted fragment
@@ -52,11 +71,30 @@ impl DecryptionState {
 struct InnerState {
     aead: Aes128Gcm,
     sequence_number: u64,
-    server_write_iv: GenericArray<u8, <Aes128Gcm as AeadCore>::NonceSize>,
+    iv: Vec<u8>,
 }
 
 impl InnerState {
-    const NONCE_SIZE: usize = <Aes128Gcm as AeadCore>::NonceSize::USIZE;
+    /// Create a new decryption state from a secret
+    ///
+    /// # Panic
+    ///
+    /// Panics if `secret` does not have a valid size for a PRK
+    pub fn new(secret: &[u8]) -> Self {
+        let hk =
+            Hkdf::<Sha256>::from_prk(secret).expect("secret should have a valid length for a PRK");
+
+        let key = derive_secret_with_length(&hk, "key", b"", KEY_SIZE as u16);
+        let iv = derive_secret_with_length(&hk, "iv", b"", NONCE_SIZE as u16);
+
+        let aead = Aes128Gcm::new_from_slice(&key).expect("dervied key should have a valid length");
+
+        Self {
+            aead,
+            sequence_number: 0,
+            iv,
+        }
+    }
 
     /// Decrypt an encrypted fragment
     ///
@@ -75,14 +113,13 @@ impl InnerState {
         .concat();
 
         // derive the per-record nonce
-        let mut nonce = [0u8; Self::NONCE_SIZE];
+        let mut nonce = [0u8; NONCE_SIZE];
 
         // Encode the sequence number at the end of the buffer
-        nonce[Self::NONCE_SIZE - size_of::<u64>()..]
-            .copy_from_slice(&self.sequence_number.to_be_bytes());
+        nonce[NONCE_SIZE - size_of::<u64>()..].copy_from_slice(&self.sequence_number.to_be_bytes());
 
         // XOR with the server_write_iv
-        for (n, iv) in zip(&mut nonce, self.server_write_iv) {
+        for (n, iv) in zip(&mut nonce, &self.iv) {
             *n ^= iv;
         }
 
@@ -118,7 +155,7 @@ impl Debug for InnerState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InnerState")
             .field("sequence_number", &self.sequence_number)
-            .field("server_write_iv", &hex(&self.server_write_iv))
+            .field("server_write_iv", &hex(&self.iv))
             .finish_non_exhaustive()
     }
 }

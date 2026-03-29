@@ -1,7 +1,7 @@
 use std::mem;
 
 use bytes::BytesMut;
-use tracing::trace;
+use tracing::{debug, trace};
 
 use crate::{
     connection::{
@@ -13,7 +13,7 @@ use crate::{
     msgs::Message,
     reader::Reader,
     record_layer::{
-        ContentTypeName,
+        ContentType, ContentTypeName,
         deframer::{Deframer, handshake::HandshakeDeframer},
     },
 };
@@ -45,6 +45,13 @@ impl Receiver {
         }
     }
 
+    /// Set the new Secret to use for traffic key calculation
+    ///
+    /// This recomputes the traffic keys and enables decryption if it was not enabled
+    pub fn set_new_traffic_secret(&mut self, secret: &[u8]) {
+        self.decryption_state.set_new_traffic_secret(secret);
+    }
+
     /// Process the packets we received in `input_buffer`
     pub fn process_new_packets(
         &mut self,
@@ -68,7 +75,13 @@ impl Receiver {
         let mut deframer = Deframer::new(&mut input_buffer);
 
         while let Some(record) = deframer.next().transpose()? {
-            trace!("Received : {:?}", record);
+            trace!("received : {:?}", record);
+
+            // Discard change_cipher_spec messages if we need to
+            if st.discard_ccs(&record)? {
+                debug!("discarding CCS");
+                continue;
+            }
 
             // Decrypt the payload if necessary
             let msg = if self.decryption_state.enabled() {

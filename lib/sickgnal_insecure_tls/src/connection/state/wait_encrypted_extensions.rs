@@ -1,3 +1,4 @@
+use hkdf::Hkdf;
 use sha2::Sha256;
 
 use core::fmt::Debug;
@@ -5,7 +6,6 @@ use core::fmt::Debug;
 use crate::{
     connection::state::{Output, ReceiveEvent, State},
     error::Error,
-    msgs::Message,
 };
 
 /// We received the ServerHello and are waiting for the encrypted extensions
@@ -13,8 +13,8 @@ pub(super) struct WaitEncryptedExtensionsState {
     /// The running transcript hash
     pub(crate) transcript_hasher: Sha256,
 
-    /// The shared secret
-    pub(crate) shared_secret: x25519_dalek::SharedSecret,
+    /// The Hkdf seeded with the handshake_secret
+    pub(crate) handshake_secret_hkdf: Hkdf<Sha256>,
 }
 
 impl Debug for WaitEncryptedExtensionsState {

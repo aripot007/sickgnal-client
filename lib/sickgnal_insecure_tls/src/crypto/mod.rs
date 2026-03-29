@@ -1,7 +1,52 @@
+use hkdf::Hkdf;
+use sha2::{Sha256, digest::OutputSizeUser};
+
 use crate::macros::codec_enum;
 
 pub mod ciphersuite;
 pub mod keyshare;
+
+/// The Derive-Secret function as defined in [RFC8446], with a default length equal to the hash size.
+///
+/// Equivalent to calling [`derive_secret_with_length`] with the length of the
+/// hash as the `length` parameter.
+///
+/// [RFC8446]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.1
+///
+/// Takes the [`Hkdf`] with the already-computed PRK instead of the `secret` argument from the RFC
+#[inline]
+pub fn derive_secret(hkdf: &Hkdf<Sha256>, label: &str, transcript_hash: &[u8]) -> Vec<u8> {
+    derive_secret_with_length(hkdf, label, transcript_hash, Sha256::output_size() as u16)
+}
+
+/// The Derive-Secret function as defined in [RFC8446#section7.1](https://datatracker.ietf.org/doc/html/rfc8446#section-7.1)
+///
+/// Takes the [`Hkdf`] with the already-computed PRK instead of the `secret` argument from the RFC
+///
+/// # Panic
+///
+/// Panics if `length` is an invalid length for Hkdf-Expand (if `length` > `255 * hash_length`)
+pub fn derive_secret_with_length(
+    hkdf: &Hkdf<Sha256>,
+    label: &str,
+    transcript_hash: &[u8],
+    length: u16,
+) -> Vec<u8> {
+    let mut output = vec![0; length as usize];
+
+    hkdf.expand_multi_info(
+        &[
+            &length.to_be_bytes(),
+            b"tls13 ",
+            label.as_ref(),
+            transcript_hash,
+        ],
+        &mut output,
+    )
+    .expect("invalid length for Hkdf-Expand");
+
+    return output;
+}
 
 codec_enum! {
 

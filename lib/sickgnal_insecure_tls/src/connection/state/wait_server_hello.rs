@@ -1,9 +1,13 @@
+use hkdf::Hkdf;
 use sha2::{Digest, Sha256};
 use tracing::{debug, trace};
 
 use crate::{
     connection::state::{Output, ReceiveEvent, State, WaitEncryptedExtensionsState},
-    crypto::keyshare::{KeyShareEntry, KeyShareSecret},
+    crypto::{
+        derive_secret,
+        keyshare::{KeyShareEntry, KeyShareSecret},
+    },
     error::{Error, InvalidMessage},
     msgs::{
         ProtocolVersion,
@@ -93,9 +97,32 @@ impl WaitServerHelloState {
         transcript_hasher.update(self.transcript_hash_buffer);
         transcript_hasher.update(sh_bytes);
 
+        // Compute the server_handshake_traffic_secret to decrypt the next server records
+
+        // We still need to follow the full key schedule even if we don't use PSK :
+        // "if PSK is not in use, Early Secret will still be HKDF-Extract(0, 0)"
+
+        // "If a given secret is not available, then the 0-value consisting of a
+        // string of Hash.length bytes set to zeros is used"
+        let zeros = vec![0u8; Sha256::output_size()];
+
+        // Early Secret = HKDF-Extract(0, PSK)
+        let hkdf = Hkdf::<Sha256>::new(Some(&zeros), &zeros);
+
+        // Handshake Secret = HKDF-Extract(Derive-Secret(Early Secret, "derived", ""), (EC)DHE)
+        let derived = derive_secret(&hkdf, "derived", b"");
+        let hkdf = Hkdf::<Sha256>::new(Some(&derived), shared_secret.as_bytes());
+
+        let transcript_hash = transcript_hasher.clone().finalize();
+        let server_hs_traffic_secret = derive_secret(&hkdf, "s hs traffic", &transcript_hash);
+
+        output
+            .receiver
+            .set_new_traffic_secret(&server_hs_traffic_secret);
+
         let next_state = WaitEncryptedExtensionsState {
             transcript_hasher,
-            shared_secret,
+            handshake_secret_hkdf: hkdf,
         };
 
         trace!("ServerHello received, next state : {:?}", next_state);

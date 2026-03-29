@@ -11,11 +11,14 @@ use std::fmt::Debug;
 
 use crate::{
     client::ClientConfig,
-    connection::{Connection, ServerName, receiver::Receiver, sender::Sender},
+    connection::{ServerName, receiver::Receiver, sender::Sender},
     crypto::keyshare::KeyShareSecret,
     error::Error,
-    msgs::{
-        Message, client_hello::ClientHello, handhake::Handshake, server_hello::ServerHelloPayload,
+    msgs::{Message, client_hello::ClientHello, handhake::Handshake},
+    reader::Reader,
+    record_layer::{
+        ContentType,
+        record::{EncodedPayload, Record},
     },
 };
 
@@ -61,6 +64,7 @@ use crate::{
 ///                           CONNECTED
 ///
 #[derive(Debug)]
+#[expect(private_interfaces)]
 pub(crate) enum State {
     /// Initial state when the client is created
     Start,
@@ -145,6 +149,28 @@ impl State {
         };
 
         Ok(State::WaitServerHello(next))
+    }
+
+    /// Decide if we should discard the change_cipher_spec message.
+    ///
+    /// Returns `true` if the record should be discarded
+    pub fn discard_ccs(&mut self, record: &Record<EncodedPayload>) -> Result<bool, Error> {
+        // don't discard non ccs messages
+        if record.typ != ContentType::ChangeCipherSpec {
+            return Ok(false);
+        }
+
+        // We should only accept ccs after our ClientHello and before the server's Finished,
+        if matches!(self, State::Start) || !self.is_handshaking() {
+            return Ok(false);
+        }
+
+        // Decode the message to check that its a valid ccs
+        let mut reader = Reader::new(&record.payload.0);
+        Message::decode(&mut reader, ContentType::ChangeCipherSpec)?;
+
+        // discard it
+        Ok(true)
     }
 
     /// Returns `true` if this state is a handshaking state

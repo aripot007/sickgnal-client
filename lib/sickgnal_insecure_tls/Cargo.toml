@@ -9,6 +9,7 @@ license.workspace = true
 aes-gcm = "0.10.3"
 bytes = "1.11.1"
 futures = "0.3.31"
+hkdf = "0.12.4"
 rand = "0.8.0"
 sha2 = "0.10.9"
 thiserror = "2.0.18"
