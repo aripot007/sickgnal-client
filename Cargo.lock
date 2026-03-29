@@ -4938,6 +4938,7 @@ name = "sickgnal_insecure_tls"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
+ "bytes",
  "futures",
  "rand 0.8.5",
  "sha2",

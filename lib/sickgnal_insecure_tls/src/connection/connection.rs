@@ -23,11 +23,6 @@ use crate::{
     },
 };
 
-/// Initial input buffer size
-///
-/// We use 16KB so it can (almost) hold a full max-sized TLS record
-const INPUT_BUF_SIZE: usize = 2 << 14;
-
 /// The server name to connect to
 ///
 /// Used for peer verification
@@ -35,8 +30,6 @@ pub type ServerName = str;
 
 #[derive(Debug)]
 pub struct Connection {
-    input_buffer: Vec<u8>,
-    data_buffer: Vec<u8>,
     state: Result<State, Error>,
     config: ClientConfig,
     receiver: Receiver,
@@ -47,8 +40,6 @@ impl Connection {
     /// Create a new TLS connection
     pub fn new(config: ClientConfig) -> Self {
         Self {
-            input_buffer: vec![0; INPUT_BUF_SIZE],
-            data_buffer: Vec::new(),
             config,
             state: Ok(State::Start),
             receiver: Receiver::new(),
@@ -104,14 +95,14 @@ impl Connection {
         &mut self,
         reader: &mut R,
     ) -> Result<usize, Error> {
-        let nb_read = reader.read_buf(&mut self.input_buffer).await?;
+        let nb_read = reader.read_buf(&mut self.receiver.input_buffer).await?;
         Ok(nb_read)
     }
 
     /// Returns `true` if the connection needs to read more data from the network
     pub fn wants_read(&self) -> bool {
         // FIXME: there should be other cases where we want to read
-        self.data_buffer.is_empty()
+        self.receiver.input_buffer.is_empty()
     }
 
     /// Returns `true` when the connection needs to write data to the network
@@ -121,11 +112,6 @@ impl Connection {
 
     /// Process the new packets left in the input buffer
     fn process_new_packets(&mut self) -> Result<(), Error> {
-        let mut deframer = Deframer::new(&mut self.input_buffer);
-
-        while let Some(record) = deframer.next().transpose()? {
-            todo!()
-        }
-        Ok(())
+        todo!()
     }
 }
