@@ -1,7 +1,8 @@
 use hkdf::Hkdf;
-use sha2::{Sha256, digest::OutputSizeUser};
+use sha2::{Digest, Sha256};
+use tracing::trace;
 
-use crate::macros::codec_enum;
+use crate::{hex_display::HexDisplayExt, macros::codec_enum};
 
 pub mod ciphersuite;
 pub mod keyshare;
@@ -11,12 +12,20 @@ pub mod keyshare;
 /// Equivalent to calling [`hkdf_expand_label`] with the length of the
 /// hash as the `length` parameter.
 ///
+/// An empty transcript hash (denoted as an empty string in the RFC), MUST be passed as `None`, and
+/// not as `Some(b"")`.
+///
 /// [RFC8446]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.1
 ///
 /// Takes the [`Hkdf`] with the already-computed PRK instead of the `secret` argument from the RFC
 #[inline]
-pub fn derive_secret(hkdf: &Hkdf<Sha256>, label: &str, transcript_hash: &[u8]) -> Vec<u8> {
-    hkdf_expand_label(hkdf, label, transcript_hash, Sha256::output_size() as u16)
+pub fn derive_secret(hkdf: &Hkdf<Sha256>, label: &str, transcript_hash: Option<&[u8]>) -> Vec<u8> {
+    let context = match transcript_hash {
+        Some(h) => h,
+        None => &Sha256::digest(b""),
+    };
+
+    hkdf_expand_label(hkdf, label, context, Sha256::output_size() as u16)
 }
 
 /// The Derive-Secret function as defined in [RFC8446#section7.1](https://datatracker.ietf.org/doc/html/rfc8446#section-7.1)
@@ -26,24 +35,35 @@ pub fn derive_secret(hkdf: &Hkdf<Sha256>, label: &str, transcript_hash: &[u8]) -
 /// # Panic
 ///
 /// Panics if `length` is an invalid length for Hkdf-Expand (if `length` > `255 * hash_length`)
-pub fn hkdf_expand_label(
-    hkdf: &Hkdf<Sha256>,
-    label: &str,
-    transcript_hash: &[u8],
-    length: u16,
-) -> Vec<u8> {
+pub fn hkdf_expand_label(hkdf: &Hkdf<Sha256>, label: &str, context: &[u8], length: u16) -> Vec<u8> {
     let mut output = vec![0; length as usize];
 
-    hkdf.expand_multi_info(
-        &[
-            &length.to_be_bytes(),
-            b"tls13 ",
-            label.as_ref(),
-            transcript_hash,
-        ],
-        &mut output,
-    )
-    .expect("invalid length for Hkdf-Expand");
+    trace!(
+        "Hkdf-Expand-Label(?, {:?}, {}, {})",
+        label,
+        context.hex(),
+        length
+    );
+
+    let mut info = Vec::from(length.to_be_bytes());
+
+    // label length
+    info.push(6 + label.len() as u8);
+
+    // label
+    info.extend(b"tls13 ");
+    info.extend(label.as_bytes());
+
+    // context length
+    info.push(context.len() as u8);
+
+    // context
+    info.extend_from_slice(context);
+
+    trace!("label : {}", info.pretty_hex());
+
+    hkdf.expand(&info, &mut output)
+        .expect("invalid length for Hkdf-Expand");
 
     return output;
 }
