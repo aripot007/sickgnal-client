@@ -141,7 +141,9 @@ impl InnerState {
         }
 
         // Decode the message
-        let content_type = payload.pop().ok_or(InvalidMessage::TooShort)?;
+        let content_type = payload
+            .pop()
+            .ok_or(InvalidMessage::TooShortFor("encrypted content_type"))?;
 
         let mut reader = Reader::new(&payload);
 

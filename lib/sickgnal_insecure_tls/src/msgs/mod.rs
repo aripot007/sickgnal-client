@@ -15,6 +15,7 @@ use crate::{
     record_layer::{ContentType, ContentTypeName},
 };
 
+pub mod certificate;
 pub mod client_hello;
 pub mod handhake;
 pub mod server_hello;
@@ -77,7 +78,7 @@ impl Message {
 
         Ok(match typ {
             ContentTypeName::ChangeCipherSpec => {
-                if reader.take_byte()? != 0x01 {
+                if reader.take_byte_for("ccs")? != 0x01 {
                     return Err(InvalidMessage::InvalidChangeCipherSpec);
                 } else {
                     Message::ChangeCipherSpec

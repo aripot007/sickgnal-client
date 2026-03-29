@@ -50,7 +50,7 @@ impl Codec for KeyShareEntry {
                 }
 
                 let mut bytes = [0; 32];
-                bytes.copy_from_slice(buf.take(len as usize)?);
+                bytes.copy_from_slice(buf.take_for("keyshare", len as usize)?);
                 let key = x25519_dalek::PublicKey::from(bytes);
 
                 Ok(KeyShareEntry::X25519(key))

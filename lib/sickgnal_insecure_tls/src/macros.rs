@@ -138,7 +138,7 @@ macro_rules! codec_enum {
 
             #[inline]
             fn decode(buf: &mut crate::reader::Reader) -> Result<Self, crate::error::InvalidMessage> {
-                Ok($struct_name(<$utype>::decode(buf)?))
+                Ok($struct_name(<$utype>::decode_for(stringify!($struct_name), buf)?))
             }
 
             #[inline]

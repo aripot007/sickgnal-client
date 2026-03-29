@@ -2,7 +2,7 @@ use crate::{
     codec::Codec,
     error::InvalidMessage,
     macros::codec_enum,
-    msgs::{client_hello::ClientHello, server_hello::ServerHello},
+    msgs::{certificate::CertificateMessage, client_hello::ClientHello, server_hello::ServerHello},
     reader::Reader,
     u24::U24,
 };
@@ -32,6 +32,7 @@ pub enum Handshake {
     ClientHello(ClientHello),
     ServerHello(ServerHello),
     EncryptedExtensions,
+    Certificate(CertificateMessage),
 }
 
 impl Handshake {
@@ -41,10 +42,12 @@ impl Handshake {
             Handshake::ClientHello(_) => HandshakeType::ClientHello,
             Handshake::ServerHello(_) => HandshakeType::ServerHello,
             Handshake::EncryptedExtensions => HandshakeType::EncryptedExtensions,
+            Handshake::Certificate(..) => HandshakeType::Certificate,
         }
     }
 }
 
+// FIXME: we shouldn't have to encode every handshake
 impl Codec for Handshake {
     fn encode(&self, dest: &mut Vec<u8>) {
         // HandshakeType msg_type
@@ -58,6 +61,7 @@ impl Codec for Handshake {
 
             // We shouldn't have to encode this, but its just an empty list
             Handshake::EncryptedExtensions => u16::encode(&0, &mut bytes),
+            Handshake::Certificate(..) => panic!("cannot encode certs"),
         }
 
         let length: U24 = U24(bytes.len() as u32).into();
@@ -73,7 +77,7 @@ impl Codec for Handshake {
         let length = U24::decode(buf)?;
 
         // Try to take the payload length
-        let payload = buf.take(length.0 as usize)?;
+        let payload = buf.take_for("handshake", length.0 as usize)?;
         let mut buf = Reader::new(&payload);
 
         let handshake = match msg_type {
@@ -89,10 +93,13 @@ impl Codec for Handshake {
                 Handshake::EncryptedExtensions
             }
 
+            HandshakeType::Certificate => {
+                Handshake::Certificate(CertificateMessage::decode(&mut buf)?)
+            }
+
             // Not supported yet
             HandshakeType::NewSessionTicket => todo!(),
             HandshakeType::EndOfEarlyData => todo!(),
-            HandshakeType::Certificate => todo!(),
             HandshakeType::CertificateRequest => todo!(),
             HandshakeType::CertificateVerify => todo!(),
             HandshakeType::Finished => todo!(),
@@ -111,6 +118,7 @@ impl Codec for Handshake {
             Handshake::ClientHello(ch) => ch.encoded_length_hint(),
             Handshake::ServerHello(sh) => sh.encoded_length_hint(),
             Handshake::EncryptedExtensions => u16::LENGTH_HINT,
+            Handshake::Certificate(..) => None,
         }
     }
 }

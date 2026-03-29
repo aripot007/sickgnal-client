@@ -57,7 +57,7 @@ impl Codec for ServerHello {
 
         // legacy_session_id_echo should be an empty array (0x00) since
         // that's what we send in our ClientHello
-        let sess_id = buf.take_byte()?;
+        let sess_id = buf.take_byte_for("sh_sess_id")?;
 
         if sess_id != 0x00 {
             return Err(InvalidMessage::IllegalParameter);
@@ -66,7 +66,7 @@ impl Codec for ServerHello {
         let cipher_suite = CipherSuite::decode(buf)?;
 
         // legacy_compression_method should be 0
-        let compression = buf.take_byte()?;
+        let compression = buf.take_byte_for("sh_compression")?;
 
         if compression != 0 {
             return Err(InvalidMessage::IllegalParameter);
@@ -74,7 +74,7 @@ impl Codec for ServerHello {
 
         // Extensions
         let len = u16::decode(buf)?;
-        let exts_payload = buf.take(len as usize)?;
+        let exts_payload = buf.take_for("extensions", len as usize)?;
         let mut exts_reader = Reader::new(&exts_payload);
 
         let mut extensions = ServerExtensions::new();
@@ -146,7 +146,7 @@ impl Codec for ServerRandom {
 
     fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         let mut random = [0; 32];
-        random.copy_from_slice(buf.take(32)?);
+        random.copy_from_slice(buf.take_for("server_random", 32)?);
         Ok(ServerRandom(random))
     }
 
@@ -215,7 +215,7 @@ impl ServerExtensions {
         let typ = ExtensionType::decode(buf)?;
 
         let len = u16::decode(buf)?;
-        let mut buf = Reader::new(buf.take(len as usize)?);
+        let mut buf = Reader::new(buf.take_for("extensions", len as usize)?);
 
         let typ =
             ExtensionTypeName::try_from(typ).map_err(|_| InvalidMessage::UnsupportedExtension)?;
@@ -245,14 +245,14 @@ impl ServerExtensions {
                     return Err(InvalidMessage::IllegalParameter);
                 }
 
-                let len = u16::decode(&mut buf)?;
+                let len = u16::decode_for("cookie", &mut buf)?;
 
                 // The cookie must not be empty
                 if len == 0 {
                     return Err(InvalidMessage::IllegalParameter);
                 }
 
-                let bytes = Vec::from(buf.take(len as usize)?);
+                let bytes = Vec::from(buf.take_for("cookie", len as usize)?);
 
                 self.cookie = Some(bytes)
             }

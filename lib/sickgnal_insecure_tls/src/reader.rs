@@ -22,16 +22,24 @@ impl<'a> Reader<'a> {
 
     /// Take exacly `count` bytes from the buffer
     ///
-    /// Returns a [`InvalidMessage::TooShort`] if the buffer does not contain
+    /// Returns `None` if the buffer does not contain
     /// enough bytes
-    pub fn take(&mut self, count: usize) -> Result<&'a [u8], InvalidMessage> {
-        let (consumed, remaining) = self
-            .buf
-            .split_at_checked(count)
-            .ok_or(InvalidMessage::TooShort)?;
+    pub fn take(&mut self, count: usize) -> Option<&'a [u8]> {
+        let (consumed, remaining) = self.buf.split_at_checked(count)?;
 
         self.buf = remaining;
-        Ok(consumed)
+        Some(consumed)
+    }
+
+    /// Convenience function for [`Self::take`] to return an [`InvalidMessage::TooShortFor`] error
+    /// instead of `None`
+    #[inline]
+    pub fn take_for(
+        &mut self,
+        name: &'static str,
+        count: usize,
+    ) -> Result<&'a [u8], InvalidMessage> {
+        self.take(count).ok_or(InvalidMessage::TooShortFor(name))
     }
 
     /// Take all the bytes available in the buffer.
@@ -43,8 +51,15 @@ impl<'a> Reader<'a> {
     }
 
     /// Take a single byte from the buffer
-    pub fn take_byte(&mut self) -> Result<u8, InvalidMessage> {
-        Ok(self.take(1)?[0])
+    pub fn take_byte(&mut self) -> Option<u8> {
+        Some(self.take(1)?[0])
+    }
+
+    /// Convenience function for [`Self::take_byte`] to return an [`InvalidMessage::TooShortFor`] error
+    /// instead of `None`
+    #[inline]
+    pub fn take_byte_for(&mut self, name: &'static str) -> Result<u8, InvalidMessage> {
+        self.take_byte().ok_or(InvalidMessage::TooShortFor(name))
     }
 
     /// Returns the number of bytes available in this reader

@@ -19,7 +19,8 @@ impl Codec for U24 {
         let mut bytes = [0; 4];
 
         // Set the last 3 bytes from the reader
-        bytes[1..].copy_from_slice(buf.take(3)?);
+        let decoded = buf.take_for("u24", 3)?;
+        bytes[1..].copy_from_slice(decoded);
 
         Ok(Self(u32::from_be_bytes(bytes)))
     }

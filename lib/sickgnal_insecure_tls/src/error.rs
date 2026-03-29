@@ -37,7 +37,7 @@ pub enum InvalidMessage {
     UnexpectedMessage,
 
     /// When the message was shorter than the expected length
-    TooShort,
+    TooShortFor(&'static str),
 
     /// When the protocol version is not known
     UnknownProtocolVersion,
@@ -80,6 +80,9 @@ pub enum InvalidMessage {
 
     /// When we failed to decrypt a message
     BadMacError,
+
+    /// When there is an error decoding a certificate
+    CertDecodeError,
 }
 
 impl From<InvalidMessage> for Error {
