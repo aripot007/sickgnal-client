@@ -105,15 +105,24 @@ macro_rules! codec_enum {
             }
         }
 
-        impl ::core::convert::TryFrom<$struct_name> for $enum_name {
+        impl ::core::convert::TryFrom<$utype> for $enum_name {
             type Error = ();
 
-            fn try_from(value: $struct_name) -> ::core::result::Result<Self, Self::Error> {
+            fn try_from(value: $utype) -> ::core::result::Result<Self, Self::Error> {
                 use self::$enum_name::*;
-                Ok(match value.0 {
+                Ok(match value {
                     $($var_value => $var_name,)*
                     _ => return Err(()),
                 })
+            }
+        }
+
+        impl ::core::convert::TryFrom<$struct_name> for $enum_name {
+            type Error = ();
+
+            #[inline]
+            fn try_from(value: $struct_name) -> ::core::result::Result<Self, Self::Error> {
+                $enum_name::try_from(value.0)
             }
         }
 
