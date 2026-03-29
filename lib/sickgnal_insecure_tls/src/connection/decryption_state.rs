@@ -109,9 +109,9 @@ impl InnerState {
 
         // additional_data is the TLSCiphertext header
         let additional_data: &[u8] = &[
-            &record.typ.0.to_be_bytes()[..],       // opaque_type
-            &record.version.0.to_be_bytes(),       // legacy_record_version
-            &record.payload.0.len().to_be_bytes(), // length
+            &record.typ.0.to_be_bytes()[..],                // opaque_type
+            &record.version.0.to_be_bytes(),                // legacy_record_version
+            &(record.payload.0.len() as u16).to_be_bytes(), // length
         ]
         .concat();
 

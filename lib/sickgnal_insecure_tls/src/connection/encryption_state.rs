@@ -189,7 +189,7 @@ impl InnerState {
         let additional_data: &[u8] = &[
             &ContentType::ApplicationData.0.to_be_bytes()[..], // opaque_type
             &ProtocolVersion::TLSv1_2.0.to_be_bytes(),         // legacy_record_version
-            &ciphertext_length.to_be_bytes(),                  // length
+            &(ciphertext_length as u16).to_be_bytes(),         // length
         ]
         .concat();
 
