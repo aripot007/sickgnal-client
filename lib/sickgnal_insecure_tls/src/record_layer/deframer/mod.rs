@@ -6,7 +6,7 @@ use bytes::BytesMut;
 use thiserror::Error;
 
 use crate::{
-    codec::Codec,
+    codec::Decode,
     error::{Error, InvalidMessage},
     msgs::ProtocolVersion,
     reader::Reader,

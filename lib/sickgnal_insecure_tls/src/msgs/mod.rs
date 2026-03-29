@@ -6,11 +6,11 @@ use std::fmt::Debug;
 use tracing::error;
 
 use crate::{
-    codec::Codec,
+    codec::Encode,
     error::InvalidMessage,
     hex_display::HexDisplayExt,
     macros::codec_enum,
-    msgs::handhake::Handshake,
+    msgs::{client_hello::ClientHello, handhake::Handshake},
     reader::Reader,
     record_layer::{ContentType, ContentTypeName},
 };
@@ -38,12 +38,12 @@ pub enum Message {
 }
 
 impl Message {
-    pub fn handhake(handshake: Handshake) -> Self {
+    pub fn client_hello(hello: ClientHello) -> Self {
         let mut raw_bytes = Vec::new();
-        handshake.encode(&mut raw_bytes);
+        hello.encode(&mut raw_bytes);
 
         Message::Handshake {
-            decoded: handshake,
+            decoded: Handshake::ClientHello(hello),
             raw_bytes,
         }
     }

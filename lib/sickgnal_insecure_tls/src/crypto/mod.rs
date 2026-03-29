@@ -1,8 +1,7 @@
 use hkdf::Hkdf;
 use sha2::{Digest, Sha256};
-use tracing::trace;
 
-use crate::{hex_display::HexDisplayExt, macros::codec_enum};
+use crate::macros::codec_enum;
 
 pub mod ciphersuite;
 pub mod keyshare;

@@ -1,10 +1,9 @@
 use std::fmt::Debug;
 
 use crate::{
-    codec::Codec,
+    codec::Encode,
     hex_display::HexDisplayExt,
-    msgs::{Message, ProtocolVersion, handhake::Handshake},
-    reader::Reader,
+    msgs::{Message, ProtocolVersion},
     record_layer::ContentType,
 };
 
@@ -17,7 +16,7 @@ pub struct Record<P> {
     pub payload: P,
 }
 
-impl Codec for Record<Message> {
+impl Encode for Record<Message> {
     fn encode(&self, dest: &mut Vec<u8>) {
         self.typ.encode(dest);
         self.version.encode(dest);
@@ -29,10 +28,6 @@ impl Codec for Record<Message> {
         let payload_len = dest.len() - (len_start + 2);
 
         dest[len_start..len_start + 2].copy_from_slice(&u16::to_be_bytes(payload_len as u16));
-    }
-
-    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
-        todo!()
     }
 }
 

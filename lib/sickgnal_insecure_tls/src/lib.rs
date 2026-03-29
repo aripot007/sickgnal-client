@@ -1,6 +1,6 @@
 use crate::{
     client::{ClientConfig, tls_stream::TlsStream},
-    codec::Codec,
+    codec::{Decode, Encode},
     connection::ConnectionConfig,
     error::Error,
     hex_display::HexDisplayExt,
@@ -38,12 +38,10 @@ pub async fn test<S: AsyncRead + AsyncWriteExt + Unpin>(tcp_stream: &mut S) -> R
 
     let hello = ClientHello::new(PublicKey::from(&secret), &conf);
 
-    let h = Handshake::ClientHello(hello);
-
     let record = Record {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
-        payload: Message::handhake(h),
+        payload: Message::client_hello(hello),
     };
 
     let mut bytes = Vec::new();

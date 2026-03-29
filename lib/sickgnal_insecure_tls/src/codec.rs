@@ -1,13 +1,24 @@
 use crate::{error::InvalidMessage, reader::Reader, u24::U24};
 
-/// A trait to encode / decode something
-pub trait Codec: Sized {
+/// A trait for encoding something
+pub trait Encode: Sized {
     /// The encoded length in bytes, if it is known at compile time
     const LENGTH_HINT: Option<usize> = None;
 
     /// Encode self by appending it to the `dest` buffer
     fn encode(&self, dest: &mut Vec<u8>);
 
+    /// Returns the encoded length in bytes, if it is known before
+    /// encoding.
+    ///
+    /// Returns [`Codec::LENGTH_HINT`] by default
+    fn encoded_length_hint(&self) -> Option<usize> {
+        Self::LENGTH_HINT
+    }
+}
+
+/// A trait to decode something
+pub trait Decode: Sized {
     /// Decode self by reading from the provided `reader`
     fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage>;
 
@@ -23,18 +34,10 @@ pub trait Codec: Sized {
             e => e,
         })
     }
-
-    /// Returns the encoded length in bytes, if it is known before
-    /// encoding.
-    ///
-    /// Returns [`Codec::LENGTH_HINT`] by default
-    fn encoded_length_hint(&self) -> Option<usize> {
-        Self::LENGTH_HINT
-    }
 }
 
 /// Encode a length-prefixed vector with the given length field size
-pub(crate) fn encode_length_prefixed_vector<T: Codec>(
+pub(crate) fn encode_length_prefixed_vector<T: Encode>(
     dest: &mut Vec<u8>,
     length_size: LengthSize,
     elements: &[T],
@@ -62,7 +65,7 @@ pub(crate) fn encode_length_prefixed_vector<T: Codec>(
 }
 
 /// Decode a length-prefixed vector with the given length field size
-pub(crate) fn decode_length_prefixed_vector<T: Codec>(
+pub(crate) fn decode_length_prefixed_vector<T: Decode>(
     reader: &mut Reader,
     length_size: LengthSize,
 ) -> Result<Vec<T>, InvalidMessage> {
@@ -97,14 +100,9 @@ pub enum LengthSize {
     U24,
 }
 
-impl Codec for u8 {
+impl Encode for u8 {
     fn encode(&self, dest: &mut Vec<u8>) {
         dest.push(*self);
-    }
-
-    #[inline]
-    fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
-        buf.take_byte().ok_or(InvalidMessage::TooShortFor("u8"))
     }
 
     #[inline]
@@ -113,19 +111,28 @@ impl Codec for u8 {
     }
 }
 
-impl Codec for u16 {
+impl Decode for u8 {
+    #[inline]
+    fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
+        buf.take_byte().ok_or(InvalidMessage::TooShortFor("u8"))
+    }
+}
+
+impl Encode for u16 {
     fn encode(&self, dest: &mut Vec<u8>) {
         dest.extend(self.to_be_bytes());
-    }
-
-    fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
-        let mut bytes: [u8; 2] = [0; 2];
-        bytes.clone_from_slice(buf.take(2).ok_or(InvalidMessage::TooShortFor("u16"))?);
-        Ok(u16::from_be_bytes(bytes))
     }
 
     #[inline]
     fn encoded_length_hint(&self) -> Option<usize> {
         Some(2)
+    }
+}
+
+impl Decode for u16 {
+    fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
+        let mut bytes: [u8; 2] = [0; 2];
+        bytes.clone_from_slice(buf.take(2).ok_or(InvalidMessage::TooShortFor("u16"))?);
+        Ok(u16::from_be_bytes(bytes))
     }
 }

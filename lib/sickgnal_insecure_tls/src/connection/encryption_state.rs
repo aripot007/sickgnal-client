@@ -8,7 +8,7 @@ use hkdf::Hkdf;
 use sha2::Sha256;
 use tracing::trace;
 
-use crate::codec::Codec;
+use crate::codec::Encode;
 use crate::crypto::hkdf_expand_label;
 use crate::hex_display::HexDisplayExt;
 use crate::msgs::ProtocolVersion;

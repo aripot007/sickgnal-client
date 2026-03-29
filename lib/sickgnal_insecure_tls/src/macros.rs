@@ -127,7 +127,7 @@ macro_rules! codec_enum {
         }
 
         // Encoding / decoding
-        impl crate::codec::Codec for $struct_name {
+        impl crate::codec::Encode for $struct_name {
 
             const LENGTH_HINT: Option<usize> = Some(::std::mem::size_of::<$utype>());
 
@@ -137,13 +137,15 @@ macro_rules! codec_enum {
             }
 
             #[inline]
-            fn decode(buf: &mut crate::reader::Reader) -> Result<Self, crate::error::InvalidMessage> {
-                Ok($struct_name(<$utype>::decode_for(stringify!($struct_name), buf)?))
-            }
-
-            #[inline]
             fn encoded_length_hint(&self) -> ::core::option::Option<usize> {
                 Some(::std::mem::size_of::<$utype>())
+            }
+        }
+
+        impl crate::codec::Decode for $struct_name {
+            #[inline]
+            fn decode(buf: &mut crate::reader::Reader) -> Result<Self, crate::error::InvalidMessage> {
+                Ok($struct_name(<$utype>::decode_for(stringify!($struct_name), buf)?))
             }
         }
 

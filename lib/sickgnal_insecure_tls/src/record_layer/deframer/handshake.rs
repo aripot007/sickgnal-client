@@ -1,7 +1,7 @@
 use std::mem;
 
 use crate::{
-    codec::Codec,
+    codec::Decode,
     error::{Error, InvalidMessage},
     msgs::handhake::{Handshake, HandshakeType, HandshakeTypeName},
     reader::Reader,

@@ -3,12 +3,12 @@ use std::fmt::Debug;
 use rand::{RngCore, rngs::OsRng};
 
 use crate::{
-    codec::{Codec, LengthSize, encode_length_prefixed_vector},
+    codec::{Encode, LengthSize, encode_length_prefixed_vector},
     connection::ConnectionConfig,
     crypto::{NamedGroup, SignatureScheme, ciphersuite::CipherSuite, keyshare::KeyShareEntry},
     hex_display::HexDisplayExt,
-    msgs::{ExtensionType, ProtocolVersion},
-    reader::Reader,
+    msgs::{ExtensionType, ProtocolVersion, handhake::HandshakeType},
+    u24::U24,
 };
 
 pub(crate) const OFFERED_CIPHERSUITE: CipherSuite = CipherSuite::TLS_AES_128_GCM_SHA256;
@@ -61,18 +61,29 @@ impl ClientHello {
     }
 }
 
-impl Codec for ClientHello {
+impl Encode for ClientHello {
     fn encode(&self, dest: &mut Vec<u8>) {
+        // Handshake message header
+        HandshakeType::ClientHello.encode(dest); // msg_type
+
+        // keep some space for the length
+        let len_start = dest.len();
+        U24(0).encode(dest); // length
+
+        // Payload (ClientHello)
+
         ProtocolVersion::TLSv1_2.encode(dest); // legacy_version
         self.random.encode(dest); // random
         dest.push(0x0); // empty legacy_session_id
         encode_length_prefixed_vector(dest, LengthSize::U16, &self.cipher_suites); // cipher_suites
         dest.extend([0x01, 0x00]); // legacy_compression_methods
         encode_length_prefixed_vector(dest, LengthSize::U16, &self.extensions); // extensions
-    }
 
-    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
-        todo!()
+        // Set the correct length
+        let length = dest.len() - (len_start + 3);
+
+        let bytes = u32::to_be_bytes(length as u32);
+        dest[len_start..len_start + 3].copy_from_slice(&bytes[1..]);
     }
 }
 
@@ -87,19 +98,15 @@ impl ClientRandom {
     }
 }
 
-impl Debug for ClientRandom {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.hex())
-    }
-}
-
-impl Codec for ClientRandom {
+impl Encode for ClientRandom {
     fn encode(&self, dest: &mut Vec<u8>) {
         dest.extend(self.0);
     }
+}
 
-    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
-        todo!()
+impl Debug for ClientRandom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.hex())
     }
 }
 
@@ -124,7 +131,7 @@ impl ClientExtension {
     }
 }
 
-impl Codec for ClientExtension {
+impl Encode for ClientExtension {
     fn encode(&self, dest: &mut Vec<u8>) {
         self.extension_type().encode(dest);
 
@@ -154,9 +161,5 @@ impl Codec for ClientExtension {
         // Update the length
         let len = (dest.len() - header_end) as u16;
         dest[header_start..header_end].copy_from_slice(&len.to_be_bytes());
-    }
-
-    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
-        todo!()
     }
 }

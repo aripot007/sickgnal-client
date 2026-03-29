@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use crate::{
-    codec::Codec,
+    codec::{Decode, Encode},
     crypto::{NamedGroup, NamedGroupName},
     error::InvalidMessage,
     hex_display::HexDisplayExt,
@@ -22,7 +22,7 @@ impl KeyShareEntry {
     }
 }
 
-impl Codec for KeyShareEntry {
+impl Encode for KeyShareEntry {
     fn encode(&self, dest: &mut Vec<u8>) {
         self.named_group().encode(dest);
 
@@ -36,6 +36,15 @@ impl Codec for KeyShareEntry {
         }
     }
 
+    fn encoded_length_hint(&self) -> Option<usize> {
+        let payload_len = match self {
+            KeyShareEntry::X25519(_) => size_of::<u16>() + 32,
+        };
+        Some(NamedGroup::LENGTH_HINT.unwrap() + payload_len)
+    }
+}
+
+impl Decode for KeyShareEntry {
     fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
         let group: NamedGroupName = NamedGroup::decode(buf)?
             .try_into()
@@ -58,13 +67,6 @@ impl Codec for KeyShareEntry {
 
             _ => Err(InvalidMessage::UnsupportedNamedGroup),
         }
-    }
-
-    fn encoded_length_hint(&self) -> Option<usize> {
-        let payload_len = match self {
-            KeyShareEntry::X25519(_) => size_of::<u16>() + 32,
-        };
-        Some(NamedGroup::LENGTH_HINT.unwrap() + payload_len)
     }
 }
 

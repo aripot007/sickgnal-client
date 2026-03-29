@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use crate::{
-    codec::Codec,
+    codec::Decode,
     crypto::{NamedGroup, ciphersuite::CipherSuite, keyshare::KeyShareEntry},
     error::InvalidMessage,
     msgs::{ExtensionType, ExtensionTypeName, ProtocolVersion},
@@ -33,11 +33,7 @@ pub struct ServerHelloPayload {
     pub(crate) extensions: ServerExtensions,
 }
 
-impl Codec for ServerHello {
-    fn encode(&self, dest: &mut Vec<u8>) {
-        todo!()
-    }
-
+impl Decode for ServerHello {
     fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
         let version = ProtocolVersion::decode(buf)?;
 
@@ -139,20 +135,11 @@ impl ServerRandom {
     }
 }
 
-impl Codec for ServerRandom {
-    fn encode(&self, dest: &mut Vec<u8>) {
-        dest.extend(self.0);
-    }
-
+impl Decode for ServerRandom {
     fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
         let mut random = [0; 32];
         random.copy_from_slice(buf.take_for("server_random", 32)?);
         Ok(ServerRandom(random))
-    }
-
-    #[inline]
-    fn encoded_length_hint(&self) -> Option<usize> {
-        Some(32)
     }
 }
 

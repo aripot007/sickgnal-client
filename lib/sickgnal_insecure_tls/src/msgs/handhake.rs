@@ -1,5 +1,5 @@
 use crate::{
-    codec::Codec,
+    codec::Decode,
     error::InvalidMessage,
     macros::codec_enum,
     msgs::{certificate::CertificateMessage, client_hello::ClientHello, server_hello::ServerHello},
@@ -47,30 +47,8 @@ impl Handshake {
     }
 }
 
-// FIXME: we shouldn't have to encode every handshake
-impl Codec for Handshake {
-    fn encode(&self, dest: &mut Vec<u8>) {
-        // HandshakeType msg_type
-        self.handshake_type().encode(dest);
-
-        // length and message
-        let mut bytes = Vec::new();
-        match self {
-            Handshake::ClientHello(msg) => msg.encode(&mut bytes),
-            Handshake::ServerHello(msg) => msg.encode(&mut bytes),
-
-            // We shouldn't have to encode this, but its just an empty list
-            Handshake::EncryptedExtensions => u16::encode(&0, &mut bytes),
-            Handshake::Certificate(..) => panic!("cannot encode certs"),
-        }
-
-        let length: U24 = U24(bytes.len() as u32).into();
-
-        length.encode(dest);
-        dest.extend(bytes);
-    }
-
-    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
+impl Decode for Handshake {
+    fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
         // handshake_type
         let msg_type = HandshakeType::decode(buf)?;
 
@@ -81,7 +59,8 @@ impl Codec for Handshake {
         let mut buf = Reader::new(&payload);
 
         let handshake = match msg_type {
-            HandshakeType::ClientHello => Handshake::ClientHello(ClientHello::decode(&mut buf)?),
+            // We shouldn't have to decrypt ClientHello messages
+            HandshakeType::ClientHello => return Err(InvalidMessage::UnexpectedMessage),
             HandshakeType::ServerHello => Handshake::ServerHello(ServerHello::decode(&mut buf)?),
 
             // We don't support any encrypted extensions, just check if its an empty list
@@ -110,15 +89,5 @@ impl Codec for Handshake {
         };
 
         Ok(handshake)
-    }
-
-    #[inline]
-    fn encoded_length_hint(&self) -> Option<usize> {
-        match self {
-            Handshake::ClientHello(ch) => ch.encoded_length_hint(),
-            Handshake::ServerHello(sh) => sh.encoded_length_hint(),
-            Handshake::EncryptedExtensions => u16::LENGTH_HINT,
-            Handshake::Certificate(..) => None,
-        }
     }
 }

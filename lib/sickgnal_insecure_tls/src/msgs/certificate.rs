@@ -5,7 +5,7 @@
 
 use rustls_pki_types::CertificateDer;
 
-use crate::codec::Codec;
+use crate::codec::Decode;
 use crate::u24::U24;
 use crate::{error::InvalidMessage, reader::Reader};
 
@@ -20,8 +20,8 @@ pub struct CertificateMessage {
     pub(crate) certification_path: Vec<CertificateDer<'static>>,
 }
 
-impl CertificateMessage {
-    pub fn decode(reader: &mut Reader) -> Result<Self, InvalidMessage> {
+impl Decode for CertificateMessage {
+    fn decode(reader: &mut Reader) -> Result<Self, InvalidMessage> {
         // certificate_request_context should be empty for the server
         let context_len = u8::decode(reader)?;
 

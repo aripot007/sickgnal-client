@@ -1,6 +1,7 @@
 mod wait_certificate;
 mod wait_certificate_verify;
 mod wait_encrypted_extensions;
+mod wait_finished;
 mod wait_server_hello;
 
 use rand::rngs::OsRng;
@@ -134,9 +135,7 @@ impl State {
 
         let hello = ClientHello::new(PublicKey::from(&secret), &config);
 
-        let ch = Handshake::ClientHello(hello);
-
-        let msg = Message::handhake(ch);
+        let msg = Message::client_hello(hello);
 
         // Save the handshake for the transcript
         let transcript_hash_buffer = match &msg {
