@@ -182,6 +182,7 @@ impl InnerState {
 impl Debug for InnerState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InnerState")
+            .field("sequence_number", &self.sequence_number)
             .field("write_iv", &hex(&self.write_iv))
             .finish_non_exhaustive()
     }

@@ -64,19 +64,19 @@ pub async fn main() -> Result<(), Error> {
     let custom_config = IClientConfig::new();
 
     info!("Connecting to {}:{}", args.host, args.port);
-    let mut tcp_stream = TcpStream::connect((args.host.clone(), args.port)).await?;
+    let tcp_stream = TcpStream::connect((args.host.clone(), args.port)).await?;
 
     // Perform TLS handshake
     info!("Starting TLS handshake");
-    // let mut tls_stream = custom_config.connect(args.host.clone(), tcp_stream).await?;
+    let mut tls_stream = custom_config.connect(args.host.clone(), tcp_stream).await?;
 
-    // sickgnal_insecure_tls::test_read_response(&mut tls_stream)
-    //     .await
-    //     .unwrap();
+    sickgnal_insecure_tls::test_read_response(&mut tls_stream)
+        .await
+        .unwrap();
 
-    // drop(tls_stream);
+    drop(tls_stream);
 
-    sickgnal_insecure_tls::test(&mut tcp_stream).await?;
+    // sickgnal_insecure_tls::test(&mut tcp_stream).await?;
 
     return Ok(());
 

@@ -3,7 +3,7 @@ use sha2::Sha256;
 use core::fmt::Debug;
 
 use crate::{
-    connection::state::{Output, State},
+    connection::state::{Output, ReceiveEvent, State},
     error::Error,
     msgs::Message,
 };
@@ -26,7 +26,7 @@ impl Debug for WaitEncryptedExtensionsState {
 }
 
 impl WaitEncryptedExtensionsState {
-    pub fn handle(self, input: Message, output: &mut Output) -> Result<State, Error> {
+    pub fn handle(self, input: ReceiveEvent, output: &mut Output) -> Result<State, Error> {
         todo!()
     }
 }

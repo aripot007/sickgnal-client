@@ -1,26 +1,16 @@
-use std::{io::Read, mem};
+use std::mem;
 
-use rand::rngs::OsRng;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tracing::trace;
-use x25519_dalek::{EphemeralSecret, PublicKey};
 
 use crate::{
     client::ClientConfig,
-    codec::Codec,
     connection::{
         receiver::Receiver,
         sender::Sender,
         state::{Output, State},
     },
     error::Error,
-    hex,
-    msgs::{Message, ProtocolVersion, client_hello::ClientHello, handhake::Handshake},
-    record_layer::{
-        ContentType,
-        deframer::Deframer,
-        record::{EncodedPayload, Record},
-    },
 };
 
 /// The server name to connect to
@@ -65,6 +55,7 @@ impl Connection {
 
         let mut output = Output {
             sender: &mut self.sender,
+            receiver: &mut self.receiver,
         };
 
         let next_state = st.handshake(&self.config, server_name, &mut output)?;
@@ -84,7 +75,7 @@ impl Connection {
 
     /// Send the buffered TLS records in queue
     pub async fn send_tls<W: AsyncWrite + Unpin>(&mut self, writer: &mut W) -> Result<(), Error> {
-        trace!("Sending buffer : {}", hex(&self.sender.output_buffer));
+        trace!("Sending {} bytes", self.sender.output_buffer.len());
 
         writer.write_all(&self.sender.output_buffer).await?;
         self.sender.output_buffer.clear();
@@ -118,6 +109,7 @@ impl Connection {
 
     /// Process the new packets left in the input buffer
     fn process_new_packets(&mut self) -> Result<(), Error> {
-        todo!()
+        self.receiver
+            .process_new_packets(&mut self.state, &mut self.sender)
     }
 }

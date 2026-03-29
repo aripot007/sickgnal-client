@@ -51,6 +51,9 @@ pub enum InvalidMessage {
     /// When we don't support a named group
     UnsupportedNamedGroup,
 
+    /// We received an unencrypted message while record protection was enabled
+    UnencryptedMessage,
+
     /// When the content type is not known
     InvalidContentType,
 
@@ -63,6 +66,9 @@ pub enum InvalidMessage {
     /// When we receive an invalid [`NamedGroup`](crate::crypto::NamedGroup)
     InvalidNamedGroup,
 
+    /// When we receive a ChangeCipherSpec message with an invalid value
+    InvalidChangeCipherSpec,
+
     /// When we receive a parameter with an invalid value
     IllegalParameter,
 
@@ -71,6 +77,9 @@ pub enum InvalidMessage {
 
     /// When we are missing an extension in the handshake
     MissingExtension,
+
+    /// When we failed to decrypt a message
+    BadMacError,
 }
 
 impl From<InvalidMessage> for Error {

@@ -3,9 +3,16 @@
 
 use std::fmt::Debug;
 
+use tracing::error;
+
 use crate::{
-    codec::Codec, hex, macros::codec_enum, msgs::handhake::Handshake, reader::Reader,
-    record_layer::ContentTypeName,
+    codec::Codec,
+    error::InvalidMessage,
+    hex,
+    macros::codec_enum,
+    msgs::handhake::Handshake,
+    reader::Reader,
+    record_layer::{ContentType, ContentTypeName},
 };
 
 pub mod client_hello;
@@ -21,6 +28,11 @@ pub enum Message {
         /// Raw handshake payload, used for the transcript hash
         raw_bytes: Vec<u8>,
     },
+    /// Handshake bytes that might contain zero, one or multiple handshake messages
+    ///
+    /// This is what we decode when we get a record with a [`ContentType::Handshake`] content_type,
+    /// as we might still need to defragment the content.
+    HandshakeData(Vec<u8>),
     ApplicationData(Vec<u8>),
 }
 
@@ -35,11 +47,6 @@ impl Message {
         }
     }
 
-    #[inline]
-    pub fn is_application_data(&self) -> bool {
-        matches!(self, Message::ApplicationData(..))
-    }
-
     /// Get the [`ContentTypeName`] of this message
     #[inline]
     pub fn content_type(&self) -> ContentTypeName {
@@ -47,28 +54,51 @@ impl Message {
         match self {
             Message::ChangeCipherSpec => ChangeCipherSpec,
             Message::Alert => Alert,
-            Message::Handshake { .. } => Handshake,
+            Message::Handshake { .. } | Message::HandshakeData(..) => Handshake,
             Message::ApplicationData(..) => ApplicationData,
         }
     }
-}
 
-impl Codec for Message {
-    // FIXME: remove bytes allocation
-    fn encode(&self, dest: &mut Vec<u8>) {
+    pub fn encode(&self, dest: &mut Vec<u8>) {
         match self {
             Message::ChangeCipherSpec => todo!(),
             Message::Alert => todo!(),
             Message::Handshake { raw_bytes, .. } => dest.extend(raw_bytes),
             Message::ApplicationData(..) => todo!(),
+            Message::HandshakeData(bytes) => dest.extend(bytes),
         }
     }
 
-    fn decode(buf: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
-        todo!()
+    pub fn decode(
+        reader: &mut Reader,
+        typ: ContentType,
+    ) -> Result<Self, crate::error::InvalidMessage> {
+        let typ = ContentTypeName::try_from(typ).map_err(|_| InvalidMessage::InvalidContentType)?;
+
+        Ok(match typ {
+            ContentTypeName::ChangeCipherSpec => {
+                if reader.take_byte()? != 0x01 {
+                    return Err(InvalidMessage::InvalidChangeCipherSpec);
+                } else {
+                    Message::ChangeCipherSpec
+                }
+            }
+            ContentTypeName::Alert => {
+                error!("Unsupported content type : {:?}", typ);
+                Message::Alert
+            }
+            ContentTypeName::Handshake => Message::HandshakeData(Vec::from(reader.take_all())),
+            ContentTypeName::ApplicationData => {
+                Message::ApplicationData(Vec::from(reader.take_all()))
+            }
+            ContentTypeName::Heartbeat => {
+                error!("Unsupported content type : {:?}", typ);
+                return Err(InvalidMessage::InvalidContentType);
+            }
+        })
     }
 
-    fn encoded_length_hint(&self) -> Option<usize> {
+    pub fn encoded_length_hint(&self) -> Option<usize> {
         match self {
             Message::ChangeCipherSpec => Some(1),
             // FIXME: use size from alert when defined
@@ -80,7 +110,7 @@ impl Codec for Message {
                     Some(raw_bytes.len())
                 }
             }
-            Message::ApplicationData(bytes) => Some(bytes.len()),
+            Message::HandshakeData(bytes) | Message::ApplicationData(bytes) => Some(bytes.len()),
         }
     }
 }
@@ -91,6 +121,9 @@ impl Debug for Message {
             Self::ChangeCipherSpec => write!(f, "ChangeCipherSpec"),
             Self::Alert => write!(f, "Alert"),
             Self::ApplicationData(arg0) => f.debug_tuple("ApplicationData").field(arg0).finish(),
+            Self::HandshakeData(bytes) => {
+                f.debug_tuple("HandshakeData").field(&hex(bytes)).finish()
+            }
             Self::Handshake { decoded, raw_bytes } => f
                 .debug_struct("Handshake")
                 .field("decoded", decoded)
@@ -142,5 +175,33 @@ codec_enum! {
         PostHandshakeAuth = 49,                   /* RFC 8446 */
         SignatureAlgorithmsCert = 50,             /* RFC 8446 */
         KeyShare = 51,                            /* RFC 8446 */
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The payload of a record containing a single ServerHello
+    const SINGLE_SERVER_HELLO_PAYLOAD: [u8; 90] = [
+        0x02, 0x00, 0x00, 0x56, 0x03, 0x03, 0x6c, 0xf2, 0x64, 0x7f, 0x6b, 0x0a, 0xcc, 0xaf, 0x5b,
+        0x6b, 0xd0, 0x93, 0x82, 0xbf, 0x79, 0x77, 0x94, 0x76, 0x4f, 0xf8, 0x1d, 0x0d, 0x84, 0xf2,
+        0x42, 0xb3, 0x18, 0x2f, 0xb1, 0x53, 0xbc, 0x96, 0x00, 0x13, 0x01, 0x00, 0x00, 0x2e, 0x00,
+        0x2b, 0x00, 0x02, 0x03, 0x04, 0x00, 0x33, 0x00, 0x24, 0x00, 0x1d, 0x00, 0x20, 0x40, 0xcb,
+        0xe4, 0x0c, 0x52, 0xf6, 0x45, 0xb4, 0x27, 0x2f, 0x43, 0x7d, 0x41, 0x3e, 0xb0, 0x57, 0x53,
+        0x38, 0xbe, 0x60, 0xa6, 0x47, 0xfe, 0x97, 0x63, 0x79, 0x7d, 0x00, 0x57, 0x25, 0xb9, 0x2c,
+    ];
+
+    #[test]
+    fn test_hs_decode_does_not_defrag() {
+        let mut reader = Reader::new(&SINGLE_SERVER_HELLO_PAYLOAD);
+        let msg = Message::decode(&mut reader, ContentType::Handshake).unwrap();
+
+        let decoded_bytes = match msg {
+            Message::HandshakeData(bytes) => bytes,
+            _ => panic!("decoding a handshake should return a HandshakeData message"),
+        };
+
+        assert_eq!(decoded_bytes, Vec::from(SINGLE_SERVER_HELLO_PAYLOAD));
     }
 }

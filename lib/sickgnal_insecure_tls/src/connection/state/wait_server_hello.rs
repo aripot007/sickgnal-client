@@ -1,11 +1,12 @@
 use sha2::{Digest, Sha256};
+use tracing::{debug, trace};
 
 use crate::{
-    connection::state::{Output, State, WaitEncryptedExtensionsState},
+    connection::state::{Output, ReceiveEvent, State, WaitEncryptedExtensionsState},
     crypto::keyshare::{KeyShareEntry, KeyShareSecret},
     error::{Error, InvalidMessage},
     msgs::{
-        Message, ProtocolVersion,
+        ProtocolVersion,
         client_hello::OFFERED_CIPHERSUITE,
         handhake::Handshake,
         server_hello::{ServerHello, ServerKeyShare},
@@ -24,15 +25,15 @@ pub(super) struct WaitServerHelloState {
 }
 
 impl WaitServerHelloState {
-    pub fn handle(self, input: Message, output: &mut Output) -> Result<State, Error> {
+    pub fn handle(self, input: ReceiveEvent, output: &mut Output) -> Result<State, Error> {
         let (sh_bytes, sh) = match input {
             // We only expect ServerHello or HelloRetryRequest messages here
-            Message::Handshake {
-                decoded: Handshake::ServerHello(hello),
-                raw_bytes,
+            ReceiveEvent::Handshake {
+                handshake: Handshake::ServerHello(hello),
+                bytes,
             } => {
                 match hello {
-                    ServerHello::ServerHello(h) => (raw_bytes, h),
+                    ServerHello::ServerHello(h) => (bytes, h),
 
                     // FIXME: We don't support HelloRetryRequests yet
                     ServerHello::HelloRetryRequest(_) => {
@@ -43,13 +44,15 @@ impl WaitServerHelloState {
             _ => return Err(InvalidMessage::UnexpectedMessage.into()),
         };
 
+        debug!("received ServerHello");
+
         // Check that we are negotiating TLS1.3
         let version = sh
             .extensions
             .supported_version
             .ok_or(InvalidMessage::MissingExtension)?;
 
-        if version != ProtocolVersion::TLSv1_2 {
+        if version != ProtocolVersion::TLSv1_3 {
             return Err(InvalidMessage::UnsupportedProtocolVersion.into());
         }
 
@@ -94,6 +97,8 @@ impl WaitServerHelloState {
             transcript_hasher,
             shared_secret,
         };
+
+        trace!("ServerHello received, next state : {:?}", next_state);
 
         Ok(State::WaitEncryptedExtensions(next_state))
     }

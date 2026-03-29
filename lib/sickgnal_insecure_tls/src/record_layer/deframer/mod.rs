@@ -1,5 +1,7 @@
 //! Record layer defragmentation
 //!
+pub mod handshake;
+
 use bytes::BytesMut;
 use thiserror::Error;
 

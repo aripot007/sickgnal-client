@@ -1,5 +1,7 @@
 //! Utility reader for parsing incoming data
 
+use std::mem;
+
 use crate::error::InvalidMessage;
 
 /// A non-consuming reader over a slice
@@ -32,8 +34,22 @@ impl<'a> Reader<'a> {
         Ok(consumed)
     }
 
+    /// Take all the bytes available in the buffer.
+    ///
+    /// Returns an empty slice if the buffer is empty.
+    #[inline]
+    pub fn take_all(&mut self) -> &'a [u8] {
+        mem::take(&mut self.buf)
+    }
+
     /// Take a single byte from the buffer
     pub fn take_byte(&mut self) -> Result<u8, InvalidMessage> {
         Ok(self.take(1)?[0])
+    }
+
+    /// Returns the number of bytes available in this reader
+    #[inline]
+    pub fn available(&self) -> usize {
+        self.buf.len()
     }
 }

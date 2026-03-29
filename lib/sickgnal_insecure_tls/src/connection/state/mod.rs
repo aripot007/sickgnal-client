@@ -2,6 +2,7 @@ mod wait_encrypted_extensions;
 mod wait_server_hello;
 
 use rand::rngs::OsRng;
+use tracing::trace;
 use wait_encrypted_extensions::*;
 use wait_server_hello::*;
 use x25519_dalek::{EphemeralSecret, PublicKey};
@@ -10,10 +11,12 @@ use std::fmt::Debug;
 
 use crate::{
     client::ClientConfig,
-    connection::{Connection, ServerName, sender::Sender},
+    connection::{Connection, ServerName, receiver::Receiver, sender::Sender},
     crypto::keyshare::KeyShareSecret,
     error::Error,
-    msgs::{Message, client_hello::ClientHello, handhake::Handshake},
+    msgs::{
+        Message, client_hello::ClientHello, handhake::Handshake, server_hello::ServerHelloPayload,
+    },
 };
 
 /// Represents the state of the TLS connection
@@ -84,8 +87,21 @@ pub(crate) enum State {
     Connected,
 }
 
+/// An event that can happen in the TLS connection, and
+/// changes the state
+#[derive(Debug)]
+pub enum ReceiveEvent {
+    Handshake {
+        handshake: Handshake,
+        bytes: Vec<u8>,
+    },
+    ChangeCipherSpec,
+    Alert,
+}
+
 pub struct Output<'conn> {
     pub(super) sender: &'conn mut Sender,
+    pub(super) receiver: &'conn mut Receiver,
 }
 
 impl<'conn> Output<'conn> {
@@ -144,8 +160,10 @@ impl State {
         }
     }
 
-    /// Handle an incoming [`Message`]
-    pub fn handle(self, input: Message, output: &mut Output) -> Result<Self, Error> {
+    /// Handle an incoming [`ReceiveEvent`]
+    pub fn handle(self, input: ReceiveEvent, output: &mut Output) -> Result<Self, Error> {
+        trace!("Handling {:?}", input);
+
         // Simply pass the call to the underlying state
         match self {
             State::Start => todo!(),
