@@ -1,12 +1,15 @@
 use std::fmt::Debug;
 use std::iter::zip;
 
-use aes_gcm::AeadInPlace;
 use aes_gcm::aes::cipher::Unsigned;
-use aes_gcm::{AeadCore, Aes128Gcm};
-use sha2::digest::generic_array::GenericArray;
+use aes_gcm::{AeadCore, Aes128Gcm, KeyInit};
+use aes_gcm::{AeadInPlace, KeySizeUser};
+use hkdf::Hkdf;
+use sha2::Sha256;
+use tracing::trace;
 
 use crate::codec::Codec;
+use crate::crypto::hkdf_expand_label;
 use crate::hex;
 use crate::msgs::ProtocolVersion;
 use crate::record_layer::ContentType;
@@ -18,6 +21,7 @@ pub(crate) const RECORDS_REKEY_LIMIT: u64 = 10_000_000;
 ///
 /// We only handle the TLS_AES_128_GCM_SHA256 ciphersuite
 #[derive(Debug)]
+#[expect(private_interfaces)]
 pub(crate) enum EncryptionState {
     Disabled,
     Enabled(InnerState),
@@ -26,6 +30,18 @@ pub(crate) enum EncryptionState {
 impl EncryptionState {
     pub fn new() -> Self {
         Self::Disabled
+    }
+
+    /// Set the new Secret to use for traffic key calculation
+    ///
+    /// This recomputes the traffic keys and enables encryption if it was not enabled
+    ///
+    /// # Panic
+    ///
+    /// Panics if `secret` does not have a valid size for a PRK
+    pub fn set_new_traffic_secret(&mut self, secret: &[u8]) {
+        trace!("new traffic secret");
+        *self = EncryptionState::Enabled(InnerState::new(secret))
     }
 
     /// Return `true` if encryption is enabled
@@ -85,12 +101,33 @@ impl EncryptionState {
 struct InnerState {
     aead: Aes128Gcm,
     sequence_number: u64,
-    write_iv: GenericArray<u8, <Aes128Gcm as AeadCore>::NonceSize>,
+    iv: Vec<u8>,
 }
 
 impl InnerState {
-    const TAG_SIZE: usize = <Aes128Gcm as AeadCore>::TagSize::USIZE;
+    const KEY_SIZE: usize = <Aes128Gcm as KeySizeUser>::KeySize::USIZE;
     const NONCE_SIZE: usize = <Aes128Gcm as AeadCore>::NonceSize::USIZE;
+
+    /// Create a new decryption state from a secret
+    ///
+    /// # Panic
+    ///
+    /// Panics if `secret` does not have a valid size for a PRK
+    pub fn new(secret: &[u8]) -> Self {
+        let hk =
+            Hkdf::<Sha256>::from_prk(secret).expect("secret should have a valid length for a PRK");
+
+        let key = hkdf_expand_label(&hk, "key", b"", Self::KEY_SIZE as u16);
+        let iv = hkdf_expand_label(&hk, "iv", b"", Self::NONCE_SIZE as u16);
+
+        let aead = Aes128Gcm::new_from_slice(&key).expect("dervied key should have a valid length");
+
+        Self {
+            aead,
+            sequence_number: 0,
+            iv,
+        }
+    }
 
     #[inline]
     fn ciphertext_overhead(&self) -> usize {
@@ -164,7 +201,7 @@ impl InnerState {
             .copy_from_slice(&self.sequence_number.to_be_bytes());
 
         // XOR with the write_iv
-        for (n, iv) in zip(&mut nonce, self.write_iv) {
+        for (n, iv) in zip(&mut nonce, &self.iv) {
             *n ^= iv;
         }
 
@@ -183,7 +220,7 @@ impl Debug for InnerState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InnerState")
             .field("sequence_number", &self.sequence_number)
-            .field("write_iv", &hex(&self.write_iv))
+            .field("write_iv", &hex(&self.iv))
             .finish_non_exhaustive()
     }
 }

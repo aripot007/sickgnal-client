@@ -8,7 +8,7 @@ use hkdf::Hkdf;
 use sha2::Sha256;
 use tracing::trace;
 
-use crate::crypto::derive_secret_with_length;
+use crate::crypto::hkdf_expand_label;
 use crate::error::{Error, InvalidMessage};
 use crate::hex;
 use crate::msgs::Message;
@@ -84,8 +84,11 @@ impl InnerState {
         let hk =
             Hkdf::<Sha256>::from_prk(secret).expect("secret should have a valid length for a PRK");
 
-        let key = derive_secret_with_length(&hk, "key", b"", KEY_SIZE as u16);
-        let iv = derive_secret_with_length(&hk, "iv", b"", NONCE_SIZE as u16);
+        let key = hkdf_expand_label(&hk, "key", b"", KEY_SIZE as u16);
+        let iv = hkdf_expand_label(&hk, "iv", b"", NONCE_SIZE as u16);
+
+        trace!("key : {}", hex(&key));
+        trace!("iv : {}", hex(&iv));
 
         let aead = Aes128Gcm::new_from_slice(&key).expect("dervied key should have a valid length");
 

@@ -13,7 +13,7 @@ use crate::{
     msgs::Message,
     reader::Reader,
     record_layer::{
-        ContentType, ContentTypeName,
+        ContentTypeName,
         deframer::{Deframer, handshake::HandshakeDeframer},
     },
 };

@@ -9,6 +9,7 @@ use crate::{
         keyshare::{KeyShareEntry, KeyShareSecret},
     },
     error::{Error, InvalidMessage},
+    hex,
     msgs::{
         ProtocolVersion,
         client_hello::OFFERED_CIPHERSUITE,
@@ -111,14 +112,30 @@ impl WaitServerHelloState {
 
         // Handshake Secret = HKDF-Extract(Derive-Secret(Early Secret, "derived", ""), (EC)DHE)
         let derived = derive_secret(&hkdf, "derived", b"");
+
+        trace!("derived secret : {}", hex(&derived));
+
         let hkdf = Hkdf::<Sha256>::new(Some(&derived), shared_secret.as_bytes());
 
         let transcript_hash = transcript_hasher.clone().finalize();
+
+        trace!("transcript hash : {}", hex(&transcript_hash));
+
         let server_hs_traffic_secret = derive_secret(&hkdf, "s hs traffic", &transcript_hash);
+
+        trace!(
+            "server hs traffic secret : {}",
+            hex(&server_hs_traffic_secret)
+        );
 
         output
             .receiver
             .set_new_traffic_secret(&server_hs_traffic_secret);
+
+        let client_hs_traffic_secret = derive_secret(&hkdf, "c hs traffic", &transcript_hash);
+        output
+            .sender
+            .set_new_traffic_secret(&client_hs_traffic_secret);
 
         let next_state = WaitEncryptedExtensionsState {
             transcript_hasher,

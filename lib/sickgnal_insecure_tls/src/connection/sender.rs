@@ -1,11 +1,9 @@
 use tracing::trace;
 
 use crate::{
-    codec::Codec,
     connection::encryption_state::EncryptionState,
-    error::Error,
-    msgs::{Message, ProtocolVersion, handhake::Handshake},
-    record_layer::{CIPHERTEXT_FRAGMENT_MAX_LEN, ContentType, record::Record},
+    msgs::Message,
+    record_layer::{CIPHERTEXT_FRAGMENT_MAX_LEN, ContentType},
 };
 
 /// Initial output buffer size
@@ -26,6 +24,13 @@ impl Sender {
             encryption_state: EncryptionState::new(),
             output_buffer: Vec::with_capacity(OUTPUT_BUF_SIZE),
         }
+    }
+
+    /// Set the new Secret to use for traffic key calculation
+    ///
+    /// This recomputes the traffic keys and enables encryption if it was not enabled
+    pub fn set_new_traffic_secret(&mut self, secret: &[u8]) {
+        self.encryption_state.set_new_traffic_secret(secret);
     }
 
     pub fn send(&mut self, msg: Message) {

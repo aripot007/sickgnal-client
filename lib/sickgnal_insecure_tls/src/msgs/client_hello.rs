@@ -7,7 +7,6 @@ use crate::{
     codec::{Codec, LengthSize, encode_length_prefixed_vector},
     connection::ServerName,
     crypto::{NamedGroup, SignatureScheme, ciphersuite::CipherSuite, keyshare::KeyShareEntry},
-    hex,
     msgs::{ExtensionType, ProtocolVersion},
     reader::Reader,
 };
