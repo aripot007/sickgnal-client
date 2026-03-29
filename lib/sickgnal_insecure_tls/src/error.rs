@@ -36,6 +36,9 @@ pub enum InvalidMessage {
     /// We received an unexpected message
     UnexpectedMessage,
 
+    /// When we receive an empty Certificate message
+    EmptyCertificates,
+
     /// When the message was shorter than the expected length
     TooShortFor(&'static str),
 

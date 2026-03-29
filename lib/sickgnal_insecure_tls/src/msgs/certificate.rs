@@ -4,7 +4,6 @@
 //!
 
 use rustls_pki_types::CertificateDer;
-use tracing::trace;
 
 use crate::codec::Codec;
 use crate::u24::U24;
@@ -15,10 +14,10 @@ pub struct CertificateMessage {
     /// The sever's certificate
     ///
     /// This should be the first entry in the `certificate_list`
-    server_cert: CertificateDer<'static>,
+    pub(crate) server_cert: CertificateDer<'static>,
 
     /// The certification chain to verify the server's certificate
-    certification_path: Vec<CertificateDer<'static>>,
+    pub(crate) certification_path: Vec<CertificateDer<'static>>,
 }
 
 impl CertificateMessage {
@@ -31,14 +30,22 @@ impl CertificateMessage {
         }
 
         let certificate_list_len = U24::decode(reader)?.0 as usize;
+
+        if certificate_list_len == 0 {
+            return Err(InvalidMessage::EmptyCertificates);
+        }
+
+        let payload = reader.take_for("certificate_list", certificate_list_len)?;
+        let mut reader = Reader::new(payload);
+
         // decode the server certificate
-        let server_cert = decode_cert_entry(reader)?;
+        let server_cert = decode_cert_entry(&mut reader)?;
 
         // decode the certification chain
         let mut certification_path = Vec::new();
 
         while !reader.is_empty() {
-            let cert = decode_cert_entry(reader)?;
+            let cert = decode_cert_entry(&mut reader)?;
             certification_path.push(cert);
         }
 
