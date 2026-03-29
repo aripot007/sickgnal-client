@@ -87,9 +87,6 @@ impl InnerState {
         let key = hkdf_expand_label(&hk, "key", b"", KEY_SIZE as u16);
         let iv = hkdf_expand_label(&hk, "iv", b"", NONCE_SIZE as u16);
 
-        trace!("key : {}", &key.hex());
-        trace!("iv : {}", &iv.hex());
-
         let aead = Aes128Gcm::new_from_slice(&key).expect("dervied key should have a valid length");
 
         Self {

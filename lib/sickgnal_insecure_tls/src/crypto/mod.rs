@@ -38,13 +38,6 @@ pub fn derive_secret(hkdf: &Hkdf<Sha256>, label: &str, transcript_hash: Option<&
 pub fn hkdf_expand_label(hkdf: &Hkdf<Sha256>, label: &str, context: &[u8], length: u16) -> Vec<u8> {
     let mut output = vec![0; length as usize];
 
-    trace!(
-        "Hkdf-Expand-Label(?, {:?}, {}, {})",
-        label,
-        context.hex(),
-        length
-    );
-
     let mut info = Vec::from(length.to_be_bytes());
 
     // label length
@@ -59,8 +52,6 @@ pub fn hkdf_expand_label(hkdf: &Hkdf<Sha256>, label: &str, context: &[u8], lengt
 
     // context
     info.extend_from_slice(context);
-
-    trace!("label : {}", info.pretty_hex());
 
     hkdf.expand(&info, &mut output)
         .expect("invalid length for Hkdf-Expand");

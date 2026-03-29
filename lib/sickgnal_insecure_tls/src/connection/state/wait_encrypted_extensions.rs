@@ -1,5 +1,6 @@
 use hkdf::Hkdf;
 use sha2::{Sha256, digest::Update};
+use tracing::{debug, trace};
 
 use core::fmt::Debug;
 
@@ -37,6 +38,8 @@ impl WaitEncryptedExtensionsState {
             _ => return Err(InvalidMessage::UnexpectedMessage.into()),
         };
 
+        debug!("received EncryptedExtensions");
+
         // Add the handshake to the transcript
         self.transcript_hasher.update(&hs_bytes);
 
@@ -44,6 +47,11 @@ impl WaitEncryptedExtensionsState {
             transcript_hasher: self.transcript_hasher,
             handshake_secret_hkdf: self.handshake_secret_hkdf,
         };
+
+        trace!(
+            "finished handling EncryptedExtensions, next state : {:?}",
+            next_state
+        );
 
         Ok(State::WaitCertificate(next_state))
     }

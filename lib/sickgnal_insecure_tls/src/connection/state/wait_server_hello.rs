@@ -113,21 +113,11 @@ impl WaitServerHelloState {
         // Handshake Secret = HKDF-Extract(Derive-Secret(Early Secret, "derived", ""), (EC)DHE)
         let derived = derive_secret(&hkdf, "derived", None);
 
-        trace!("derived secret : {}", &derived.hex());
-
         let hkdf = Hkdf::<Sha256>::new(Some(&derived), shared_secret.as_bytes());
 
         let transcript_hash = transcript_hasher.clone().finalize();
 
-        trace!("transcript hash : {}", &transcript_hash.hex());
-
         let server_hs_traffic_secret = derive_secret(&hkdf, "s hs traffic", Some(&transcript_hash));
-
-        trace!(
-            "server hs traffic secret : {}",
-            &server_hs_traffic_secret.hex()
-        );
-
         output
             .receiver
             .set_new_traffic_secret(&server_hs_traffic_secret);
@@ -142,7 +132,10 @@ impl WaitServerHelloState {
             handshake_secret_hkdf: hkdf,
         };
 
-        trace!("ServerHello received, next state : {:?}", next_state);
+        trace!(
+            "finished handling ServerHello, next state : {:?}",
+            next_state
+        );
 
         Ok(State::WaitEncryptedExtensions(next_state))
     }
