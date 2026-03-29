@@ -1,17 +1,25 @@
 use hkdf::Hkdf;
+use rustls_pki_types::UnixTime;
 use sha2::{Sha256, digest::Update};
-use tracing::trace;
+use tracing::{debug, trace};
+use webpki::{ALL_VERIFICATION_ALGS, EndEntityCert, KeyUsage};
 
 use core::fmt::Debug;
 
 use crate::{
-    connection::state::{Output, ReceiveEvent, State},
+    connection::{
+        ConnectionConfig,
+        state::{Output, ReceiveEvent, State, wait_certificate_verify::WaitCertificateVerifyState},
+    },
     error::{Error, InvalidMessage},
     msgs::handhake::Handshake,
 };
 
 /// We received the ServerHello and are waiting for the encrypted extensions
 pub(super) struct WaitCertificateState {
+    /// The current connection configuration
+    pub(super) config: ConnectionConfig,
+
     /// The running transcript hash
     pub(crate) transcript_hasher: Sha256,
 
@@ -28,7 +36,7 @@ impl Debug for WaitCertificateState {
 }
 
 impl WaitCertificateState {
-    pub fn handle(mut self, input: ReceiveEvent, output: &mut Output) -> Result<State, Error> {
+    pub fn handle(mut self, input: ReceiveEvent, _output: &mut Output) -> Result<State, Error> {
         // Ensure we only receive an Certificate message
         let (bytes, certs) = match input {
             ReceiveEvent::Handshake {
@@ -38,10 +46,48 @@ impl WaitCertificateState {
             _ => return Err(InvalidMessage::UnexpectedMessage.into()),
         };
 
-        trace!("received Certificate : {:?}", certs);
+        debug!("received Certifcate");
+
+        // Check that the certificate is valid
+        let server_cert = EndEntityCert::try_from(&certs.server_cert)
+            .map_err(|e| InvalidMessage::CertDecodeError(e))?;
+
+        debug!(
+            "verifying with {} root certificates and {} intermediaries",
+            self.config.client.root_certificates.len(),
+            certs.certification_path.len(),
+        );
+
+        server_cert
+            .verify_for_usage(
+                ALL_VERIFICATION_ALGS,
+                &self.config.client.root_certificates,
+                &certs.certification_path,
+                UnixTime::now(),
+                KeyUsage::server_auth(),
+                None,
+                None,
+            )
+            .map_err(|e| InvalidMessage::InvalidCertificate(e))?;
+
+        server_cert
+            .verify_is_valid_for_subject_name(&self.config.server_name)
+            .map_err(|e| InvalidMessage::InvalidCertificate(e))?;
+
+        debug!("server certificate valid");
 
         self.transcript_hasher.update(&bytes);
 
-        todo!()
+        let next_state = WaitCertificateVerifyState {
+            transcript_hasher: self.transcript_hasher,
+            handshake_secret_hkdf: self.handshake_secret_hkdf,
+        };
+
+        trace!(
+            "finished handling Certificate, next state : {:?}",
+            next_state
+        );
+
+        Ok(State::WaitCertificateVerify(next_state))
     }
 }

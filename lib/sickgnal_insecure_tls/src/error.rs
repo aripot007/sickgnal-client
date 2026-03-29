@@ -85,7 +85,10 @@ pub enum InvalidMessage {
     BadMacError,
 
     /// When there is an error decoding a certificate
-    CertDecodeError,
+    CertDecodeError(webpki::Error),
+
+    /// When we can't validate the server's certificate
+    InvalidCertificate(webpki::Error),
 }
 
 impl From<InvalidMessage> for Error {

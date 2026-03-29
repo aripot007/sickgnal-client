@@ -1,3 +1,4 @@
+use rustls_pki_types::TrustAnchor;
 use tokio::io::{AsyncReadExt, AsyncWrite};
 
 use crate::{
@@ -9,25 +10,24 @@ use crate::{
 /// TLS Client configuration
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
-    // TODO: add certificates, etc
+    /// The root CA certificates
+    pub(crate) root_certificates: Vec<TrustAnchor<'static>>,
 }
 
 impl ClientConfig {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(root_certificates: Vec<TrustAnchor<'static>>) -> Self {
+        Self { root_certificates }
     }
 
     /// Establish a TLS session with the given server
     pub async fn connect<S: AsyncReadExt + AsyncWrite + Unpin>(
         &self,
-        server_name: impl AsRef<ServerName>,
+        server_name: ServerName,
         mut stream: S,
     ) -> Result<TlsStream<S>, Error> {
-        let mut connection = Connection::new(self.clone());
+        let mut connection = Connection::new(self.clone(), server_name);
 
-        connection
-            .handshake(server_name.as_ref(), &mut stream)
-            .await?;
+        connection.handshake(&mut stream).await?;
 
         Ok(TlsStream::new(connection, stream))
     }

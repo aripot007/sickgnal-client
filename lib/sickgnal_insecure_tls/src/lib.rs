@@ -1,6 +1,7 @@
 use crate::{
     client::{ClientConfig, tls_stream::TlsStream},
     codec::Codec,
+    connection::ConnectionConfig,
     error::Error,
     hex_display::HexDisplayExt,
     msgs::{Message, ProtocolVersion, client_hello::ClientHello, handhake::Handshake},
@@ -9,6 +10,7 @@ use crate::{
 };
 use bytes::BytesMut;
 use rand::rngs::OsRng;
+use rustls_pki_types::ServerName;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
@@ -29,9 +31,12 @@ pub(crate) mod macros;
 pub async fn test<S: AsyncRead + AsyncWriteExt + Unpin>(tcp_stream: &mut S) -> Result<(), Error> {
     let secret = EphemeralSecret::random_from_rng(OsRng);
 
-    let conf = ClientConfig::new();
+    let conf = ConnectionConfig {
+        client: ClientConfig::new(vec![]),
+        server_name: ServerName::try_from("localhost").unwrap(),
+    };
 
-    let hello = ClientHello::new(PublicKey::from(&secret), &conf, &"localhost");
+    let hello = ClientHello::new(PublicKey::from(&secret), &conf);
 
     let h = Handshake::ClientHello(hello);
 

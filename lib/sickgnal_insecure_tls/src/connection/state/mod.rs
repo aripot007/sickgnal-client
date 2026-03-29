@@ -1,4 +1,5 @@
 mod wait_certificate;
+mod wait_certificate_verify;
 mod wait_encrypted_extensions;
 mod wait_server_hello;
 
@@ -11,10 +12,14 @@ use x25519_dalek::{EphemeralSecret, PublicKey};
 use std::fmt::Debug;
 
 use crate::{
-    client::ClientConfig,
     connection::{
-        ServerName, receiver::Receiver, sender::Sender,
-        state::wait_certificate::WaitCertificateState,
+        ConnectionConfig,
+        receiver::Receiver,
+        sender::Sender,
+        state::{
+            wait_certificate::WaitCertificateState,
+            wait_certificate_verify::WaitCertificateVerifyState,
+        },
     },
     crypto::keyshare::KeyShareSecret,
     error::Error,
@@ -86,7 +91,7 @@ pub(crate) enum State {
     WaitCertificate(WaitCertificateState),
 
     /// We are waiting for the CertificateVerify message
-    WaitCertificateVerify,
+    WaitCertificateVerify(WaitCertificateVerifyState),
 
     /// We are waiting for the Finished message
     WaitFinished,
@@ -120,19 +125,14 @@ impl<'conn> Output<'conn> {
 
 impl State {
     /// Perform a TLS handshake
-    pub fn handshake(
-        self,
-        config: &ClientConfig,
-        server_name: &ServerName,
-        output: &mut Output,
-    ) -> Result<Self, Error> {
+    pub fn handshake(self, config: ConnectionConfig, output: &mut Output) -> Result<Self, Error> {
         if !matches!(self, State::Start) {
             return Err(Error::InvalidState);
         }
 
         let secret = EphemeralSecret::random_from_rng(OsRng);
 
-        let hello = ClientHello::new(PublicKey::from(&secret), config, server_name);
+        let hello = ClientHello::new(PublicKey::from(&secret), &config);
 
         let ch = Handshake::ClientHello(hello);
 
@@ -148,6 +148,7 @@ impl State {
         output.send(msg);
 
         let next = WaitServerHelloState {
+            config: config,
             transcript_hash_buffer,
             key_share_secrets: vec![KeyShareSecret::X25519(secret)],
         };
@@ -184,7 +185,7 @@ impl State {
             | State::WaitServerHello(..)
             | State::WaitEncryptedExtensions(..)
             | State::WaitCertificate(..)
-            | State::WaitCertificateVerify
+            | State::WaitCertificateVerify(..)
             | State::WaitFinished => true,
             _ => false,
         }
@@ -196,11 +197,11 @@ impl State {
 
         // Simply pass the call to the underlying state
         match self {
-            State::Start => todo!(),
+            State::Start => Err(Error::InvalidState),
             State::WaitServerHello(s) => s.handle(input, output),
             State::WaitEncryptedExtensions(s) => s.handle(input, output),
-            State::WaitCertificate(..) => todo!(),
-            State::WaitCertificateVerify => todo!(),
+            State::WaitCertificate(s) => s.handle(input, output),
+            State::WaitCertificateVerify(s) => s.handle(input, output),
             State::WaitFinished => todo!(),
             State::Connected => todo!(),
         }
@@ -214,7 +215,7 @@ impl State {
             State::WaitServerHello(..)
             | State::WaitEncryptedExtensions(..)
             | State::WaitCertificate(..)
-            | State::WaitCertificateVerify
+            | State::WaitCertificateVerify(..)
             | State::WaitFinished
             | State::Connected => true,
         }

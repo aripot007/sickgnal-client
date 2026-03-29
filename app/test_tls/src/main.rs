@@ -10,11 +10,12 @@ use tokio_rustls::{
     TlsConnector,
     rustls::{
         ClientConfig, RootCertStore,
-        pki_types::{CertificateDer, ServerName, pem::PemObject},
+        pki_types::{CertificateDer, ServerName, UnixTime, pem::PemObject},
     },
 };
-use tracing::{debug, error, info, level_filters::LevelFilter};
+use tracing::{debug, error, info, level_filters::LevelFilter, trace};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
+use webpki::{ALL_VERIFICATION_ALGS, EndEntityCert, KeyUsage};
 
 use crate::{cli::Args, error::Error};
 
@@ -28,6 +29,8 @@ pub async fn main() -> Result<(), Error> {
     let args = Args::parse();
 
     debug!("Args : {:?}", args);
+
+    let server_name = ServerName::try_from(args.host.clone()).expect("Invalid DNS name");
 
     let mut root_store = RootCertStore::empty();
 
@@ -52,7 +55,7 @@ pub async fn main() -> Result<(), Error> {
     // rustls config
 
     let config = ClientConfig::builder()
-        .with_root_certificates(root_store)
+        .with_root_certificates(root_store.clone())
         .with_no_client_auth();
 
     let connector = TlsConnector::from(Arc::new(config));
@@ -61,14 +64,14 @@ pub async fn main() -> Result<(), Error> {
 
     info!("===== Testing Custom TLS");
 
-    let custom_config = IClientConfig::new();
+    let custom_config = IClientConfig::new(root_store.roots);
 
     info!("Connecting to {}:{}", args.host, args.port);
     let tcp_stream = TcpStream::connect((args.host.clone(), args.port)).await?;
 
     // Perform TLS handshake
     info!("Starting TLS handshake");
-    let mut tls_stream = custom_config.connect(args.host.clone(), tcp_stream).await?;
+    let mut tls_stream = custom_config.connect(server_name, tcp_stream).await?;
 
     sickgnal_insecure_tls::test_read_response(&mut tls_stream)
         .await
@@ -84,10 +87,8 @@ pub async fn main() -> Result<(), Error> {
     info!("Connecting to {}:{}", args.host, args.port);
     let tcp_stream = TcpStream::connect((args.host.clone(), args.port)).await?;
 
-    let domain = ServerName::try_from(args.host).expect("Invalid DNS name");
-
     info!("Starting TLS handshake");
-    let mut tls_stream = connector.connect(domain, tcp_stream).await?;
+    let mut tls_stream = connector.connect(server_name, tcp_stream).await?;
 
     info!("TLS Handshake successful");
 

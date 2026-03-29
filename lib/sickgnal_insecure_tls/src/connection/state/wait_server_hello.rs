@@ -3,13 +3,15 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, trace};
 
 use crate::{
-    connection::state::{Output, ReceiveEvent, State, WaitEncryptedExtensionsState},
+    connection::{
+        ConnectionConfig,
+        state::{Output, ReceiveEvent, State, WaitEncryptedExtensionsState},
+    },
     crypto::{
         derive_secret,
         keyshare::{KeyShareEntry, KeyShareSecret},
     },
     error::{Error, InvalidMessage},
-    hex_display::HexDisplayExt,
     msgs::{
         ProtocolVersion,
         client_hello::OFFERED_CIPHERSUITE,
@@ -21,6 +23,9 @@ use crate::{
 /// State of the connection when ClientHello was sent and we are waiting for the reply
 #[derive(Debug)]
 pub(super) struct WaitServerHelloState {
+    /// The current connection configuration
+    pub(super) config: ConnectionConfig,
+
     /// Contains the handshake messages that need to be hashed
     /// to compute the Transcript Hash
     pub(super) transcript_hash_buffer: Vec<u8>,
@@ -128,6 +133,7 @@ impl WaitServerHelloState {
             .set_new_traffic_secret(&client_hs_traffic_secret);
 
         let next_state = WaitEncryptedExtensionsState {
+            config: self.config,
             transcript_hasher,
             handshake_secret_hkdf: hkdf,
         };

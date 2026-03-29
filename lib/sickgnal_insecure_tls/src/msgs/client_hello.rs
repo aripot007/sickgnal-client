@@ -1,11 +1,10 @@
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 
 use rand::{RngCore, rngs::OsRng};
 
 use crate::{
-    client::ClientConfig,
     codec::{Codec, LengthSize, encode_length_prefixed_vector},
-    connection::ServerName,
+    connection::ConnectionConfig,
     crypto::{NamedGroup, SignatureScheme, ciphersuite::CipherSuite, keyshare::KeyShareEntry},
     hex_display::HexDisplayExt,
     msgs::{ExtensionType, ProtocolVersion},
@@ -36,8 +35,7 @@ impl ClientHello {
     /// Create a ClientHello message with the supported defaults
     pub(crate) fn new(
         x25519_public_key: x25519_dalek::PublicKey,
-        config: &ClientConfig,
-        server_name: &ServerName,
+        config: &ConnectionConfig,
     ) -> Self {
         let mut ext = Vec::new();
 

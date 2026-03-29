@@ -16,21 +16,31 @@ use crate::{
 /// The server name to connect to
 ///
 /// Used for peer verification
-pub type ServerName = str;
+pub type ServerName = rustls_pki_types::ServerName<'static>;
 
 #[derive(Debug)]
 pub struct Connection {
     state: Result<State, Error>,
-    config: ClientConfig,
+    config: ConnectionConfig,
     receiver: Receiver,
     sender: Sender,
 }
 
+/// The configuration for this connection
+#[derive(Debug, Clone)]
+pub(crate) struct ConnectionConfig {
+    pub client: ClientConfig,
+    pub server_name: ServerName,
+}
+
 impl Connection {
     /// Create a new TLS connection
-    pub fn new(config: ClientConfig) -> Self {
+    pub fn new(config: ClientConfig, server_name: ServerName) -> Self {
         Self {
-            config,
+            config: ConnectionConfig {
+                client: config,
+                server_name,
+            },
             state: Ok(State::Start),
             receiver: Receiver::new(),
             sender: Sender::new(),
@@ -40,7 +50,6 @@ impl Connection {
     /// Start the TLS handshake
     pub(crate) async fn handshake<S: AsyncWrite + AsyncReadExt + Unpin>(
         &mut self,
-        server_name: &ServerName,
         stream: &mut S,
     ) -> Result<(), Error> {
         // Get the state and replace it with an error in case we try to use it
@@ -58,7 +67,7 @@ impl Connection {
             receiver: &mut self.receiver,
         };
 
-        let next_state = st.handshake(&self.config, server_name, &mut output)?;
+        let next_state = st.handshake(self.config.clone(), &mut output)?;
 
         // Send the client hello
         self.send_tls(stream).await?;

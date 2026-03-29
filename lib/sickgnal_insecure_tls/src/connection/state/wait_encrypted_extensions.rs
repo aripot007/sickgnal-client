@@ -5,13 +5,19 @@ use tracing::{debug, trace};
 use core::fmt::Debug;
 
 use crate::{
-    connection::state::{Output, ReceiveEvent, State, WaitCertificateState},
+    connection::{
+        ConnectionConfig,
+        state::{Output, ReceiveEvent, State, WaitCertificateState},
+    },
     error::{Error, InvalidMessage},
     msgs::handhake::Handshake,
 };
 
 /// We received the ServerHello and are waiting for the encrypted extensions
 pub(super) struct WaitEncryptedExtensionsState {
+    /// The current connection configuration
+    pub(super) config: ConnectionConfig,
+
     /// The running transcript hash
     pub(crate) transcript_hasher: Sha256,
 
@@ -44,6 +50,7 @@ impl WaitEncryptedExtensionsState {
         self.transcript_hasher.update(&hs_bytes);
 
         let next_state = WaitCertificateState {
+            config: self.config,
             transcript_hasher: self.transcript_hasher,
             handshake_secret_hkdf: self.handshake_secret_hkdf,
         };

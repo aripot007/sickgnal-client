@@ -5441,6 +5441,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "rustls-native-certs",
+ "rustls-webpki",
  "sickgnal_insecure_tls",
  "thiserror 2.0.18",
  "tokio",
