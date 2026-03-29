@@ -1,5 +1,6 @@
 use hkdf::Hkdf;
 use sha2::{Sha256, digest::Update};
+use tracing::trace;
 
 use core::fmt::Debug;
 
@@ -27,7 +28,20 @@ impl Debug for WaitCertificateState {
 }
 
 impl WaitCertificateState {
-    pub fn handle(self, input: ReceiveEvent, output: &mut Output) -> Result<State, Error> {
+    pub fn handle(mut self, input: ReceiveEvent, output: &mut Output) -> Result<State, Error> {
+        // Ensure we only receive an Certificate message
+        let (bytes, certs) = match input {
+            ReceiveEvent::Handshake {
+                handshake: Handshake::Certificate(certs),
+                bytes,
+            } => (bytes, certs),
+            _ => return Err(InvalidMessage::UnexpectedMessage.into()),
+        };
+
+        trace!("received Certificate : {:?}", certs);
+
+        self.transcript_hasher.update(&bytes);
+
         todo!()
     }
 }

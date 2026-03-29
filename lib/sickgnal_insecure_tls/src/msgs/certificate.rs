@@ -4,6 +4,7 @@
 //!
 
 use rustls_pki_types::CertificateDer;
+use tracing::trace;
 
 use crate::codec::Codec;
 use crate::u24::U24;
@@ -30,14 +31,13 @@ impl CertificateMessage {
         }
 
         let certificate_list_len = U24::decode(reader)?.0 as usize;
-
         // decode the server certificate
         let server_cert = decode_cert_entry(reader)?;
 
         // decode the certification chain
         let mut certification_path = Vec::new();
 
-        for _ in 1..certificate_list_len {
+        while !reader.is_empty() {
             let cert = decode_cert_entry(reader)?;
             certification_path.push(cert);
         }

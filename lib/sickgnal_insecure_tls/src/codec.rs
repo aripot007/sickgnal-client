@@ -11,6 +11,19 @@ pub trait Codec: Sized {
     /// Decode self by reading from the provided `reader`
     fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage>;
 
+    /// Decode by reading the provided `reader`, mapping [`InvalidMessage::TooShortFor`] messages
+    /// with the given name.
+    ///
+    /// Equivalent to calling [`Self::decode`] and mapping `InvalidMessage::TooShortFor(_)` to
+    /// `InvalidMessage::TooShortFor(name)`.
+    #[inline]
+    fn decode_for(name: &'static str, buf: &mut Reader) -> Result<Self, InvalidMessage> {
+        Self::decode(buf).map_err(|e| match e {
+            InvalidMessage::TooShortFor(_) => InvalidMessage::TooShortFor(name),
+            e => e,
+        })
+    }
+
     /// Returns the encoded length in bytes, if it is known before
     /// encoding.
     ///
@@ -91,7 +104,7 @@ impl Codec for u8 {
 
     #[inline]
     fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
-        buf.take_byte()
+        buf.take_byte().ok_or(InvalidMessage::TooShortFor("u8"))
     }
 
     #[inline]
@@ -107,29 +120,12 @@ impl Codec for u16 {
 
     fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
         let mut bytes: [u8; 2] = [0; 2];
-        bytes.clone_from_slice(buf.take(2)?);
+        bytes.clone_from_slice(buf.take(2).ok_or(InvalidMessage::TooShortFor("u16"))?);
         Ok(u16::from_be_bytes(bytes))
     }
 
     #[inline]
     fn encoded_length_hint(&self) -> Option<usize> {
         Some(2)
-    }
-}
-
-impl Codec for u32 {
-    fn encode(&self, dest: &mut Vec<u8>) {
-        dest.extend(self.to_be_bytes());
-    }
-
-    fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
-        let mut bytes: [u8; 4] = [0; 4];
-        bytes.clone_from_slice(buf.take(4)?);
-        Ok(u32::from_be_bytes(bytes))
-    }
-
-    #[inline]
-    fn encoded_length_hint(&self) -> Option<usize> {
-        Some(4)
     }
 }
