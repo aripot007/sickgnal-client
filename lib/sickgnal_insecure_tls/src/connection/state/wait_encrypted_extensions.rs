@@ -1,11 +1,12 @@
 use hkdf::Hkdf;
-use sha2::Sha256;
+use sha2::{Sha256, digest::Update};
 
 use core::fmt::Debug;
 
 use crate::{
-    connection::state::{Output, ReceiveEvent, State},
-    error::Error,
+    connection::state::{Output, ReceiveEvent, State, WaitCertificateState},
+    error::{Error, InvalidMessage},
+    msgs::handhake::Handshake,
 };
 
 /// We received the ServerHello and are waiting for the encrypted extensions
@@ -26,7 +27,24 @@ impl Debug for WaitEncryptedExtensionsState {
 }
 
 impl WaitEncryptedExtensionsState {
-    pub fn handle(self, input: ReceiveEvent, output: &mut Output) -> Result<State, Error> {
-        todo!()
+    pub fn handle(mut self, input: ReceiveEvent, _output: &mut Output) -> Result<State, Error> {
+        // Ensure we only receive an empty EncryptedExtensions message
+        let hs_bytes = match input {
+            ReceiveEvent::Handshake {
+                handshake: Handshake::EncryptedExtensions,
+                bytes,
+            } => bytes,
+            _ => return Err(InvalidMessage::UnexpectedMessage.into()),
+        };
+
+        // Add the handshake to the transcript
+        self.transcript_hasher.update(&hs_bytes);
+
+        let next_state = WaitCertificateState {
+            transcript_hasher: self.transcript_hasher,
+            handshake_secret_hkdf: self.handshake_secret_hkdf,
+        };
+
+        Ok(State::WaitCertificate(next_state))
     }
 }

@@ -1,3 +1,4 @@
+mod wait_certificate;
 mod wait_encrypted_extensions;
 mod wait_server_hello;
 
@@ -11,7 +12,10 @@ use std::fmt::Debug;
 
 use crate::{
     client::ClientConfig,
-    connection::{ServerName, receiver::Receiver, sender::Sender},
+    connection::{
+        ServerName, receiver::Receiver, sender::Sender,
+        state::wait_certificate::WaitCertificateState,
+    },
     crypto::keyshare::KeyShareSecret,
     error::Error,
     msgs::{Message, client_hello::ClientHello, handhake::Handshake},
@@ -79,7 +83,7 @@ pub(crate) enum State {
     ///
     /// We don't support client authentication using certificates, so we skip to waiting for the
     /// certificate directly and don't wait for a certificate request
-    WaitCertificate,
+    WaitCertificate(WaitCertificateState),
 
     /// We are waiting for the CertificateVerify message
     WaitCertificateVerify,
@@ -179,7 +183,7 @@ impl State {
             State::Start
             | State::WaitServerHello(..)
             | State::WaitEncryptedExtensions(..)
-            | State::WaitCertificate
+            | State::WaitCertificate(..)
             | State::WaitCertificateVerify
             | State::WaitFinished => true,
             _ => false,
@@ -195,7 +199,7 @@ impl State {
             State::Start => todo!(),
             State::WaitServerHello(s) => s.handle(input, output),
             State::WaitEncryptedExtensions(s) => s.handle(input, output),
-            State::WaitCertificate => todo!(),
+            State::WaitCertificate(..) => todo!(),
             State::WaitCertificateVerify => todo!(),
             State::WaitFinished => todo!(),
             State::Connected => todo!(),
@@ -209,7 +213,7 @@ impl State {
 
             State::WaitServerHello(..)
             | State::WaitEncryptedExtensions(..)
-            | State::WaitCertificate
+            | State::WaitCertificate(..)
             | State::WaitCertificateVerify
             | State::WaitFinished
             | State::Connected => true,
