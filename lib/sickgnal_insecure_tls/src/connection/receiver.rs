@@ -1,5 +1,14 @@
 use bytes::BytesMut;
 
+use crate::{
+    codec::Codec,
+    connection::state::State,
+    error::Error,
+    msgs::handhake::Handshake,
+    reader::Reader,
+    record_layer::{ContentType, deframer::Deframer},
+};
+
 /// Initial input buffer size in bytes
 ///
 /// We use 16KB so it can (almost) hold a full max-sized TLS record
@@ -23,5 +32,40 @@ impl Receiver {
             handshake_buffer: Vec::new(),
             data_buffer: Vec::with_capacity(DATA_BUF_SIZE),
         }
+    }
+
+    /// Process the packets we received in `input_buffer`
+    pub fn process_new_packets(&mut self, state: &mut Result<State, Error>) -> Result<(), Error> {
+        let mut deframer = Deframer::new(&mut self.input_buffer);
+
+        while let Some(res) = deframer.next() {
+            match res {
+                Err(e) => {
+                    println!("Error deframing message : {}", e);
+                    break;
+                }
+                Ok(msg) => {
+                    println!("Got message : {:?}", msg);
+
+                    if msg.typ == ContentType::Handshake {
+                        let mut reader = Reader::new(&msg.payload.0);
+
+                        let handshake = match Handshake::decode(&mut reader) {
+                            Ok(h) => h,
+                            Err(e) => {
+                                println!("Error decoding handshake : {:?}", e);
+                                continue;
+                            }
+                        };
+
+                        println!("Got handshake : {:?}", handshake);
+                    } else {
+                        println!("Unsupported type {:?}", msg.typ)
+                    }
+                }
+            }
+        }
+
+        todo!()
     }
 }

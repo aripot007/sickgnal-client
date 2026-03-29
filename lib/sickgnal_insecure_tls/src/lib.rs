@@ -6,6 +6,7 @@ use crate::{
     reader::Reader,
     record_layer::{ContentType, deframer::Deframer, record::Record},
 };
+use bytes::BytesMut;
 use rand::rngs::OsRng;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use x25519_dalek::{EphemeralSecret, PublicKey};
@@ -45,48 +46,7 @@ pub async fn test<S: AsyncRead + AsyncWriteExt + Unpin>(tcp_stream: &mut S) -> R
 
     tcp_stream.write_all(&bytes).await.unwrap();
 
-    let mut response = vec![0; 2048];
-
-    let nb_read = match tcp_stream.read(&mut response).await {
-        Ok(n) => n,
-        Err(e) => {
-            println!("Error reading response : {}", e);
-            return Ok(());
-        }
-    };
-    response.truncate(nb_read);
-
-    println!("Response : {}", hex(&response));
-
-    let mut deframer = Deframer::new(&mut response);
-
-    while let Some(res) = deframer.next() {
-        match res {
-            Err(e) => {
-                println!("Error deframing message : {}", e);
-                break;
-            }
-            Ok(msg) => {
-                println!("Got message : {:?}", msg);
-
-                if msg.typ == ContentType::Handshake {
-                    let mut reader = Reader::new(&msg.payload.0);
-
-                    let handshake = match Handshake::decode(&mut reader) {
-                        Ok(h) => h,
-                        Err(e) => {
-                            println!("Error decoding handshake : {:?}", e);
-                            continue;
-                        }
-                    };
-
-                    println!("Got handshake : {:?}", handshake);
-                } else {
-                    println!("Unsupported type {:?}", msg.typ)
-                }
-            }
-        }
-    }
+    read_response(tcp_stream).await?;
 
     Ok(())
 }
@@ -100,9 +60,9 @@ pub async fn test_read_response<S: AsyncRead + AsyncWriteExt + Unpin>(
 async fn read_response<S: AsyncRead + AsyncWriteExt + Unpin>(
     tcp_stream: &mut S,
 ) -> Result<(), Error> {
-    let mut response = vec![0; 2048];
+    let mut response = BytesMut::with_capacity(2048);
 
-    let nb_read = match tcp_stream.read(&mut response).await {
+    let nb_read = match tcp_stream.read_buf(&mut response).await {
         Ok(n) => n,
         Err(e) => {
             println!("Error reading response : {}", e);

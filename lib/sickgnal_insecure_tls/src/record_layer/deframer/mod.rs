@@ -1,6 +1,6 @@
 //! Record layer defragmentation
 //!
-
+use bytes::BytesMut;
 use thiserror::Error;
 
 use crate::{
@@ -18,11 +18,11 @@ use crate::{
 /// Reconstructs [`Record<EncodedPayload>`] from an input buffer
 pub struct Deframer<'a> {
     /// Data read from the socket, waiting to be parsed into messages
-    input_buffer: &'a mut Vec<u8>,
+    input_buffer: &'a mut BytesMut,
 }
 
 impl<'a> Deframer<'a> {
-    pub fn new(buf: &'a mut Vec<u8>) -> Self {
+    pub fn new(buf: &'a mut BytesMut) -> Self {
         Self { input_buffer: buf }
     }
 }
@@ -60,16 +60,16 @@ impl<'a> Iterator for Deframer<'a> {
         // Try to get the full fragment
         self.input_buffer.get(RECORD_HEADER_LEN..fragment_end)?;
 
-        // Get the fragment and shift the buffer to the left
-        let fragment = self
-            .input_buffer
-            .drain(0..fragment_end) // Remove the whole record from the buffer
-            .skip(RECORD_HEADER_LEN); // Skip the header
+        // Take the record from the buffer, leaving the unprocessed data
+        let record = self.input_buffer.split_to(fragment_end);
+
+        // Remove the header
+        let fragment = &record[RECORD_HEADER_LEN..];
 
         let record = Record {
             typ: content_type,
             version,
-            payload: EncodedPayload(Vec::from_iter(fragment)),
+            payload: EncodedPayload(Vec::from(fragment)),
         };
 
         Some(Ok(record))

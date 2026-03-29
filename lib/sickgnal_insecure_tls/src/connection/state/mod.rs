@@ -131,6 +131,19 @@ impl State {
         Ok(State::WaitServerHello(next))
     }
 
+    /// Returns `true` if this state is a handshaking state
+    pub fn is_handshaking(&self) -> bool {
+        match self {
+            State::Start
+            | State::WaitServerHello(..)
+            | State::WaitEncryptedExtensions(..)
+            | State::WaitCertificate
+            | State::WaitCertificateVerify
+            | State::WaitFinished => true,
+            _ => false,
+        }
+    }
+
     /// Handle an incoming [`Message`]
     pub fn handle(self, input: Message, output: &mut Output) -> Result<Self, Error> {
         // Simply pass the call to the underlying state

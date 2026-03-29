@@ -48,10 +48,10 @@ impl Connection {
     }
 
     /// Start the TLS handshake
-    pub(crate) async fn handshake<W: AsyncWrite + Unpin>(
+    pub(crate) async fn handshake<S: AsyncWrite + AsyncReadExt + Unpin>(
         &mut self,
         server_name: &ServerName,
-        writer: &mut W,
+        stream: &mut S,
     ) -> Result<(), Error> {
         // Get the state and replace it with an error in case we try to use it
         let st = match mem::replace(&mut self.state, Err(Error::UnfinishedHandshake)) {
@@ -70,9 +70,15 @@ impl Connection {
         let next_state = st.handshake(&self.config, server_name, &mut output)?;
 
         // Send the client hello
-        self.send_tls(writer).await?;
-
+        self.send_tls(stream).await?;
         self.state = Ok(next_state);
+
+        // Complete the handshake
+        while self.state.as_ref().is_ok_and(|s| s.is_handshaking()) {
+            self.read_tls(stream).await?;
+            self.process_new_packets()?;
+        }
+
         Ok(())
     }
 
