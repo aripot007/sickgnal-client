@@ -64,34 +64,6 @@ pub(crate) fn encode_length_prefixed_vector<T: Encode>(
     dest[start..header_end].copy_from_slice(&vec_len.to_be_bytes()[(4 - header_len)..]);
 }
 
-/// Decode a length-prefixed vector with the given length field size
-pub(crate) fn decode_length_prefixed_vector<T: Decode>(
-    reader: &mut Reader,
-    length_size: LengthSize,
-) -> Result<Vec<T>, InvalidMessage> {
-    let len = match length_size {
-        LengthSize::U8 => u8::decode(reader)? as usize,
-        LengthSize::U16 => u16::decode(reader)? as usize,
-        LengthSize::U24 => U24::decode(reader)?.into(),
-    };
-
-    if len == 0 {
-        return Ok(Vec::new());
-    }
-
-    let nb_elts = len / size_of::<T>();
-
-    // FIXME: For now, we assume the max size is the encodable size, it might be smaller
-    let mut elts = Vec::with_capacity(nb_elts);
-
-    // Decode each elements
-    for _ in 0..len {
-        elts.push(T::decode(reader)?);
-    }
-
-    Ok(elts)
-}
-
 #[derive(Debug, Clone, Copy)]
 /// Represents the size of the length field for a length-prefixed vector
 pub enum LengthSize {
