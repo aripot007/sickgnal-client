@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use crate::{
     codec::Codec,
-    hex,
+    hex_display::HexDisplayExt,
     msgs::{Message, ProtocolVersion, handhake::Handshake},
     reader::Reader,
     record_layer::ContentType,
@@ -43,6 +43,6 @@ pub struct EncodedPayload(pub Vec<u8>);
 
 impl Debug for EncodedPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "EncodedPayload[{}]", hex(&self.0))
+        write!(f, "EncodedPayload[{}]", &self.0.pretty_hex())
     }
 }

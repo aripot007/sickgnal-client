@@ -10,7 +10,7 @@ use tracing::trace;
 
 use crate::codec::Codec;
 use crate::crypto::hkdf_expand_label;
-use crate::hex;
+use crate::hex_display::HexDisplayExt;
 use crate::msgs::ProtocolVersion;
 use crate::record_layer::ContentType;
 
@@ -220,7 +220,7 @@ impl Debug for InnerState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InnerState")
             .field("sequence_number", &self.sequence_number)
-            .field("write_iv", &hex(&self.iv))
+            .field("write_iv", &self.iv.hex())
             .finish_non_exhaustive()
     }
 }

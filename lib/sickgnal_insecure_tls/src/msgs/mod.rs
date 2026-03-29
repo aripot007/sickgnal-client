@@ -8,7 +8,7 @@ use tracing::error;
 use crate::{
     codec::Codec,
     error::InvalidMessage,
-    hex,
+    hex_display::HexDisplayExt,
     macros::codec_enum,
     msgs::handhake::Handshake,
     reader::Reader,
@@ -121,13 +121,14 @@ impl Debug for Message {
             Self::ChangeCipherSpec => write!(f, "ChangeCipherSpec"),
             Self::Alert => write!(f, "Alert"),
             Self::ApplicationData(arg0) => f.debug_tuple("ApplicationData").field(arg0).finish(),
-            Self::HandshakeData(bytes) => {
-                f.debug_tuple("HandshakeData").field(&hex(bytes)).finish()
-            }
+            Self::HandshakeData(bytes) => f
+                .debug_tuple("HandshakeData")
+                .field(&bytes.pretty_hex())
+                .finish(),
             Self::Handshake { decoded, raw_bytes } => f
                 .debug_struct("Handshake")
                 .field("decoded", decoded)
-                .field("raw_bytes", &hex(raw_bytes))
+                .field("raw_bytes", &raw_bytes.pretty_hex())
                 .finish(),
         }
     }

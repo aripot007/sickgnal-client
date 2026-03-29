@@ -10,7 +10,7 @@ use tracing::trace;
 
 use crate::crypto::hkdf_expand_label;
 use crate::error::{Error, InvalidMessage};
-use crate::hex;
+use crate::hex_display::HexDisplayExt;
 use crate::msgs::Message;
 use crate::reader::Reader;
 use crate::record_layer::ContentType;
@@ -87,8 +87,8 @@ impl InnerState {
         let key = hkdf_expand_label(&hk, "key", b"", KEY_SIZE as u16);
         let iv = hkdf_expand_label(&hk, "iv", b"", NONCE_SIZE as u16);
 
-        trace!("key : {}", hex(&key));
-        trace!("iv : {}", hex(&iv));
+        trace!("key : {}", &key.hex());
+        trace!("iv : {}", &iv.hex());
 
         let aead = Aes128Gcm::new_from_slice(&key).expect("dervied key should have a valid length");
 
@@ -158,7 +158,7 @@ impl Debug for InnerState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InnerState")
             .field("sequence_number", &self.sequence_number)
-            .field("server_write_iv", &hex(&self.iv))
+            .field("server_write_iv", &self.iv.hex())
             .finish_non_exhaustive()
     }
 }

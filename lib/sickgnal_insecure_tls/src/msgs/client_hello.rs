@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use rand::{RngCore, rngs::OsRng};
 
@@ -7,6 +7,7 @@ use crate::{
     codec::{Codec, LengthSize, encode_length_prefixed_vector},
     connection::ServerName,
     crypto::{NamedGroup, SignatureScheme, ciphersuite::CipherSuite, keyshare::KeyShareEntry},
+    hex_display::HexDisplayExt,
     msgs::{ExtensionType, ProtocolVersion},
     reader::Reader,
 };
@@ -90,8 +91,7 @@ impl ClientRandom {
 
 impl Debug for ClientRandom {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let hex: String = self.0.iter().map(|d| format!("{:02x}", d)).collect();
-        write!(f, "{}", hex)
+        write!(f, "{}", self.0.hex())
     }
 }
 

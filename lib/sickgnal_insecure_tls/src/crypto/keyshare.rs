@@ -4,7 +4,7 @@ use crate::{
     codec::Codec,
     crypto::{NamedGroup, NamedGroupName},
     error::InvalidMessage,
-    hex,
+    hex_display::HexDisplayExt,
     reader::Reader,
 };
 
@@ -73,7 +73,7 @@ impl Debug for KeyShareEntry {
         match self {
             Self::X25519(arg0) => f
                 .debug_tuple("X25519")
-                .field(&hex(arg0.as_bytes()))
+                .field(&arg0.as_bytes().hex())
                 .finish(),
         }
     }

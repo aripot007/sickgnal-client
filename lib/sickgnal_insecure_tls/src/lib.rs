@@ -2,6 +2,7 @@ use crate::{
     client::{ClientConfig, tls_stream::TlsStream},
     codec::Codec,
     error::Error,
+    hex_display::HexDisplayExt,
     msgs::{Message, ProtocolVersion, client_hello::ClientHello, handhake::Handshake},
     reader::Reader,
     record_layer::{ContentType, deframer::Deframer, record::Record},
@@ -16,6 +17,7 @@ mod codec;
 mod connection;
 mod crypto;
 pub mod error;
+pub(crate) mod hex_display;
 mod msgs;
 pub(crate) mod reader;
 mod record_layer;
@@ -42,7 +44,7 @@ pub async fn test<S: AsyncRead + AsyncWriteExt + Unpin>(tcp_stream: &mut S) -> R
     let mut bytes = Vec::new();
     record.encode(&mut bytes);
 
-    println!("Encoded payload : {}", hex(&bytes));
+    println!("Encoded payload : {}", &bytes.pretty_hex());
 
     tcp_stream.write_all(&bytes).await.unwrap();
 
@@ -71,7 +73,7 @@ async fn read_response<S: AsyncRead + AsyncWriteExt + Unpin>(
     };
     response.truncate(nb_read);
 
-    println!("Response : {}", hex(&response));
+    println!("Response : {}", &response.pretty_hex());
 
     let mut deframer = Deframer::new(&mut response);
 
@@ -104,13 +106,4 @@ async fn read_response<S: AsyncRead + AsyncWriteExt + Unpin>(
     }
 
     Ok(())
-}
-
-// Create a string to display bytes as hex
-pub fn hex(bytes: &[u8]) -> String {
-    let mut res = String::with_capacity(2 * (bytes.len() + 1));
-    for b in bytes {
-        res += &format!("{:02x} ", b);
-    }
-    res
 }
