@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use clap::Parser;
-use sickgnal_insecure_tls::client::ClientConfig as IClientConfig;
+use sickgnal_insecure_tls::{Connection, client::ClientConfig as IClientConfig};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -67,17 +67,38 @@ pub async fn main() -> Result<(), Error> {
     let custom_config = IClientConfig::new(root_store.roots);
 
     info!("Connecting to {}:{}", args.host, args.port);
-    let tcp_stream = TcpStream::connect((args.host.clone(), args.port)).await?;
+    let mut tcp_stream = TcpStream::connect((args.host.clone(), args.port)).await?;
 
     // Perform TLS handshake
     info!("Starting TLS handshake");
-    let mut tls_stream = custom_config.connect(server_name, tcp_stream).await?;
+    // let mut tls_stream = custom_config.connect(server_name, tcp_stream).await?;
 
-    sickgnal_insecure_tls::test_read_response(&mut tls_stream)
-        .await
-        .unwrap();
+    let mut connection = Connection::new(custom_config.clone(), server_name);
+    connection.handshake(&mut tcp_stream).await?;
 
-    drop(tls_stream);
+    info!("Sending hello world");
+
+    connection.write(b"Hello World !\n");
+    connection.write_tls(&mut tcp_stream).await?;
+
+    info!("Reading response");
+
+    loop {
+        connection.read_tls(&mut tcp_stream).await?;
+        connection.process_new_packets()?;
+
+        let mut response = [0; 1024];
+        let nread = connection.read(&mut response)?;
+
+        let resp = String::from_utf8_lossy(&response[0..nread]);
+        eprint!("{}", resp)
+    }
+
+    // sickgnal_insecure_tls::test_read_response(&mut tls_stream)
+    //     .await
+    //     .unwrap();
+
+    // drop(tls_stream);
 
     // sickgnal_insecure_tls::test(&mut tcp_stream).await?;
 

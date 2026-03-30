@@ -1,4 +1,5 @@
 use sha2::{Sha256, digest::OutputSizeUser};
+use tracing::debug;
 
 use crate::{
     codec::Decode,
@@ -44,6 +45,9 @@ pub enum Handshake {
     Certificate(CertificateMessage),
     CertificateVerify(CertificateVerify),
     Finished(Finished),
+
+    /// We don't use session sickets, so we just ignore the message for now
+    NewSessionTicket,
 }
 
 impl Handshake {
@@ -56,6 +60,7 @@ impl Handshake {
             Handshake::Certificate(..) => HandshakeType::Certificate,
             Handshake::CertificateVerify(..) => HandshakeType::CertificateVerify,
             Handshake::Finished(..) => HandshakeType::Finished,
+            Handshake::NewSessionTicket => HandshakeType::NewSessionTicket,
         }
     }
 }
@@ -99,8 +104,12 @@ impl Decode for Handshake {
                 Handshake::Finished(Finished::decode(&mut buf, hash_length)?)
             }
 
+            HandshakeType::NewSessionTicket => {
+                debug!("discarded NewSessionTicket");
+                Handshake::NewSessionTicket
+            }
+
             // Not supported yet
-            HandshakeType::NewSessionTicket => todo!(),
             HandshakeType::EndOfEarlyData => todo!(),
             HandshakeType::CertificateRequest => todo!(),
             HandshakeType::KeyUpdate => todo!(),

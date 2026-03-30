@@ -4989,9 +4989,11 @@ dependencies = [
  "rusqlite",
  "serde",
  "sickgnal_core",
+ "sickgnal_insecure_tls",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-rustls",
  "uuid",
 ]
 

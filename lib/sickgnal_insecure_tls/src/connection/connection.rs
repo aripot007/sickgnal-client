@@ -1,5 +1,6 @@
-use std::mem;
+use std::{cmp, io, mem};
 
+use bytes::Buf;
 use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tracing::{debug, trace};
 
@@ -11,6 +12,7 @@ use crate::{
         state::{Output, State},
     },
     error::Error,
+    msgs::Message,
 };
 
 /// The server name to connect to
@@ -48,7 +50,7 @@ impl Connection {
     }
 
     /// Start the TLS handshake
-    pub(crate) async fn handshake<S: AsyncWrite + AsyncReadExt + Unpin>(
+    pub async fn handshake<S: AsyncWrite + AsyncReadExt + Unpin>(
         &mut self,
         stream: &mut S,
     ) -> Result<(), Error> {
@@ -70,7 +72,7 @@ impl Connection {
         let next_state = st.handshake(self.config.clone(), &mut output)?;
 
         // Send the client hello
-        self.send_tls(stream).await?;
+        self.write_tls(stream).await?;
         self.state = Ok(next_state);
 
         // Complete the handshake
@@ -79,13 +81,13 @@ impl Connection {
             self.process_new_packets()?;
 
             if self.wants_write() {
-                self.send_tls(stream).await?;
+                self.write_tls(stream).await?;
             }
         }
 
         // finish sending the data
         if self.wants_write() {
-            self.send_tls(stream).await?;
+            self.write_tls(stream).await?;
         }
 
         debug!("finished handshake");
@@ -94,7 +96,7 @@ impl Connection {
     }
 
     /// Send the buffered TLS records in queue
-    pub async fn send_tls<W: AsyncWrite + Unpin>(&mut self, writer: &mut W) -> Result<(), Error> {
+    pub async fn write_tls<W: AsyncWrite + Unpin>(&mut self, writer: &mut W) -> Result<(), Error> {
         trace!("Sending {} bytes", self.sender.output_buffer.len());
 
         writer.write_all(&self.sender.output_buffer).await?;
@@ -116,20 +118,38 @@ impl Connection {
         Ok(nb_read)
     }
 
-    /// Returns `true` if the connection needs to read more data from the network
+    /// Returns `true` if the client should call [`Self::read_tls`] as soon as possible
     pub fn wants_read(&self) -> bool {
         // FIXME: there should be other cases where we want to read
         self.receiver.input_buffer.is_empty()
     }
 
-    /// Returns `true` when the connection needs to write data to the network
+    // Returns `true` if the client should call [`Self::write_tls`] as soon as possible
     pub fn wants_write(&self) -> bool {
         !self.sender.output_buffer.is_empty()
     }
 
     /// Process the new packets left in the input buffer
-    fn process_new_packets(&mut self) -> Result<(), Error> {
+    pub fn process_new_packets(&mut self) -> Result<(), Error> {
         self.receiver
             .process_new_packets(&mut self.state, &mut self.sender)
+    }
+
+    /// Write some application data
+    ///
+    /// You need to call [`Self::write_tls`] to actually send the data
+    /// on the network.
+    pub fn write(&mut self, data: &[u8]) {
+        self.sender.send(Message::ApplicationData(Vec::from(data)));
+    }
+
+    /// Read some application data
+    ///
+    /// You should call [`Self::read_tls`] and [`Self::process_new_packets`] to fill
+    /// the internal buffer first
+    pub fn read(&mut self, dest: &mut [u8]) -> io::Result<usize> {
+        let len = cmp::min(self.receiver.data_buffer.remaining(), dest.len());
+        self.receiver.data_buffer.copy_to_slice(&mut dest[0..len]);
+        Ok(len)
     }
 }

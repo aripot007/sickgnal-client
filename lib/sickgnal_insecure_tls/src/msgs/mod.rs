@@ -85,7 +85,7 @@ impl Message {
             Message::ChangeCipherSpec => todo!(),
             Message::Alert => todo!(),
             Message::Handshake { raw_bytes, .. } => dest.extend(raw_bytes),
-            Message::ApplicationData(..) => todo!(),
+            Message::ApplicationData(bytes) => dest.extend(bytes),
             Message::HandshakeData(bytes) => dest.extend(bytes),
         }
     }

@@ -24,13 +24,13 @@ use crate::{
 const INPUT_BUF_SIZE: usize = 2 << 14;
 
 /// Initial data buffer size in bytes
-const DATA_BUF_SIZE: usize = 1024;
+const DATA_BUF_SIZE: usize = 4096;
 
 /// Receives, decrypts and defragments TLS records
 #[derive(Debug)]
 pub struct Receiver {
     pub(super) input_buffer: BytesMut,
-    pub(super) data_buffer: Vec<u8>,
+    pub(super) data_buffer: BytesMut,
     decryption_state: DecryptionState,
     hs_deframer: HandshakeDeframer,
 }
@@ -39,7 +39,7 @@ impl Receiver {
     pub fn new() -> Self {
         Self {
             input_buffer: BytesMut::with_capacity(INPUT_BUF_SIZE),
-            data_buffer: Vec::with_capacity(DATA_BUF_SIZE),
+            data_buffer: BytesMut::with_capacity(DATA_BUF_SIZE),
             decryption_state: DecryptionState::new(),
             hs_deframer: HandshakeDeframer::new(),
         }
@@ -137,6 +137,8 @@ impl Receiver {
 
         // get the buffer back
         self.input_buffer = input_buffer;
+
+        *state = Ok(st);
 
         Ok(())
     }

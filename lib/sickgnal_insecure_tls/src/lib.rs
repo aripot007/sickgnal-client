@@ -10,9 +10,11 @@ use crate::{
 };
 use bytes::BytesMut;
 use rand::rngs::OsRng;
-use rustls_pki_types::ServerName;
+pub use rustls_pki_types::ServerName;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use x25519_dalek::{EphemeralSecret, PublicKey};
+
+pub use rustls_pki_types as pki_types;
 
 pub mod client;
 mod codec;
@@ -24,6 +26,8 @@ mod msgs;
 pub(crate) mod reader;
 mod record_layer;
 mod u24;
+
+pub use connection::*;
 
 #[macro_use]
 pub(crate) mod macros;
