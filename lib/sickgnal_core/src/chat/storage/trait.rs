@@ -17,7 +17,7 @@ pub trait StorageBackend: Send + Sync {
     fn create_account(&mut self, account: &Account) -> Result<()>;
 
     /// Load the account (there should only be one)
-    fn load_account(&self) -> Result<Option<Account>>;
+    fn load_account(&self, username: String) -> Result<Option<Account>>;
 
     /// Update account information
     fn update_account(&mut self, account: &Account) -> Result<()>;

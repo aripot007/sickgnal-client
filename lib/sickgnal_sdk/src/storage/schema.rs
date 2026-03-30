@@ -1,18 +1,19 @@
 /// SQL schema for the SQLite database
 ///
 /// This module contains all table definitions and initialization scripts.
-/// Sensitive columns (identity_key_priv, midterm_key, session_data_json, messages.content)
-/// are stored as BLOB and encrypted at the application layer using ChaCha20Poly1305.
+/// Sensitive columns (session_data_json, messages.content) are stored as BLOB
+/// and encrypted at the application layer using ChaCha20Poly1305.
+/// Cryptographic keys (identity, midterm, ephemeral) are stored in the keys table.
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
 -- Accounts table: stores the local user account information
 -- There should only be one account per database
+-- Cryptographic keys are stored separately in the keys table
 CREATE TABLE IF NOT EXISTS accounts (
     user_id TEXT PRIMARY KEY NOT NULL,
     username TEXT NOT NULL,
-    identity_key_priv BLOB NOT NULL,  -- Encrypted with user's master key
-    midterm_key BLOB NOT NULL,        -- Encrypted with user's master key
+    auth_token TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
 
@@ -22,8 +23,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     peer_user_id TEXT NOT NULL UNIQUE,  -- Each peer can only have one conversation
     peer_name TEXT NOT NULL,
     last_message_at TEXT,               -- ISO 8601 timestamp
-    unread_count INTEGER NOT NULL DEFAULT 0,
-    FOREIGN KEY (peer_user_id) REFERENCES accounts(user_id)
+    unread_count INTEGER NOT NULL DEFAULT 0
 );
 
 -- Messages table: stores all messages for all conversations
@@ -44,8 +44,7 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS sessions (
     peer_user_id TEXT PRIMARY KEY NOT NULL,
     session_data_json BLOB NOT NULL,    -- Encrypted session data (serialized JSON)
-    updated_at TEXT NOT NULL,           -- ISO 8601 timestamp
-    FOREIGN KEY (peer_user_id) REFERENCES accounts(user_id)
+    updated_at TEXT NOT NULL            -- ISO 8601 timestamp
 );
 
 -- Keys table: stores various cryptographic keys

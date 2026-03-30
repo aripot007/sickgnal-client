@@ -68,7 +68,7 @@ where
 
 impl<Storage, MsgStream> E2EClient<Storage, MsgStream>
 where
-    Storage: E2EStorageBackend + Send,
+    Storage: E2EStorageBackend + Send + 'static,
     MsgStream: E2EMessageStream + Send,
 {
     // region:    Public API
@@ -172,7 +172,7 @@ where
     ///
     /// ```ignore
     ///
-    /// let (handle, ch, recv_worker, send_worker) = client.start_async_workers();
+    /// let (handle, ch, recv_worker, send_worker) = client.start_async_workers().await?;
     ///
     /// // Start the two worker tasks
     /// tokio::spawn(recv_worker);
@@ -181,14 +181,23 @@ where
     /// ```
     ///
     /// [`Receiver<ChatMessage>`]: mpsc::Receiver
-    pub fn start_async_workers(
-        self,
-    ) -> (
+    pub async fn start_async_workers(
+        mut self,
+    ) -> Result<(
         ClientHandle<Storage>,
         mpsc::Receiver<ChatMessage>,
         impl Future<Output = ()> + Send + 'static, // Receiver task
         impl Future<Output = ()> + Send + 'static, // Sender task
-    ) {
+    )> {
+        // Activate instant relay
+        let rq = E2EMessage::EnableInstantRelay {
+            token: String::new(),
+        };
+
+        match self.send_authenticated_e2e(rq).await? {
+            E2EMessage::Ok => (),
+            m => return Err(Error::UnexpectedE2EMessage(m)),
+        };
         let (reader, writer) = self.msg_stream.split();
 
         let (send_tx, send_rx) = mpsc::channel(100);
@@ -205,7 +214,7 @@ where
             client_state: state,
         };
 
-        (handle, recv_rx, receiver_task, sender_task)
+        Ok((handle, recv_rx, receiver_task, sender_task))
     }
 
     // endregion: Public API

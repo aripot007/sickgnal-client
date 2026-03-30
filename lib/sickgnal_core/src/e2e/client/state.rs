@@ -131,8 +131,9 @@ where
             return Ok(msg);
         }
 
-        let msg = E2EMessage::ConversationMessage {
-            sender_id: self.account.id,
+        let msg = E2EMessage::SendMessage {
+            token: self.account.token.clone(),
+            recipient_id: to,
             msg_ciphertext,
         };
 
@@ -347,10 +348,10 @@ where
         let nonce = XChaCha20Poly1305::generate_nonce(&mut self.rng);
 
         let aad = &[
-            idk.as_bytes().as_slice(),              // I_A
-            bundle.identity_keys.x25519.as_bytes(), // I_B
-            send_key_id.as_bytes(),                 // i
-            receive_key_id.as_bytes(),              // j
+            public_identity_key.as_bytes().as_slice(), // I_A
+            bundle.identity_keys.x25519.as_bytes(),    // I_B
+            send_key_id.as_bytes(),                    // i
+            receive_key_id.as_bytes(),                 // j
         ]
         .concat();
 
@@ -363,12 +364,6 @@ where
             .encrypt(&nonce, payload)
             .map_err(encrypted_payload::Error::from)?;
 
-        let encrypted_payload = EncryptedPayload {
-            nonce: nonce.into(),
-            key_id: send_key_id,
-            ciphertext,
-        };
-
         // Construct the message and the session
 
         let kex_data = KeyExchangeData {
@@ -377,7 +372,8 @@ where
             recipient_prekey_id: prekey_id,
             send_key_id,
             receive_key_id,
-            msg_ciphertext: encrypted_payload,
+            nonce: nonce.into(),
+            ciphertext,
         };
 
         let message = E2EMessage::SendInitialMessage {
@@ -473,12 +469,12 @@ where
         .concat();
 
         let payload = Payload {
-            msg: &kex_data.msg_ciphertext.ciphertext,
+            msg: &kex_data.ciphertext,
             aad,
         };
 
         let bytes = aead
-            .decrypt(&kex_data.msg_ciphertext.nonce.into(), payload)
+            .decrypt(&kex_data.nonce.into(), payload)
             .map_err(encrypted_payload::Error::from)?;
 
         let payload = PayloadMessage::try_from_bytes(&bytes)?;
@@ -499,10 +495,10 @@ where
         let sess = E2ESession {
             correspondant_id: sender_id,
             sending_key_id: kex_data.receive_key_id,
-            sending_key: recv_key,
+            sending_key: send_key,
             key_msg_count,
             receiving_key_id: kex_data.send_key_id,
-            receiving_key: send_key,
+            receiving_key: recv_key,
         };
 
         self.storage.save_session(&sess)?;

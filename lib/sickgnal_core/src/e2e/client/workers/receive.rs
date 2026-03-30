@@ -71,6 +71,15 @@ where
     S: E2EStorageBackend + Send,
     R: E2EMessageReader,
 {
+    /// Cleanly shutdown the worker
+    fn shutdown(&mut self) {
+        self.out_channel.close_channel();
+
+        // Close the oneshot channels to prevent the client from hanging
+        let mut state = self.state.lock().unwrap();
+        state.waiting_requests.clear();
+    }
+
     /// Main worker loop
     async fn main_loop(&mut self) {
         'main: loop {
@@ -85,7 +94,6 @@ where
             let packet = match self.reader.receive().await {
                 Ok(packet) => packet,
                 Err(err) => {
-                    // TODO: Better logging
                     println!("Reader error : {}", err);
                     break;
                 }
@@ -128,6 +136,7 @@ where
 
         // TODO: Clean shutdown / send error to client ?
         println!("Stopping receiver");
+        self.shutdown();
     }
 
     /// Process a [`E2EMessage`]
@@ -176,10 +185,13 @@ where
             .handle_open_session(sender_id, &data)?;
 
         // Get the initial chat message
-        let m = match payload {
+        let mut m = match payload {
             PayloadMessage::ChatMessage(m) => m,
             PayloadMessage::E2EMessage(m) => return Err(Error::UnexpectedE2EMessage(m)),
         };
+
+        // Set the sender_id from the E2E envelope (it's skipped during deserialization)
+        m.sender_id = sender_id;
 
         if !matches!(
             m.kind,
@@ -212,7 +224,10 @@ where
             .decrypt_payload(sender_id, &ciphertext);
 
         match payload_res {
-            Ok(PayloadMessage::ChatMessage(m)) => self.out_channel.send(m).await?,
+            Ok(PayloadMessage::ChatMessage(mut m)) => {
+                m.sender_id = sender_id;
+                self.out_channel.send(m).await?;
+            }
 
             // Handle key rotation
             Ok(PayloadMessage::E2EMessage(E2EMessage::KeyRotation {

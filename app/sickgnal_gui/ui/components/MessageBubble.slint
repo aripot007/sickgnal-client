@@ -54,7 +54,7 @@ component BubbleBase inherits HorizontalLayout {
     }
 }
 
-export component LMessageBubble inherits BubbleBase {
+component LMessageBubble inherits BubbleBase {
     bubble-alignment: start;
     pad-left: Theme.message-bubble-inner-pad;
     pad-right: Theme.message-bubble-inner-pad * 10;
@@ -64,7 +64,7 @@ export component LMessageBubble inherits BubbleBase {
     radius-right: Theme.border-radius;
 }
 
-export component RMessageBubble inherits BubbleBase {
+component RMessageBubble inherits BubbleBase {
     bubble-alignment: end;
     pad-left: Theme.message-bubble-inner-pad * 10;
     pad-right: Theme.message-bubble-inner-pad;

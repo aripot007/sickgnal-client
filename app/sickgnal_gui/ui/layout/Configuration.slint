@@ -5,6 +5,7 @@ import {
 } from "std-widgets.slint";
 import { Button } from "../components/Button.slint";
 import { Theme } from "../theme.slint";
+import { Auth } from "Log.slint";
 
 export component ConfigLayout inherits VerticalBox {
     padding: 30px;
@@ -26,7 +27,7 @@ export component ConfigLayout inherits VerticalBox {
         }
 
         LineEdit {
-            text: "User_42";
+            text: Auth.username;
         }
 
         Button {

@@ -1,0 +1,29 @@
+import {
+    Button,
+    VerticalBox,
+    LineEdit,
+    ScrollView,
+    HorizontalBox,
+} from "std-widgets.slint";
+import { MainLayout } from "layout/Main.slint";
+import { Theme } from "theme.slint";
+import { LogLayout, Auth } from "layout/Log.slint";
+
+// Export models for Rust access
+export { Chat } from "models/Chat.slint";
+export { MessageData } from "models/Message.slint";
+export { Conversation } from "models/Conversation.slint";
+export { Auth } from "layout/Log.slint";
+
+export component AppWindow inherits Window {
+
+    title: "Rust Messenger";
+    min-width: 800px;
+    min-height: 500px;
+
+    background: Theme.background;
+
+    if (!Auth.is-logged-in): LogLayout { }
+
+    if (Auth.is-logged-in): MainLayout { }
+}

@@ -1,43 +1,158 @@
-use sickgnal_sdk::{client::SdkClient, core::chat::client::Event};
-/*use clap::Parser;
-use sickgnal_cli::cli;
-use tokio::net::TcpStream;
-use slint::{Model, ModelRc, VecModel};*/
-use std::{fmt::Debug, path::PathBuf, rc::Rc};
-slint::include_modules!();
+use sickgnal_sdk::{account::AccountFile, client::SdkClient, core::chat::client::Event};
 
+use std::path::PathBuf;
+use std::sync::Arc;
+slint::include_modules!();
+/*
 #[tokio::main]
-async fn main() {
-    let mut sdk = SdkClient::new("test".into(), PathBuf::new(), "1234", "127.0.0.1")
-        .await
-        .unwrap_or_else(|e| {
-            eprintln!("Erreur SDK : {}", e);
-            panic!("Impossible de continuer.");
-        });
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    use uuid::Uuid;
+    use chrono::Utc;
+    use sickgnal_core::chat::storage::StorageBackend;
+    use sickgnal_sdk::storage::{Config, Sqlite};
+    let dir = PathBuf::from("./storage");
+
+    let new_account = sickgnal_core::chat::storage::Account {
+        user_id: Uuid::new_v4(),
+        username: "username".into(),
+        auth_token: "token".into(),
+        created_at: Utc::now(),
+    };
+
+    let storage_config = Config::new(dir.into(), "password".into(), None)?;
+    let mut storage = Sqlite::new(storage_config)?;
+    storage.initialize()?;
+    storage.create_account(&new_account)?;
+
+    Ok(())
+}
+*/
+
+fn main() {
+    let dir = PathBuf::from("./storage");
+
+    let rt = Arc::new(tokio::runtime::Runtime::new().expect("Failed to create tokio runtime"));
 
     let ui = AppWindow::new().expect("Failed to load UI");
-    let ui_handle = ui.as_weak();
+    let account_file = Arc::new(AccountFile::new(dir.clone()).expect("Dossier non créé"));
 
-    // 3. Lancer la tâche d'écoute (Background Task)
-    tokio::spawn(async move {
-        // On boucle sur le receiver du SDK
+    if let Ok(username) = account_file.username() {
+        ui.global::<Auth>().set_username(username.into());
+    }
+
+    // --- CALLBACK SIGN UP ---
+    {
+        let ui_weak = ui.as_weak();
+        let af = Arc::clone(&account_file);
+        let rt = Arc::clone(&rt);
+        let dir = dir.clone();
+        ui.global::<Auth>()
+            .on_sign_up(move |user, pass, conf_pass| {
+                let ui = if let Some(ui) = ui_weak.upgrade() {
+                    ui
+                } else {
+                    return;
+                };
+
+                if pass != conf_pass {
+                    ui.global::<Auth>().set_different_password(true);
+                    return;
+                }
+
+                af.create(user.as_str(), pass.as_str())
+                    .expect("unable to store credentials");
+
+                spawn_sdk(
+                    ui_weak.clone(),
+                    rt.clone(),
+                    user.to_string(),
+                    pass.to_string(),
+                    dir.clone(),
+                    false,
+                );
+
+                ui.global::<Auth>().set_is_logged_in(true);
+                ui.window().set_maximized(true);
+            });
+    }
+
+    // --- CALLBACK SIGN IN ---
+    {
+        let ui_weak = ui.as_weak();
+        let af = Arc::clone(&account_file);
+        let rt = Arc::clone(&rt);
+        let dir = dir.clone();
+        ui.global::<Auth>().on_sign_in(move |pass| {
+            let ui = if let Some(ui) = ui_weak.upgrade() {
+                ui
+            } else {
+                return;
+            };
+            let username = ui.global::<Auth>().get_username().to_string();
+
+            match af.verify(username.as_str(), pass.as_str()) {
+                Ok(true) => {
+                    spawn_sdk(
+                        ui_weak.clone(),
+                        rt.clone(),
+                        username,
+                        pass.to_string(),
+                        dir.clone(),
+                        true,
+                    );
+                    ui.global::<Auth>().set_is_logged_in(true);
+                    ui.window().set_maximized(true);
+                }
+                Ok(false) => ui.global::<Auth>().set_incorrect_password(true),
+                Err(e) => panic!("Erreur de vérification: {}", e),
+            }
+        });
+    }
+
+    ui.run().unwrap();
+}
+
+/// Spawns the SDK initialization and event loop in the Tokio runtime.
+/// The Slint event loop continues running on the main thread.
+fn spawn_sdk(
+    ui_weak: slint::Weak<AppWindow>,
+    rt: Arc<tokio::runtime::Runtime>,
+    username: String,
+    password: String,
+    dir: PathBuf,
+    existing_account: bool,
+) {
+    rt.spawn(async move {
+        let sdk_result = if existing_account {
+            println!("Existing Account");
+            SdkClient::load(username.clone(), dir, &password, "127.0.0.1:8000").await
+        } else {
+            println!("Unexisting Account");
+            SdkClient::new(username.clone(), dir, &password, "127.0.0.1:8000").await
+        };
+
+        let mut sdk = match sdk_result {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Erreur SDK : {}", e);
+                return;
+            }
+        };
+
         loop {
-            // On attend le prochain message
             match sdk.event_rx.recv().await {
                 Ok(event) => {
-                    let _ = ui_handle.upgrade_in_event_loop(move |ui| {
+                    let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                         handle_sdk_event(ui, event);
                     });
                 }
-
                 Err(e) => {
-                    println!("{:?}", e);
+                    eprintln!("Event channel fermé : {:?}", e);
+                    break;
                 }
             }
         }
     });
-
-    ui.run().unwrap();
 }
 
 fn handle_sdk_event(ui: AppWindow, event: Event) {

@@ -75,6 +75,11 @@ impl EphemeralSecretKey {
             secret: X25519Secret::random_from_rng(csprng),
         }
     }
+
+    /// Consume the key and return its (id, secret) parts
+    pub fn into_parts(self) -> (Uuid, X25519Secret) {
+        (self.id, self.secret)
+    }
 }
 
 impl From<&EphemeralSecretKey> for EphemeralKey {

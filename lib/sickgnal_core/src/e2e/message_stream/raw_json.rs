@@ -1,5 +1,3 @@
-use std::io::IoSlice;
-
 use async_trait::async_trait;
 use thiserror::Error;
 use tokio::io::{self, AsyncRead, AsyncWrite, AsyncWriteExt};
@@ -81,12 +79,18 @@ where
 
     let request_id = packet.request_id.to_be_bytes();
 
+    // write_all guarantees all bytes are written (unlike write_vectored
+    // which can do partial writes and corrupt the framing)
     writer
-        .write_vectored(&[
-            IoSlice::new(&len.to_be_bytes()),
-            IoSlice::new(&request_id),
-            IoSlice::new(&payload),
-        ])
+        .write_all(&len.to_be_bytes())
+        .await
+        .map_err(Error::from)?;
+    writer
+        .write_all(&request_id)
+        .await
+        .map_err(Error::from)?;
+    writer
+        .write_all(&payload)
         .await
         .map_err(Error::from)?;
 

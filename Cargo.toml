@@ -3,8 +3,10 @@ members = [
     "lib/sickgnal_core",
     "lib/sickgnal_sdk",
     "lib/sickgnal_insecure_tls",
-    "app/sickgnal_cli",
     "app/test_tls",
+    "app/sickgnal_gui",
+    "app/sickgnal_test",
+    "app/sickgnal_tui",
 ]
 resolver = "2"
 

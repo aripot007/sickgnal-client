@@ -1,5 +1,5 @@
 mod client;
-mod client_handle;
+pub mod client_handle;
 pub mod error;
 mod payload_cache;
 pub mod session;
