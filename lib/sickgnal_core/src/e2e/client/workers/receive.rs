@@ -73,8 +73,6 @@ where
 {
     /// Cleanly shutdown the worker
     fn shutdown(&mut self) {
-        self.out_channel.close_channel();
-
         // Close the oneshot channels to prevent the client from hanging
         let mut state = self.state.lock().unwrap();
         state.waiting_requests.clear();

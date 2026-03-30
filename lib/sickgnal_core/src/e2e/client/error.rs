@@ -2,7 +2,7 @@
 //!
 
 use thiserror::Error;
-use tokio::sync::mpsc::{self, error::SendError};
+use tokio::sync::mpsc::error::SendError;
 use uuid::Uuid;
 
 use crate::e2e::{

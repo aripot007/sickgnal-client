@@ -107,15 +107,9 @@ impl From<ChatMessage> for Message {
                     ControlMessage::DeleteMsg { id } => {
                         (*id, "[message deleted]".to_string(), None)
                     }
-                    ControlMessage::AckReception { id } => {
-                        (*id, String::new(), None)
-                    }
-                    ControlMessage::AckRead { id } => {
-                        (*id, String::new(), None)
-                    }
-                    ControlMessage::IsTyping => {
-                        (Uuid::new_v4(), String::new(), None)
-                    }
+                    ControlMessage::AckReception { id } => (*id, String::new(), None),
+                    ControlMessage::AckRead { id } => (*id, String::new(), None),
+                    ControlMessage::IsTyping => (Uuid::new_v4(), String::new(), None),
                 };
 
                 Self {

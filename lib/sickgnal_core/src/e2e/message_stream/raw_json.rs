@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use thiserror::Error;
-use tokio::io::{self, AsyncRead, AsyncWrite, AsyncWriteExt};
+use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::e2e::{
     message::{E2EMessage, E2EPacket},
@@ -85,14 +85,8 @@ where
         .write_all(&len.to_be_bytes())
         .await
         .map_err(Error::from)?;
-    writer
-        .write_all(&request_id)
-        .await
-        .map_err(Error::from)?;
-    writer
-        .write_all(&payload)
-        .await
-        .map_err(Error::from)?;
+    writer.write_all(&request_id).await.map_err(Error::from)?;
+    writer.write_all(&payload).await.map_err(Error::from)?;
 
     Ok(())
 }
@@ -141,7 +135,7 @@ where
 
     /// Consumes the stream and return the two halves
     fn split(self) -> (Self::Reader, Self::Writer) {
-        let (reader, writer) = self.byte_stream.split();
+        let (reader, writer) = io::split(self.byte_stream);
 
         return (ReaderHalf(reader), WriterHalf(writer));
     }
