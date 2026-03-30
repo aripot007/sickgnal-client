@@ -79,7 +79,7 @@ impl WaitFinishedState {
         // Send our Finished message
 
         let hkdf = Hkdf::<Sha256>::from_prk(&self.client_hs_traffic_secret)
-            .expect("server_handshake_traffic_secret should be a valid PRK");
+            .expect("client_handshake_traffic_secret should be a valid PRK");
 
         let finished_key = hkdf_expand_label(&hkdf, "finished", b"", Sha256::output_size() as u16);
 
@@ -107,8 +107,10 @@ impl WaitFinishedState {
 
         let master_secret = Hkdf::<Sha256>::new(Some(&derived), &zeros);
 
-        let client_app_traffic_secret = derive_secret(&master_secret, "c ap traffic", None);
-        let server_app_traffic_secret = derive_secret(&master_secret, "s ap traffic", None);
+        let client_app_traffic_secret =
+            derive_secret(&master_secret, "c ap traffic", Some(&transcript_hash));
+        let server_app_traffic_secret =
+            derive_secret(&master_secret, "s ap traffic", Some(&transcript_hash));
 
         output
             .sender

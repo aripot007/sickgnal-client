@@ -134,7 +134,7 @@ impl InnerState {
         // The length of the ciphertext is
         // plaintext + content_type + padding + tag
         // we never use padding here
-        size_of::<ContentType>() + <Aes128Gcm as AeadCore>::CiphertextOverhead::USIZE
+        size_of::<ContentType>() + <Aes128Gcm as AeadCore>::TagSize::USIZE
     }
 
     /// Get the length of the ciphertext resulting from the

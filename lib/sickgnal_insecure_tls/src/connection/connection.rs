@@ -1,7 +1,7 @@
 use std::mem;
 
 use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tracing::trace;
+use tracing::{debug, trace};
 
 use crate::{
     client::ClientConfig,
@@ -77,7 +77,18 @@ impl Connection {
         while self.state.as_ref().is_ok_and(|s| s.is_handshaking()) {
             self.read_tls(stream).await?;
             self.process_new_packets()?;
+
+            if self.wants_write() {
+                self.send_tls(stream).await?;
+            }
         }
+
+        // finish sending the data
+        if self.wants_write() {
+            self.send_tls(stream).await?;
+        }
+
+        debug!("finished handshake");
 
         Ok(())
     }
