@@ -136,6 +136,8 @@ impl WaitServerHelloState {
             config: self.config,
             transcript_hasher,
             handshake_secret_hkdf: hkdf,
+            server_hs_traffic_secret,
+            client_hs_traffic_secret,
         };
 
         trace!(

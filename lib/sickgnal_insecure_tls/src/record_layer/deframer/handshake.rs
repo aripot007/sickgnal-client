@@ -9,7 +9,7 @@ use crate::{
 };
 
 /// Length of a Handshake message in bytes
-const HANDSHAKE_HEADER_SIZE: usize = 4;
+pub(crate) const HANDSHAKE_HEADER_SIZE: usize = 4;
 
 /// Deframes handshakes from a buffer
 #[derive(Debug)]

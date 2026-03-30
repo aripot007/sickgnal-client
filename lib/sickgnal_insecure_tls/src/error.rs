@@ -1,3 +1,4 @@
+use hkdf::hmac;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -95,6 +96,9 @@ pub enum InvalidMessage {
 
     /// When we can't validate the server's CertificateVerify
     InvalidCertificateVerify(webpki::Error),
+
+    /// When the hmac in a Finished message is invalid
+    InvalidFinishedHmac(hmac::digest::MacError),
 }
 
 impl From<InvalidMessage> for Error {

@@ -10,9 +10,13 @@ use crate::{
     error::InvalidMessage,
     hex_display::HexDisplayExt,
     macros::codec_enum,
-    msgs::{client_hello::ClientHello, handhake::Handshake},
+    msgs::{
+        client_hello::ClientHello,
+        handhake::{Handshake, HandshakeType},
+    },
     reader::Reader,
-    record_layer::{ContentType, ContentTypeName},
+    record_layer::{ContentType, ContentTypeName, deframer::handshake::HANDSHAKE_HEADER_SIZE},
+    u24::U24,
 };
 
 pub mod certificate;
@@ -46,6 +50,22 @@ impl Message {
             decoded: Handshake::ClientHello(hello),
             raw_bytes,
         }
+    }
+
+    /// Create a Finished message with the given data
+    ///
+    /// Returns a [`Message::HandshakeData`] that can be used for the transcript hash
+    pub fn finished<'a>(verify_data: Vec<u8>) -> Self {
+        // directly encode as handshake data
+        let mut bytes = Vec::with_capacity(HANDSHAKE_HEADER_SIZE + verify_data.len());
+
+        // Handshake header
+        HandshakeType::Finished.encode(&mut bytes); // msg_type
+        U24(verify_data.len() as u32).encode(&mut bytes); // length
+
+        bytes.extend(verify_data);
+
+        Message::HandshakeData(bytes)
     }
 
     /// Get the [`ContentTypeName`] of this message

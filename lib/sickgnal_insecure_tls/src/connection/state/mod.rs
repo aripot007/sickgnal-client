@@ -1,3 +1,4 @@
+mod connected;
 mod wait_certificate;
 mod wait_certificate_verify;
 mod wait_encrypted_extensions;
@@ -18,8 +19,8 @@ use crate::{
         receiver::Receiver,
         sender::Sender,
         state::{
-            wait_certificate::WaitCertificateState,
-            wait_certificate_verify::WaitCertificateVerifyState, wait_finished::WaitFinished,
+            connected::ConnectedState, wait_certificate::WaitCertificateState,
+            wait_certificate_verify::WaitCertificateVerifyState, wait_finished::WaitFinishedState,
         },
     },
     crypto::keyshare::KeyShareSecret,
@@ -95,10 +96,10 @@ pub(crate) enum State {
     WaitCertificateVerify(WaitCertificateVerifyState),
 
     /// We are waiting for the Finished message
-    WaitFinished(WaitFinished),
+    WaitFinished(WaitFinishedState),
 
     /// The handshake is done and we can send application data
-    Connected,
+    Connected(ConnectedState),
 }
 
 /// An event that can happen in the TLS connection, and
@@ -202,7 +203,7 @@ impl State {
             State::WaitCertificate(s) => s.handle(input, output),
             State::WaitCertificateVerify(s) => s.handle(input, output),
             State::WaitFinished(s) => s.handle(input, output),
-            State::Connected => todo!(),
+            State::Connected(s) => s.handle(input, output),
         }
     }
 
@@ -216,7 +217,7 @@ impl State {
             | State::WaitCertificate(..)
             | State::WaitCertificateVerify(..)
             | State::WaitFinished(..)
-            | State::Connected => true,
+            | State::Connected(..) => true,
         }
     }
 }

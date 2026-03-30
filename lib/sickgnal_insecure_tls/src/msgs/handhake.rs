@@ -1,6 +1,9 @@
+use sha2::{Sha256, digest::OutputSizeUser};
+
 use crate::{
     codec::Decode,
     error::InvalidMessage,
+    hex_display::HexDisplayExt,
     macros::codec_enum,
     msgs::{
         certificate::{CertificateMessage, CertificateVerify},
@@ -10,6 +13,8 @@ use crate::{
     reader::Reader,
     u24::U24,
 };
+
+use std::fmt::Debug;
 
 codec_enum! {
 
@@ -38,6 +43,7 @@ pub enum Handshake {
     EncryptedExtensions,
     Certificate(CertificateMessage),
     CertificateVerify(CertificateVerify),
+    Finished(Finished),
 }
 
 impl Handshake {
@@ -49,6 +55,7 @@ impl Handshake {
             Handshake::EncryptedExtensions => HandshakeType::EncryptedExtensions,
             Handshake::Certificate(..) => HandshakeType::Certificate,
             Handshake::CertificateVerify(..) => HandshakeType::CertificateVerify,
+            Handshake::Finished(..) => HandshakeType::Finished,
         }
     }
 }
@@ -86,11 +93,16 @@ impl Decode for Handshake {
                 Handshake::CertificateVerify(CertificateVerify::decode(&mut buf)?)
             }
 
+            HandshakeType::Finished => {
+                // TODO: Allow other hash algorithms
+                let hash_length = Sha256::output_size();
+                Handshake::Finished(Finished::decode(&mut buf, hash_length)?)
+            }
+
             // Not supported yet
             HandshakeType::NewSessionTicket => todo!(),
             HandshakeType::EndOfEarlyData => todo!(),
             HandshakeType::CertificateRequest => todo!(),
-            HandshakeType::Finished => todo!(),
             HandshakeType::KeyUpdate => todo!(),
             HandshakeType::MessageHash => todo!(),
 
@@ -98,5 +110,27 @@ impl Decode for Handshake {
         };
 
         Ok(handshake)
+    }
+}
+
+pub struct Finished {
+    pub(crate) verify_data: Vec<u8>,
+}
+
+impl Finished {
+    pub fn decode(buf: &mut Reader, hash_length: usize) -> Result<Self, InvalidMessage> {
+        let data = buf.take_for("Finished", hash_length)?;
+
+        Ok(Self {
+            verify_data: Vec::from(data),
+        })
+    }
+}
+
+impl Debug for Finished {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Finished")
+            .field("verify_data", &self.verify_data.hex())
+            .finish()
     }
 }

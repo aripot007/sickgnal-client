@@ -23,6 +23,12 @@ pub(super) struct WaitEncryptedExtensionsState {
 
     /// The Hkdf seeded with the handshake_secret
     pub(crate) handshake_secret_hkdf: Hkdf<Sha256>,
+
+    /// The server_handshake_traffic_secret
+    pub(crate) server_hs_traffic_secret: Vec<u8>,
+
+    /// The client_handshake_traffic_secret
+    pub(crate) client_hs_traffic_secret: Vec<u8>,
 }
 
 impl Debug for WaitEncryptedExtensionsState {
@@ -53,6 +59,8 @@ impl WaitEncryptedExtensionsState {
             config: self.config,
             transcript_hasher: self.transcript_hasher,
             handshake_secret_hkdf: self.handshake_secret_hkdf,
+            server_hs_traffic_secret: self.server_hs_traffic_secret,
+            client_hs_traffic_secret: self.client_hs_traffic_secret,
         };
 
         trace!(
