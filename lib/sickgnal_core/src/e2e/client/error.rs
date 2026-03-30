@@ -1,8 +1,8 @@
 //! E2E Client errors
 //!
 
-use futures::channel::mpsc::SendError;
 use thiserror::Error;
+use tokio::sync::mpsc::{self, error::SendError};
 use uuid::Uuid;
 
 use crate::e2e::{
@@ -47,8 +47,8 @@ pub enum Error {
     NoPrekeyAvailable,
 
     /// When there is an error sending the message on the worker channel
-    #[error("Could not send message to worker : {0}")]
-    WorkerSendError(#[from] SendError),
+    #[error("worker channel closed")]
+    WorkerSendError,
 
     /// When we can't receive a response because the receiving worker stopped
     #[error("Receiving worker stopped")]
@@ -64,5 +64,11 @@ impl From<ErrorCode> for Error {
             ErrorCode::NoAvailableKey => Error::NoPrekeyAvailable,
             _ => Error::ProtocolError(code),
         }
+    }
+}
+
+impl<T> From<SendError<T>> for Error {
+    fn from(_: SendError<T>) -> Self {
+        Self::WorkerSendError
     }
 }

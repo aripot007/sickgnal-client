@@ -1,4 +1,4 @@
-use futures::channel::mpsc;
+use tokio::sync::mpsc;
 
 use crate::e2e::{message::E2EPacket, message_stream::E2EMessageWriter};
 
@@ -11,10 +11,10 @@ where
 {
     loop {
         let msg = match channel_out.recv().await {
-            Ok(msg) => msg,
+            Some(msg) => msg,
 
             // Sending channel closed, stop the worker
-            Err(_) => break,
+            None => break,
         };
 
         if let Err(e) = writer.send(msg).await {

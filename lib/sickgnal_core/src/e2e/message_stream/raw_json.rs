@@ -1,8 +1,8 @@
 use std::io::IoSlice;
 
 use async_trait::async_trait;
-use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, io};
 use thiserror::Error;
+use tokio::io::{self, AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use crate::e2e::{
     message::{E2EMessage, E2EPacket},
@@ -132,8 +132,8 @@ impl<S> E2EMessageStream for RawJsonMessageStream<S>
 where
     S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    type Reader = ReaderHalf<futures::io::ReadHalf<S>>;
-    type Writer = WriterHalf<futures::io::WriteHalf<S>>;
+    type Reader = ReaderHalf<io::ReadHalf<S>>;
+    type Writer = WriterHalf<io::WriteHalf<S>>;
 
     /// Consumes the stream and return the two halves
     fn split(self) -> (Self::Reader, Self::Writer) {

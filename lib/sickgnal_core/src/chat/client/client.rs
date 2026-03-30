@@ -3,8 +3,8 @@ use crate::chat::client::{ConnectionState, Error, Event, Result};
 use crate::chat::storage::{Conversation, Message, MessageStatus, StorageBackend};
 
 use chrono::Utc;
-use futures::channel::mpsc;
-use futures::{AsyncRead, AsyncWrite, SinkExt};
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::chat::message::ChatMessage;

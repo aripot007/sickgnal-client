@@ -2,8 +2,7 @@
 //!
 
 use std::sync::{Arc, Mutex};
-
-use futures::{SinkExt, channel::mpsc};
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::{

@@ -15,7 +15,7 @@ use crate::{
         message_stream::E2EMessageReader,
     },
 };
-use futures::{SinkExt, channel::mpsc};
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 struct ReceiveWorker<R, S>

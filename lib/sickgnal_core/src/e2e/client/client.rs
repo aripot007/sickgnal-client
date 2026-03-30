@@ -7,12 +7,12 @@ use std::{
 };
 
 use ed25519_dalek::Signer;
-use futures::channel::mpsc;
 use rand::{
     SeedableRng,
     rngs::{OsRng, StdRng},
 };
 use sha2::{Digest, Sha512};
+use tokio::sync::mpsc;
 use uuid::Uuid;
 use x25519_dalek::PublicKey;
 

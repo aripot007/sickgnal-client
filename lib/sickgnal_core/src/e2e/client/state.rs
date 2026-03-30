@@ -7,8 +7,8 @@ use chacha20poly1305::{
     AeadCore, KeyInit, XChaCha20Poly1305,
     aead::{Aead, Payload},
 };
-use futures::channel::oneshot;
 use rand::{CryptoRng, Rng, RngCore, rngs::StdRng};
+use tokio::sync::oneshot;
 use uuid::Uuid;
 use x25519_dalek::PublicKey;
 
