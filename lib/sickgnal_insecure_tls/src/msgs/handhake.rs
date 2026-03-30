@@ -2,7 +2,11 @@ use crate::{
     codec::Decode,
     error::InvalidMessage,
     macros::codec_enum,
-    msgs::{certificate::CertificateMessage, client_hello::ClientHello, server_hello::ServerHello},
+    msgs::{
+        certificate::{CertificateMessage, CertificateVerify},
+        client_hello::ClientHello,
+        server_hello::ServerHello,
+    },
     reader::Reader,
     u24::U24,
 };
@@ -33,6 +37,7 @@ pub enum Handshake {
     ServerHello(ServerHello),
     EncryptedExtensions,
     Certificate(CertificateMessage),
+    CertificateVerify(CertificateVerify),
 }
 
 impl Handshake {
@@ -43,6 +48,7 @@ impl Handshake {
             Handshake::ServerHello(_) => HandshakeType::ServerHello,
             Handshake::EncryptedExtensions => HandshakeType::EncryptedExtensions,
             Handshake::Certificate(..) => HandshakeType::Certificate,
+            Handshake::CertificateVerify(..) => HandshakeType::CertificateVerify,
         }
     }
 }
@@ -76,11 +82,14 @@ impl Decode for Handshake {
                 Handshake::Certificate(CertificateMessage::decode(&mut buf)?)
             }
 
+            HandshakeType::CertificateVerify => {
+                Handshake::CertificateVerify(CertificateVerify::decode(&mut buf)?)
+            }
+
             // Not supported yet
             HandshakeType::NewSessionTicket => todo!(),
             HandshakeType::EndOfEarlyData => todo!(),
             HandshakeType::CertificateRequest => todo!(),
-            HandshakeType::CertificateVerify => todo!(),
             HandshakeType::Finished => todo!(),
             HandshakeType::KeyUpdate => todo!(),
             HandshakeType::MessageHash => todo!(),

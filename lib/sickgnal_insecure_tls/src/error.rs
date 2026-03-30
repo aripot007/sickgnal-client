@@ -69,6 +69,9 @@ pub enum InvalidMessage {
     /// When we receive an invalid [`NamedGroup`](crate::crypto::NamedGroup)
     InvalidNamedGroup,
 
+    /// When we receive an invalid [`SignatureScheme`](crate::crypto::SignatureScheme)
+    InvalidSignatureScheme,
+
     /// When we receive a ChangeCipherSpec message with an invalid value
     InvalidChangeCipherSpec,
 
@@ -89,6 +92,9 @@ pub enum InvalidMessage {
 
     /// When we can't validate the server's certificate
     InvalidCertificate(webpki::Error),
+
+    /// When we can't validate the server's CertificateVerify
+    InvalidCertificateVerify(webpki::Error),
 }
 
 impl From<InvalidMessage> for Error {

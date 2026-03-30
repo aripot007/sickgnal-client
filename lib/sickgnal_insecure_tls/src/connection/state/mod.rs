@@ -19,7 +19,7 @@ use crate::{
         sender::Sender,
         state::{
             wait_certificate::WaitCertificateState,
-            wait_certificate_verify::WaitCertificateVerifyState,
+            wait_certificate_verify::WaitCertificateVerifyState, wait_finished::WaitFinished,
         },
     },
     crypto::keyshare::KeyShareSecret,
@@ -95,7 +95,7 @@ pub(crate) enum State {
     WaitCertificateVerify(WaitCertificateVerifyState),
 
     /// We are waiting for the Finished message
-    WaitFinished,
+    WaitFinished(WaitFinished),
 
     /// The handshake is done and we can send application data
     Connected,
@@ -185,7 +185,7 @@ impl State {
             | State::WaitEncryptedExtensions(..)
             | State::WaitCertificate(..)
             | State::WaitCertificateVerify(..)
-            | State::WaitFinished => true,
+            | State::WaitFinished(..) => true,
             _ => false,
         }
     }
@@ -201,7 +201,7 @@ impl State {
             State::WaitEncryptedExtensions(s) => s.handle(input, output),
             State::WaitCertificate(s) => s.handle(input, output),
             State::WaitCertificateVerify(s) => s.handle(input, output),
-            State::WaitFinished => todo!(),
+            State::WaitFinished(s) => s.handle(input, output),
             State::Connected => todo!(),
         }
     }
@@ -215,7 +215,7 @@ impl State {
             | State::WaitEncryptedExtensions(..)
             | State::WaitCertificate(..)
             | State::WaitCertificateVerify(..)
-            | State::WaitFinished
+            | State::WaitFinished(..)
             | State::Connected => true,
         }
     }

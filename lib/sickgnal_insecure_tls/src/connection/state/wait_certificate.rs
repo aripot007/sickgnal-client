@@ -79,6 +79,7 @@ impl WaitCertificateState {
         self.transcript_hasher.update(&bytes);
 
         let next_state = WaitCertificateVerifyState {
+            server_cert: certs.server_cert,
             transcript_hasher: self.transcript_hasher,
             handshake_secret_hkdf: self.handshake_secret_hkdf,
         };

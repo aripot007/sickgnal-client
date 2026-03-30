@@ -3,9 +3,13 @@
 //! We only support the X509 certificate type without extensions
 //!
 
+use std::fmt::Debug;
+
 use rustls_pki_types::CertificateDer;
 
 use crate::codec::Decode;
+use crate::crypto::{SignatureScheme, SignatureSchemeName};
+use crate::hex_display::HexDisplayExt;
 use crate::u24::U24;
 use crate::{error::InvalidMessage, reader::Reader};
 
@@ -71,4 +75,36 @@ fn decode_cert_entry(reader: &mut Reader) -> Result<CertificateDer<'static>, Inv
     }
 
     Ok(cert.into_owned())
+}
+
+pub struct CertificateVerify {
+    pub(crate) algorithm: SignatureSchemeName,
+    pub(crate) signature: Vec<u8>,
+}
+
+impl Decode for CertificateVerify {
+    fn decode(buf: &mut Reader) -> Result<Self, InvalidMessage> {
+        let algorithm = SignatureScheme::decode(buf)?;
+
+        let algorithm = SignatureSchemeName::try_from(algorithm)
+            .map_err(|_| InvalidMessage::InvalidSignatureScheme)?;
+
+        let sig_length = u16::decode(buf)?;
+
+        let sig = buf.take_for("CertificateVerify", sig_length as usize)?;
+
+        Ok(CertificateVerify {
+            algorithm,
+            signature: Vec::from(sig),
+        })
+    }
+}
+
+impl Debug for CertificateVerify {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CertificateVerify")
+            .field("algorithm", &self.algorithm)
+            .field("signature", &self.signature.hex())
+            .finish()
+    }
 }

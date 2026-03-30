@@ -5,13 +5,17 @@ use rand::{RngCore, rngs::OsRng};
 use crate::{
     codec::{Encode, LengthSize, encode_length_prefixed_vector},
     connection::ConnectionConfig,
-    crypto::{NamedGroup, SignatureScheme, ciphersuite::CipherSuite, keyshare::KeyShareEntry},
+    crypto::{
+        NamedGroup, SignatureScheme, SignatureSchemeName, ciphersuite::CipherSuite,
+        keyshare::KeyShareEntry,
+    },
     hex_display::HexDisplayExt,
     msgs::{ExtensionType, ProtocolVersion, handhake::HandshakeType},
     u24::U24,
 };
 
 pub(crate) const OFFERED_CIPHERSUITE: CipherSuite = CipherSuite::TLS_AES_128_GCM_SHA256;
+pub(crate) const OFFERED_SIG_SCHEME: SignatureSchemeName = SignatureSchemeName::rsa_pss_rsae_sha256;
 
 /// ClientHello message
 ///
@@ -42,7 +46,7 @@ impl ClientHello {
         ext.push(ClientExtension::SupportedVersions);
 
         ext.push(ClientExtension::SignatureAlgorithms(vec![
-            SignatureScheme::rsa_pss_rsae_sha256,
+            OFFERED_SIG_SCHEME.into(),
         ]));
 
         ext.push(ClientExtension::SupportedGroups(vec![NamedGroup::x25519]));
