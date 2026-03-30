@@ -1,12 +1,11 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use futures::channel::mpsc;
-use futures::SinkExt;
 use sickgnal_core::chat::client::Event as SdkEvent;
 use sickgnal_core::chat::storage::{Conversation, Message, MessageStatus, StorageBackend};
 use sickgnal_core::e2e::message::UserProfile;
 use sickgnal_sdk::client::SdkClient;
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use chrono::Utc;
@@ -130,8 +129,7 @@ impl SdkBridge {
         let mut orig_rx = event_rx;
         let mut fwd_tx_clone = fwd_tx.clone();
         tokio::spawn(async move {
-            use futures::StreamExt;
-            while let Some(event) = orig_rx.next().await {
+            while let Some(event) = orig_rx.recv().await {
                 if fwd_tx_clone.send(event).await.is_err() {
                     break;
                 }
@@ -140,13 +138,12 @@ impl SdkBridge {
 
         // Forward live chat messages from the receive worker as SdkEvents
         tokio::spawn(async move {
-            use futures::StreamExt;
             use sickgnal_core::chat::client::Event;
             use sickgnal_core::chat::storage::Message;
 
             let mut rx = chat_msg_rx;
             let mut storage = storage_for_forwarder;
-            while let Some(msg) = rx.next().await {
+            while let Some(msg) = rx.recv().await {
                 let conv_id = msg.conversation_id;
                 let message = Message::from(msg);
 
@@ -185,14 +182,12 @@ impl SdkBridge {
         >,
         mut cmd_rx: mpsc::Receiver<SdkCommand>,
     ) {
-        use futures::StreamExt;
-
         // Enable instant relay so the server pushes messages in real-time
         if let Err(e) = handle.enable_instant_relay().await {
             eprintln!("Failed to enable instant relay: {e}");
         }
 
-        while let Some(cmd) = cmd_rx.next().await {
+        while let Some(cmd) = cmd_rx.recv().await {
             match cmd {
                 SdkCommand::SendMessage {
                     peer_user_id,
@@ -241,7 +236,9 @@ impl SdkBridge {
     /// Save a conversation to storage.
     pub fn create_conversation(&self, conv: &Conversation) -> Result<(), String> {
         let mut storage = self.storage.lock().map_err(|e| e.to_string())?;
-        storage.create_conversation(conv).map_err(|e| format!("{e}"))
+        storage
+            .create_conversation(conv)
+            .map_err(|e| format!("{e}"))
     }
 
     /// Save a message to storage.
@@ -259,11 +256,7 @@ impl SdkBridge {
     }
 
     /// Send a text message to a conversation.
-    pub fn send_message(
-        &self,
-        conversation_id: Uuid,
-        text: String,
-    ) -> Result<Message, String> {
+    pub fn send_message(&self, conversation_id: Uuid, text: String) -> Result<Message, String> {
         // Get the conversation to find the peer
         let peer_user_id = {
             let storage = self.storage.lock().map_err(|e| e.to_string())?;
@@ -395,9 +388,7 @@ impl SdkBridge {
             .list_messages(conv_id, None, None)
             .map_err(|e| format!("{e}"))?;
         for msg in messages {
-            storage
-                .delete_message(msg.id)
-                .map_err(|e| format!("{e}"))?;
+            storage.delete_message(msg.id).map_err(|e| format!("{e}"))?;
         }
 
         storage

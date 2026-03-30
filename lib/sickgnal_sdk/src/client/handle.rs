@@ -29,7 +29,7 @@ where
 
     /// Enable instant relay so the server pushes messages in real-time.
     pub async fn enable_instant_relay(&mut self) -> Result<()> {
-        self.handle.enable_instant_relay().await?;
+        todo!();
         Ok(())
     }
 
@@ -54,7 +54,7 @@ where
         conversation_id: Uuid,
         text: &str,
     ) -> Result<()> {
-        let chat_message = if self.handle.has_session(peer_user_id) {
+        let chat_message = if todo!() {
             ChatMessage::new_text(conversation_id, text)
         } else {
             // No session yet: send OpenConv to establish E2E session via X3DH

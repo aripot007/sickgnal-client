@@ -1,8 +1,8 @@
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
+use tokio::sync::mpsc;
 
-use futures::channel::mpsc;
 use sickgnal_core::chat::client::Event as SdkEvent;
 use uuid::Uuid;
 
@@ -87,7 +87,10 @@ fn main() {
         .start_conversation(bob_name.clone())
         .expect("Alice start conversation with Bob");
     assert_eq!(conv.peer_user_id, bob_id);
-    println!("    OK - Conversation created: id={}, peer={}", conv.id, conv.peer_name);
+    println!(
+        "    OK - Conversation created: id={}, peer={}",
+        conv.id, conv.peer_name
+    );
     println!();
 
     // ================================================================
@@ -203,24 +206,20 @@ fn wait_for_message(
             return None;
         }
 
-        match rx.try_next() {
-            Ok(Some(SdkEvent::NewMessage(conv_id, msg))) => {
+        match rx.blocking_recv() {
+            Some(SdkEvent::NewMessage(conv_id, msg)) => {
                 return Some((conv_id, msg));
             }
-            Ok(Some(SdkEvent::MessageForUnknownConversation(msg))) => {
+            Some(SdkEvent::MessageForUnknownConversation(msg)) => {
                 return Some((msg.conversation_id, msg));
             }
-            Ok(Some(_other)) => {
+            Some(_other) => {
                 // Skip non-message events
                 continue;
             }
-            Ok(None) => {
+            None => {
                 // Channel closed
                 return None;
-            }
-            Err(_) => {
-                // No event yet, wait a bit
-                thread::sleep(Duration::from_millis(50));
             }
         }
     }

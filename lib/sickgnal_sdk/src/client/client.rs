@@ -44,16 +44,16 @@ pub fn disconnect(&self) -> Result<()> {
 
 */
 
-use async_std::net::TcpStream;
 use chrono::Utc;
-use futures::task::UnsafeFutureObj;
-use futures::{AsyncRead, AsyncWrite, channel::mpsc};
 use sickgnal_core::chat::client::{ChatClient, Event};
 use sickgnal_core::chat::storage::StorageBackend;
 use sickgnal_core::e2e::client::Account;
 use sickgnal_core::e2e::keys::E2EStorageBackend;
 use sickgnal_core::e2e::message_stream::raw_json::RawJsonMessageStream;
 use std::path::PathBuf;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::net::TcpStream;
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::client::Result;

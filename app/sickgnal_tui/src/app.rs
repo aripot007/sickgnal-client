@@ -2,9 +2,9 @@ use std::path::{Path, PathBuf};
 
 use chrono::Utc;
 use crossterm::event::{KeyCode, KeyEvent};
-use futures::channel::mpsc;
 use sickgnal_core::chat::client::Event as SdkEvent;
 use sickgnal_core::chat::storage::{Conversation, Message};
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use sickgnal_sdk::account::{Profile, ProfileManager};
@@ -595,9 +595,7 @@ impl App {
             }
             KeyCode::Enter => {
                 if !self.message_input.is_empty() {
-                    if let (Some(conv_id), Some(sdk)) =
-                        (self.current_conversation, &self.sdk)
-                    {
+                    if let (Some(conv_id), Some(sdk)) = (self.current_conversation, &self.sdk) {
                         match sdk.send_message(conv_id, self.message_input.clone()) {
                             Ok(msg) => {
                                 self.messages.push(msg);
@@ -635,12 +633,10 @@ impl App {
 
         if let Some(rx) = self.event_rx.as_mut() {
             loop {
-                match rx.try_recv() {
-                    Ok(event) => events.push(event),
-                    Err(e) => {
-                        if e.is_closed() {
-                            self.status_message = Some("SDK connection lost".into());
-                        }
+                match rx.blocking_recv() {
+                    Some(event) => events.push(event),
+                    None => {
+                        self.status_message = Some("SDK connection lost".into());
                         break;
                     }
                 }

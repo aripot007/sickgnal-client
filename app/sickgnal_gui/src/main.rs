@@ -141,13 +141,13 @@ fn spawn_sdk(
 
         loop {
             match sdk.event_rx.recv().await {
-                Ok(event) => {
+                Some(event) => {
                     let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                         handle_sdk_event(ui, event);
                     });
                 }
-                Err(e) => {
-                    eprintln!("Event channel fermé : {:?}", e);
+                None => {
+                    eprintln!("Event channel fermé");
                     break;
                 }
             }
@@ -163,6 +163,7 @@ fn handle_sdk_event(ui: AppWindow, event: Event) {
         Event::ConversationDeleted(uuid) => todo!(),
         Event::TypingIndicator(uuid) => todo!(),
         Event::ConnectionStateChanged(connection_state) => todo!(),
+        Event::MessageForUnknownConversation(_) => todo!(),
     }
 }
 

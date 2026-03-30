@@ -9,8 +9,6 @@ license.workspace = true
 sickgnal_sdk = { path = "../../lib/sickgnal_sdk", version = "0.1.0" }
 sickgnal_core = { path = "../../lib/sickgnal_core", version = "0.1.0" }
 tokio = { version = "1.49.0", features = ["full"] }
-async-std = "1.13.2"
 uuid = { version = "1.20.0", features = ["serde", "v4"] }
 chrono = "0.4.44"
-futures = "0.3.32"
 tempfile = "3.26.0"
