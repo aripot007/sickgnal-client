@@ -110,10 +110,16 @@ impl Connection {
     ///
     /// You should call [`process_new_packets`](Self::process_new_packets) to process
     /// the received packets afterwards
+    ///
+    /// # Cancel safety
+    ///
+    /// This method is cancel safe. If you use it as the event in a tokio::select!
+    /// statement and some other branch completes first, then it is guaranteed that
+    /// no data was read.
     pub async fn read_tls<R: AsyncReadExt + Unpin>(
         &mut self,
         reader: &mut R,
-    ) -> Result<usize, Error> {
+    ) -> std::io::Result<usize> {
         let nb_read = reader.read_buf(&mut self.receiver.input_buffer).await?;
         Ok(nb_read)
     }
@@ -121,7 +127,7 @@ impl Connection {
     /// Returns `true` if the client should call [`Self::read_tls`] as soon as possible
     pub fn wants_read(&self) -> bool {
         // FIXME: there should be other cases where we want to read
-        self.receiver.input_buffer.is_empty()
+        self.receiver.data_buffer.is_empty() && self.receiver.input_buffer.is_empty()
     }
 
     // Returns `true` if the client should call [`Self::write_tls`] as soon as possible

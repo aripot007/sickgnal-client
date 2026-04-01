@@ -123,10 +123,7 @@ impl WaitFinishedState {
         // Update the state
         let next_state = ConnectedState {};
 
-        trace!(
-            "finished handling EncryptedExtensions, next state : {:?}",
-            next_state
-        );
+        trace!("finished handling Finished, next state : {:?}", next_state);
 
         Ok(State::Connected(next_state))
     }
