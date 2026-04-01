@@ -1,10 +1,12 @@
 use std::fmt::Debug;
 
 use rand::{RngCore, rngs::OsRng};
+use rustls_pki_types::DnsName;
+use tracing::trace;
 
 use crate::{
     codec::{Encode, LengthSize, encode_length_prefixed_vector},
-    connection::ConnectionConfig,
+    connection::{ConnectionConfig, ServerName},
     crypto::{
         NamedGroup, SignatureScheme, SignatureSchemeName, ciphersuite::CipherSuite,
         keyshare::KeyShareEntry,
@@ -55,7 +57,10 @@ impl ClientHello {
             x25519_public_key,
         )]));
 
-        // TODO: Add SNI
+        // Add SNI if possible
+        if let ServerName::DnsName(dns_name) = &config.server_name {
+            ext.push(ClientExtension::ServerName(dns_name.to_owned()));
+        }
 
         Self {
             random: ClientRandom::new_random(),
@@ -116,6 +121,7 @@ impl Debug for ClientRandom {
 
 #[derive(Debug, Clone)]
 pub(crate) enum ClientExtension {
+    ServerName(DnsName<'static>),
     // We only support TLSv1.3 here, which will be hardcoded
     SupportedVersions,
     SignatureAlgorithms(Vec<SignatureScheme>),
@@ -127,6 +133,7 @@ impl ClientExtension {
     /// Get the extension type for this extension
     pub fn extension_type(&self) -> ExtensionType {
         match self {
+            Self::ServerName(_) => ExtensionType::ServerName,
             Self::SupportedVersions => ExtensionType::SupportedVersions,
             Self::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
             Self::KeyShare(_) => ExtensionType::KeyShare,
@@ -145,6 +152,19 @@ impl Encode for ClientExtension {
         let header_end = dest.len();
 
         match self {
+            ClientExtension::ServerName(name) => {
+                let name_len = name.as_ref().len();
+                let ext_len = 1 + size_of::<u16>() + name_len;
+                // list length
+                (ext_len as u16).encode(dest);
+                // name_type is always host_name (0)
+                dest.push(0);
+                // hostname length
+                (name_len as u16).encode(dest);
+                // hostname
+                dest.extend_from_slice(name.as_ref().as_bytes());
+            }
+
             ClientExtension::SupportedVersions => {
                 encode_length_prefixed_vector(dest, LengthSize::U8, &vec![ProtocolVersion::TLSv1_3])
             }
