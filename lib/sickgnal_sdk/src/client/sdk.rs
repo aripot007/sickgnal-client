@@ -26,6 +26,7 @@ use sickgnal_core::chat::storage::{Conversation, Message, MessageStatus, Storage
 use sickgnal_core::e2e::message::UserProfile;
 
 use crate::storage::Sqlite;
+use crate::tls::TlsConfig;
 
 use super::{Result, SdkClient};
 
@@ -81,11 +82,12 @@ impl Sdk {
         dir: std::path::PathBuf,
         existing_account: bool,
         server_addr: &str,
+        tls_config: &TlsConfig,
     ) -> Result<Self> {
         let sdk_client = if existing_account {
-            SdkClient::load(username, dir, password, server_addr).await?
+            SdkClient::load(username, dir, password, server_addr, tls_config).await?
         } else {
-            SdkClient::new(username, dir, password, server_addr).await?
+            SdkClient::new(username, dir, password, server_addr, tls_config).await?
         };
 
         let user_id = sdk_client.chatclient.account().id;

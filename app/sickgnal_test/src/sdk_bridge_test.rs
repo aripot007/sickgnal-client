@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use sickgnal_core::chat::client::Event as SdkEvent;
 use sickgnal_core::chat::storage::{Conversation, Message};
+use sickgnal_sdk::TlsConfig;
 use sickgnal_sdk::client::SyncBridge;
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -21,9 +22,16 @@ impl TestBridge {
         dir: PathBuf,
         existing_account: bool,
     ) -> Result<Self, String> {
-        SyncBridge::connect(username, &password, dir, existing_account, SERVER_ADDR)
-            .map(Self)
-            .map_err(|e| format!("{e}"))
+        SyncBridge::connect(
+            username,
+            &password,
+            dir,
+            existing_account,
+            SERVER_ADDR,
+            &TlsConfig::None,
+        )
+        .map(Self)
+        .map_err(|e| format!("{e}"))
     }
 
     pub fn my_user_id(&self) -> Uuid {

@@ -14,6 +14,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use super::{Result, Sdk};
+use crate::tls::TlsConfig;
 
 /// Thin synchronous wrapper around [`Sdk`].
 ///
@@ -32,6 +33,7 @@ impl SyncBridge {
         dir: PathBuf,
         existing_account: bool,
         server_addr: &str,
+        tls_config: &TlsConfig,
     ) -> Result<Self> {
         let rt = Arc::new(tokio::runtime::Runtime::new()?);
 
@@ -41,6 +43,7 @@ impl SyncBridge {
             dir,
             existing_account,
             server_addr,
+            tls_config,
         ))?;
 
         Ok(Self { rt, sdk })
