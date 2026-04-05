@@ -1,32 +1,144 @@
+use std::path::PathBuf;
+use std::process::{Child, Command};
 use std::thread;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
 use sickgnal_core::chat::client::Event as SdkEvent;
 use sickgnal_core::chat::storage::MessageStatus;
+use sickgnal_sdk::TlsConfig;
 use uuid::Uuid;
 
 use sickgnal_sdk::account::AccountFile;
 
 mod sdk_bridge_test;
 
-const DEFAULT_SERVER_ADDR: &str = "127.0.0.1:8080";
-
-fn server_addr() -> String {
-    std::env::var("SICKGNAL_SERVER").unwrap_or_else(|_| DEFAULT_SERVER_ADDR.to_string())
-}
+const PLAIN_ADDR: &str = "127.0.0.1:8080";
+const TLS_ADDR: &str = "127.0.0.1:8443";
 
 fn main() {
-    // NOT #[tokio::main] - SdkBridge creates its own runtime,
-    // and block_on inside an existing runtime panics.
-
-    let addr = server_addr();
-    println!("=== TUI SdkBridge Integration Test ===");
-    println!("Server: {addr}");
-    println!();
-
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let temp_path = temp_dir.path().to_path_buf();
+
+    // ─── Run 1: Plain TCP ───────────────────────────────────────────
+    println!("========================================");
+    println!("  Round 1: Plain TCP (TlsConfig::None)");
+    println!("========================================");
+    println!();
+    run_tests(PLAIN_ADDR, &TlsConfig::None, &temp_path);
+
+    // ─── Run 2: TLS via rustls ──────────────────────────────────────
+    println!();
+    println!("========================================");
+    println!("  Round 2: TLS (TlsConfig::Rustls)");
+    println!("========================================");
+    println!();
+
+    // Generate self-signed cert for localhost
+    let cert_dir = temp_path.join("certs");
+    std::fs::create_dir_all(&cert_dir).unwrap();
+    let ca_cert = cert_dir.join("ca.pem");
+    let server_cert = cert_dir.join("server.pem");
+    let server_key = cert_dir.join("server-key.pem");
+
+    generate_self_signed_certs(&ca_cert, &server_cert, &server_key);
+
+    // Start a TLS server on a different port
+    let tls_db = temp_path.join("tls_test.db");
+    let mut tls_server = start_server(&tls_db, TLS_ADDR, Some((&server_cert, &server_key)));
+    thread::sleep(Duration::from_secs(2));
+
+    let tls_config = TlsConfig::Rustls {
+        custom_ca: Some(ca_cert),
+    };
+
+    run_tests(TLS_ADDR, &tls_config, &temp_path);
+
+    // Cleanup
+    let _ = tls_server.kill();
+}
+
+/// Start the Go server. Returns the child process.
+fn start_server(
+    db_path: &PathBuf,
+    addr: &str,
+    tls: Option<(&PathBuf, &PathBuf)>,
+) -> Child {
+    let server_bin = std::env::var("SICKGNAL_SERVER_BIN")
+        .unwrap_or_else(|_| "/tmp/sickgnal-server".to_string());
+
+    let port = addr.split(':').last().unwrap();
+    let mut cmd = Command::new(&server_bin);
+    cmd.arg("-db").arg(db_path);
+    cmd.arg("-port").arg(port);
+
+    if let Some((cert, key)) = tls {
+        cmd.arg("-tls-cert").arg(cert);
+        cmd.arg("-tls-key").arg(key);
+    }
+
+    cmd.stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap_or_else(|e| panic!("Failed to start server at {server_bin}: {e}"))
+}
+
+/// Generate a self-signed CA + server certificate for localhost using openssl.
+fn generate_self_signed_certs(ca_cert: &PathBuf, server_cert: &PathBuf, server_key: &PathBuf) {
+    let ca_key = ca_cert.with_extension("key");
+
+    // Generate CA key + cert
+    let status = Command::new("openssl")
+        .args([
+            "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+            "-keyout", ca_key.to_str().unwrap(),
+            "-out", ca_cert.to_str().unwrap(),
+            "-days", "1",
+            "-subj", "/CN=TestCA",
+        ])
+        .output()
+        .expect("openssl CA generation");
+    assert!(status.status.success(), "Failed to generate CA cert");
+
+    // Generate server key
+    let status = Command::new("openssl")
+        .args([
+            "req", "-newkey", "rsa:2048", "-nodes",
+            "-keyout", server_key.to_str().unwrap(),
+            "-out", server_cert.with_extension("csr").to_str().unwrap(),
+            "-subj", "/CN=localhost",
+        ])
+        .output()
+        .expect("openssl server key generation");
+    assert!(status.status.success(), "Failed to generate server key");
+
+    // Sign server cert with CA (with SAN for localhost + 127.0.0.1)
+    let ext_file = ca_cert.with_extension("ext");
+    std::fs::write(
+        &ext_file,
+        "subjectAltName=DNS:localhost,IP:127.0.0.1\n",
+    )
+    .unwrap();
+
+    let status = Command::new("openssl")
+        .args([
+            "x509", "-req",
+            "-in", server_cert.with_extension("csr").to_str().unwrap(),
+            "-CA", ca_cert.to_str().unwrap(),
+            "-CAkey", ca_key.to_str().unwrap(),
+            "-CAcreateserial",
+            "-out", server_cert.to_str().unwrap(),
+            "-days", "1",
+            "-extfile", ext_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("openssl server cert signing");
+    assert!(status.status.success(), "Failed to sign server cert");
+}
+
+fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
+    println!("Server: {server_addr}");
+    println!();
 
     let suffix = Uuid::new_v4().to_string()[..8].to_string();
     let alice_name = format!("alice_{suffix}");
@@ -47,6 +159,8 @@ fn main() {
         password.to_string(),
         alice_dir.clone(),
         false,
+        server_addr,
+        tls_config,
     )
     .expect("Alice connect");
     let alice_id = alice.my_user_id();
@@ -63,6 +177,8 @@ fn main() {
         password.to_string(),
         bob_dir.clone(),
         false,
+        server_addr,
+        tls_config,
     )
     .expect("Bob connect");
     let bob_id = bob.my_user_id();
@@ -300,6 +416,7 @@ fn main() {
     charlie_af.create(&charlie_name, password).unwrap();
     let mut charlie = sdk_bridge_test::SdkBridge::connect(
         charlie_name.clone(), password.to_string(), charlie_dir.clone(), false,
+        server_addr, tls_config,
     ).expect("Charlie connect");
 
     let dave_dir = temp_path.join(&dave_name);
@@ -308,6 +425,7 @@ fn main() {
     dave_af.create(&dave_name, password).unwrap();
     let mut dave = sdk_bridge_test::SdkBridge::connect(
         dave_name.clone(), password.to_string(), dave_dir.clone(), false,
+        server_addr, tls_config,
     ).expect("Dave connect");
 
     let mut dave_event_rx = dave.take_event_rx();

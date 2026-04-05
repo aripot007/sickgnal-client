@@ -7,10 +7,7 @@ use sickgnal_sdk::client::SyncBridge;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-const SERVER_ADDR: &str = "127.0.0.1:8080";
-
-/// Test uses [`SyncBridge`] directly with a thin `connect()` wrapper
-/// that hardcodes the server address.
+/// Test uses [`SyncBridge`] directly.
 pub type SdkBridge = TestBridge;
 
 pub struct TestBridge(pub SyncBridge);
@@ -21,14 +18,16 @@ impl TestBridge {
         password: String,
         dir: PathBuf,
         existing_account: bool,
+        server_addr: &str,
+        tls_config: &TlsConfig,
     ) -> Result<Self, String> {
         SyncBridge::connect(
             username,
             &password,
             dir,
             existing_account,
-            SERVER_ADDR,
-            &TlsConfig::None,
+            server_addr,
+            tls_config,
         )
         .map(Self)
         .map_err(|e| format!("{e}"))

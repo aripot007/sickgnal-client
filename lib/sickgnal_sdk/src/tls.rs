@@ -39,7 +39,7 @@ pub enum TlsConfig {
 
 impl Default for TlsConfig {
     fn default() -> Self {
-        TlsConfig::None
+        TlsConfig::Rustls { custom_ca: None }
     }
 }
 

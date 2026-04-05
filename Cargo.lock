@@ -4987,6 +4987,7 @@ dependencies = [
  "getrandom 0.4.2",
  "hex",
  "rusqlite",
+ "rustls-native-certs",
  "serde",
  "sickgnal_core",
  "sickgnal_insecure_tls",
