@@ -148,8 +148,7 @@ impl SyncBridge {
     // ─── Profile ────────────────────────────────────────────────────────
 
     pub fn get_profile_by_username(&self, username: String) -> Result<UserProfile> {
-        self.rt
-            .block_on(self.sdk.get_profile_by_username(username))
+        self.rt.block_on(self.sdk.get_profile_by_username(username))
     }
 
     pub fn get_profile_by_id(&self, id: Uuid) -> Result<UserProfile> {

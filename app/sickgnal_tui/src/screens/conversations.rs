@@ -13,16 +13,26 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     let chunks = Layout::vertical([
         Constraint::Length(3), // Header
-        Constraint::Min(1),   // Conversation list
+        Constraint::Min(1),    // Conversation list
         Constraint::Length(3), // Status / help bar
     ])
     .split(area);
 
     // Header
     let header = Paragraph::new(Line::from(vec![
-        Span::styled("  sickgnal", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "  sickgnal",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(" - ", Style::default().fg(Color::White)),
-        Span::styled(&app.username, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            &app.username,
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ),
     ]))
     .block(
         Block::default()
@@ -73,10 +83,7 @@ pub fn draw(f: &mut Frame, app: &App) {
                     Span::styled(marker, style),
                     Span::styled(conv.peer_name.clone(), style),
                     Span::styled(unread_str, Style::default().fg(Color::Yellow)),
-                    Span::styled(
-                        format!("  {}", time),
-                        Style::default().fg(Color::DarkGray),
-                    ),
+                    Span::styled(format!("  {}", time), Style::default().fg(Color::DarkGray)),
                 ]);
 
                 ListItem::new(line)
@@ -94,7 +101,10 @@ pub fn draw(f: &mut Frame, app: &App) {
     // Status bar / help
     let help_text = if app.new_conversation_mode {
         Line::from(vec![
-            Span::styled("New conversation with: ", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                "New conversation with: ",
+                Style::default().fg(Color::Yellow),
+            ),
             Span::styled(
                 &app.new_conversation_username,
                 Style::default().fg(Color::Cyan),
@@ -111,20 +121,14 @@ pub fn draw(f: &mut Frame, app: &App) {
             ),
         ])
     } else {
-        let status = app
-            .status_message
-            .as_deref()
-            .unwrap_or("");
+        let status = app.status_message.as_deref().unwrap_or("");
 
         Line::from(vec![
             Span::styled(
                 " n: new | Enter: open | d: delete | q: quit",
                 Style::default().fg(Color::DarkGray),
             ),
-            Span::styled(
-                format!("  {}", status),
-                Style::default().fg(Color::Green),
-            ),
+            Span::styled(format!("  {}", status), Style::default().fg(Color::Green)),
         ])
     };
 

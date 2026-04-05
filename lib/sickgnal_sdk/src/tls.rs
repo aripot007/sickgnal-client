@@ -12,8 +12,8 @@ use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::net::TcpStream;
-use tokio_rustls::rustls::pki_types::{CertificateDer, ServerName, pem::PemObject};
 use tokio_rustls::rustls::RootCertStore;
+use tokio_rustls::rustls::pki_types::{CertificateDer, ServerName, pem::PemObject};
 
 /// TLS mode for the SDK connection.
 #[derive(Debug, Clone)]
@@ -128,8 +128,8 @@ pub(crate) async fn connect_transport(
                 sickgnal_insecure_tls::client::ClientConfig::new(root_store.roots);
 
             let host = server_addr.split(':').next().unwrap_or(server_addr);
-            let server_name =
-                sickgnal_insecure_tls::ServerName::try_from(host.to_string()).map_err(|_| {
+            let server_name = sickgnal_insecure_tls::ServerName::try_from(host.to_string())
+                .map_err(|_| {
                     std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
                         format!("Invalid server name: {host}"),
@@ -151,9 +151,7 @@ pub(crate) async fn connect_transport(
 }
 
 /// Build a `RootCertStore` from system certs + optional custom CA.
-fn build_root_store(
-    custom_ca: &Option<PathBuf>,
-) -> Result<RootCertStore, std::io::Error> {
+fn build_root_store(custom_ca: &Option<PathBuf>) -> Result<RootCertStore, std::io::Error> {
     let mut root_store = RootCertStore::empty();
 
     let native_certs = rustls_native_certs::load_native_certs();

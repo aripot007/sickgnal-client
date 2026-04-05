@@ -111,26 +111,38 @@ fn handle_control_message<S: StorageBackend>(
                 };
                 let _ = storage.update_message(&stored_msg);
             }
-            emit(event_tx, Event::MessageEdited {
-                conversation_id: conv.id,
-                message_id: *id,
-                new_content: new_content.clone(),
-            });
+            emit(
+                event_tx,
+                Event::MessageEdited {
+                    conversation_id: conv.id,
+                    message_id: *id,
+                    new_content: new_content.clone(),
+                },
+            );
         }
         ControlMessage::DeleteMsg { id } => {
             let _ = storage.delete_message(*id);
-            emit(event_tx, Event::MessageDeleted {
-                conversation_id: conv.id,
-                message_id: *id,
-            });
+            emit(
+                event_tx,
+                Event::MessageDeleted {
+                    conversation_id: conv.id,
+                    message_id: *id,
+                },
+            );
         }
         ControlMessage::AckReception { id } => {
             storage.update_message_status(*id, MessageStatus::Delivered)?;
-            emit(event_tx, Event::MessageStatusUpdate(*id, MessageStatus::Delivered));
+            emit(
+                event_tx,
+                Event::MessageStatusUpdate(*id, MessageStatus::Delivered),
+            );
         }
         ControlMessage::AckRead { id } => {
             storage.update_message_status(*id, MessageStatus::Read)?;
-            emit(event_tx, Event::MessageStatusUpdate(*id, MessageStatus::Read));
+            emit(
+                event_tx,
+                Event::MessageStatusUpdate(*id, MessageStatus::Read),
+            );
         }
         ControlMessage::IsTyping => {
             emit(event_tx, Event::TypingIndicator(conv.id));

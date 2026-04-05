@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 
 use crate::client::Result;
 use crate::storage::{Config, Sqlite};
-use crate::tls::{Transport, TlsConfig, connect_transport};
+use crate::tls::{TlsConfig, Transport, connect_transport};
 
 pub struct SdkClient<S, P>
 where

@@ -69,8 +69,6 @@ impl SdkBridge {
     }
 
     pub fn get_profile_by_id(&self, id: Uuid) -> Result<UserProfile, String> {
-        self.0
-            .get_profile_by_id(id)
-            .map_err(|e| format!("{e}"))
+        self.0.get_profile_by_id(id).map_err(|e| format!("{e}"))
     }
 }

@@ -14,7 +14,7 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     let chunks = Layout::vertical([
         Constraint::Length(3), // Header with conversation name
-        Constraint::Min(1),   // Messages area
+        Constraint::Min(1),    // Messages area
         Constraint::Length(3), // Input area
     ])
     .split(area);
@@ -101,20 +101,14 @@ pub fn draw(f: &mut Frame, app: &App) {
                     Span::styled(padding, Style::default()),
                     Span::styled(&msg.content, Style::default().fg(Color::Green)),
                     Span::styled(status_str, Style::default().fg(status_color)),
-                    Span::styled(
-                        format!(" {}", time),
-                        Style::default().fg(Color::DarkGray),
-                    ),
+                    Span::styled(format!(" {}", time), Style::default().fg(Color::DarkGray)),
                 ]);
                 items.push(ListItem::new(line));
             } else {
                 // Left-aligned messages (from peer)
                 let line = Line::from(vec![
                     Span::styled(&msg.content, Style::default().fg(Color::White)),
-                    Span::styled(
-                        format!("  {}", time),
-                        Style::default().fg(Color::DarkGray),
-                    ),
+                    Span::styled(format!("  {}", time), Style::default().fg(Color::DarkGray)),
                 ]);
                 items.push(ListItem::new(line));
             }
@@ -128,7 +122,8 @@ pub fn draw(f: &mut Frame, app: &App) {
         let end = total.saturating_sub(offset);
         let start = end.saturating_sub(visible_height);
 
-        let visible_items: Vec<ListItem> = items.into_iter().skip(start).take(end - start).collect();
+        let visible_items: Vec<ListItem> =
+            items.into_iter().skip(start).take(end - start).collect();
 
         let list = List::new(visible_items);
         f.render_widget(list, messages_area);

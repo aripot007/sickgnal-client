@@ -20,7 +20,7 @@ use chrono::Utc;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use sickgnal_core::chat::client::{process_incoming_message, Event};
+use sickgnal_core::chat::client::{Event, process_incoming_message};
 use sickgnal_core::chat::message::ChatMessage;
 use sickgnal_core::chat::storage::{Conversation, Message, MessageStatus, StorageBackend};
 use sickgnal_core::e2e::message::UserProfile;
@@ -208,8 +208,7 @@ impl Sdk {
         if let Some(text) = initial_message {
             let message = self.store_outgoing(conv.id, &text, None)?;
 
-            let chat_message =
-                ChatMessage::new_open_conv_with_id(Some(conv.id), Some(&text));
+            let chat_message = ChatMessage::new_open_conv_with_id(Some(conv.id), Some(&text));
             self.send_raw(conv.peer_user_id, chat_message).await?;
 
             let mut storage = self.storage.lock().unwrap();
@@ -268,18 +267,12 @@ impl Sdk {
     ///
     /// If the conversation has not yet been opened (no OpenConv sent),
     /// the message is wrapped in an OpenConv control message automatically.
-    pub async fn send_message(
-        &self,
-        conversation_id: Uuid,
-        text: String,
-    ) -> Result<Message> {
+    pub async fn send_message(&self, conversation_id: Uuid, text: String) -> Result<Message> {
         let (peer_user_id, needs_open) = {
             let storage = self.storage.lock().unwrap();
-            let conv = storage
-                .get_conversation(conversation_id)?
-                .ok_or(sickgnal_core::chat::client::Error::NoConversation(
-                    conversation_id,
-                ))?;
+            let conv = storage.get_conversation(conversation_id)?.ok_or(
+                sickgnal_core::chat::client::Error::NoConversation(conversation_id),
+            )?;
             (conv.peer_user_id, !conv.opened)
         };
 
@@ -354,11 +347,7 @@ impl Sdk {
     }
 
     /// Delete a message (sends a delete control message to the peer).
-    pub async fn delete_message(
-        &self,
-        conversation_id: Uuid,
-        message_id: Uuid,
-    ) -> Result<()> {
+    pub async fn delete_message(&self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
         let peer_user_id = self.peer_for_conversation(conversation_id)?;
 
         let chat_message = ChatMessage::new_delete(conversation_id, message_id);
@@ -373,11 +362,7 @@ impl Sdk {
     }
 
     /// Send a read receipt for a message.
-    pub async fn send_read_receipt(
-        &self,
-        conversation_id: Uuid,
-        message_id: Uuid,
-    ) -> Result<()> {
+    pub async fn send_read_receipt(&self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
         let peer_user_id = self.peer_for_conversation(conversation_id)?;
 
         let chat_message = ChatMessage::new_ack_read(conversation_id, message_id);
@@ -472,11 +457,9 @@ impl Sdk {
     /// Look up the peer user ID for a conversation.
     fn peer_for_conversation(&self, conversation_id: Uuid) -> Result<Uuid> {
         let storage = self.storage.lock().unwrap();
-        let conv = storage
-            .get_conversation(conversation_id)?
-            .ok_or(sickgnal_core::chat::client::Error::NoConversation(
-                conversation_id,
-            ))?;
+        let conv = storage.get_conversation(conversation_id)?.ok_or(
+            sickgnal_core::chat::client::Error::NoConversation(conversation_id),
+        )?;
         Ok(conv.peer_user_id)
     }
 
