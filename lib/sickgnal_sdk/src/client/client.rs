@@ -1,50 +1,3 @@
-/* Connection Event changement
-/// Connect to the server
-///
-/// # Arguments
-/// * `server_addr` - Server address (e.g., "127.0.0.1:8080")
-///
-/// # Returns
-/// Ok(()) if connection successful, error otherwise
-pub fn connect(&self, connection: server_addr: &str) -> Result<()> {
-    self.set_connection_state(ConnectionState::Connecting);
-
-    // Connect TCP stream
-    let _stream = TcpStream::connect(server_addr);
-
-    self.set_connection_state(ConnectionState::Connected);
-
-    // Authenticate
-    self.set_connection_state(ConnectionState::Authenticating);
-
-    let e2e_client = &self.e2e_client;
-    // TODO: e2e_client.connect() doesn't exist yet, we need to initialize with stream
-    // e2e_client.connect(stream, user_id);
-
-    // TODO: Call e2e_client.authenticate() once implemented
-
-    drop(e2e_client);
-
-    self.set_connection_state(ConnectionState::Authenticated);
-
-    Ok(())
-}
-
-/// Disconnect from the server
-pub fn disconnect(&self) -> Result<()> {
-    let e2e_client = self.e2e_client;
-    // TODO: e2e_client.disconnect() doesn't exist yet
-    // e2e_client.disconnect();
-    drop(e2e_client);
-
-    self.set_connection_state(ConnectionState::Disconnected);
-
-    Ok(())
-}
-
-*/
-
-use chrono::Utc;
 use sickgnal_core::chat::client::{ChatClient, Event};
 use sickgnal_core::chat::storage::StorageBackend;
 use sickgnal_core::e2e::client::Account;
@@ -54,7 +7,6 @@ use std::path::PathBuf;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
-use uuid::Uuid;
 
 use crate::client::Result;
 use crate::storage::{Config, Sqlite};

@@ -632,14 +632,9 @@ impl App {
         let mut events = Vec::new();
 
         if let Some(rx) = self.event_rx.as_mut() {
-            loop {
-                match rx.blocking_recv() {
-                    Some(event) => events.push(event),
-                    None => {
-                        self.status_message = Some("SDK connection lost".into());
-                        break;
-                    }
-                }
+            // Non-blocking: drain all available events
+            while let Ok(event) = rx.try_recv() {
+                events.push(event);
             }
         }
 
@@ -651,12 +646,10 @@ impl App {
     fn handle_sdk_event(&mut self, event: SdkEvent) {
         match event {
             SdkEvent::NewMessage(conv_id, message) => {
-                // If we're viewing this conversation, add the message
                 if self.current_conversation == Some(conv_id) {
                     self.messages.push(message);
                 }
 
-                // Update conversation unread count (if not viewing)
                 if let Some(conv) = self.conversations.iter_mut().find(|c| c.id == conv_id) {
                     if self.current_conversation != Some(conv_id) {
                         conv.unread_count += 1;
@@ -664,45 +657,18 @@ impl App {
                     conv.last_message_at = Some(Utc::now());
                 }
             }
-            SdkEvent::MessageForUnknownConversation(message) => {
-                // A message from a user we don't have a conversation with yet
-                // Create a new conversation entry, persist it, and store the message
-                if let Some(ref sdk) = self.sdk {
-                    let peer_id = message.sender_id;
-                    let peer_name = format!("User {}", &peer_id.to_string()[..8]);
-
-                    // Try to get profile
-                    let name = match sdk.get_profile_by_id(peer_id) {
-                        Ok(profile) => profile.username,
-                        Err(_) => peer_name,
-                    };
-
-                    let conv = Conversation {
-                        id: message.conversation_id,
-                        peer_user_id: peer_id,
-                        peer_name: name,
-                        last_message_at: Some(Utc::now()),
-                        unread_count: 1,
-                    };
-
-                    // Persist to storage so messages are visible when opening
-                    let _ = sdk.create_conversation(&conv);
-                    let _ = sdk.store_message(&message);
-
-                    self.conversations.push(conv);
-
-                    // If the user is currently viewing this conversation, show the message
-                    if self.current_conversation == Some(message.conversation_id) {
-                        self.messages.push(message);
-                    }
-                }
-            }
             SdkEvent::MessageStatusUpdate(msg_id, status) => {
                 if let Some(msg) = self.messages.iter_mut().find(|m| m.id == msg_id) {
                     msg.status = status;
                 }
             }
-            SdkEvent::ConversationCreated(conv) => {
+            SdkEvent::ConversationCreated(mut conv) => {
+                // Resolve the peer name if it's just a UUID placeholder
+                if let Some(ref sdk) = self.sdk {
+                    if let Ok(profile) = sdk.get_profile_by_id(conv.peer_user_id) {
+                        conv.peer_name = profile.username;
+                    }
+                }
                 if !self.conversations.iter().any(|c| c.id == conv.id) {
                     self.conversations.push(conv);
                 }
@@ -715,8 +681,31 @@ impl App {
                     self.messages.clear();
                 }
             }
+            SdkEvent::MessageEdited {
+                conversation_id,
+                message_id,
+                new_content,
+            } => {
+                if self.current_conversation == Some(conversation_id) {
+                    if let Some(msg) = self.messages.iter_mut().find(|m| m.id == message_id) {
+                        msg.content = match new_content {
+                            sickgnal_core::chat::message::Content::Text(txt) => txt,
+                        };
+                    }
+                }
+            }
+            SdkEvent::MessageDeleted {
+                conversation_id,
+                message_id,
+            } => {
+                if self.current_conversation == Some(conversation_id) {
+                    if let Some(msg) = self.messages.iter_mut().find(|m| m.id == message_id) {
+                        msg.content = "[deleted]".to_string();
+                    }
+                }
+            }
             SdkEvent::TypingIndicator(_conv_id) => {
-                // Could show typing indicator in UI
+                // TODO: show typing indicator in UI
             }
             SdkEvent::ConnectionStateChanged(state) => {
                 self.status_message = Some(format!("Connection: {:?}", state));

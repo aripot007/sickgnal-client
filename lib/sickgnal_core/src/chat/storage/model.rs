@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    chat::message::{ChatMessage, ChatMessageKind, Content, ControlMessage},
+    chat::message::{Content, ContentMessage},
     e2e,
 };
 
@@ -50,6 +50,9 @@ pub struct Conversation {
     pub peer_name: String,
     pub last_message_at: Option<DateTime<Utc>>,
     pub unread_count: i32,
+    /// Whether the conversation has been opened (OpenConv sent or received).
+    /// `false` means the next outgoing message must be wrapped in an OpenConv.
+    pub opened: bool,
 }
 
 /// Represents a message in the database
@@ -65,64 +68,27 @@ pub struct Message {
     pub local_id: Option<String>, // For tracking messages before server confirmation
 }
 
-impl From<ChatMessage> for Message {
-    fn from(value: ChatMessage) -> Self {
-        match value.kind {
-            ChatMessageKind::Data(content_msg) => {
-                let text_content = match content_msg.content {
-                    Content::Text(txt) => txt,
-                };
+impl Message {
+    /// Create a `Message` from a `ContentMessage` with explicit metadata.
+    pub fn from_content_message(
+        content_msg: &ContentMessage,
+        conversation_id: Uuid,
+        sender_id: Uuid,
+        timestamp: DateTime<Utc>,
+    ) -> Self {
+        let text_content = match &content_msg.content {
+            Content::Text(txt) => txt.clone(),
+        };
 
-                Self {
-                    id: content_msg.id,
-                    conversation_id: value.conversation_id,
-                    sender_id: value.sender_id,
-                    content: text_content,
-                    timestamp: value.issued_at,
-                    status: MessageStatus::Sent, // Par défaut lors de la réception/création
-                    reply_to_id: content_msg.reply_to,
-                    local_id: None, // Rempli manuellement si c'est un message sortant
-                }
-            }
-            ChatMessageKind::Ctrl(_ctrl) => {
-                // Extract a displayable text from control messages
-                let (id, content, reply_to_id) = match &_ctrl {
-                    ControlMessage::OpenConv {
-                        initial_message: Some(msg),
-                    } => {
-                        let text = match &msg.content {
-                            Content::Text(txt) => txt.clone(),
-                        };
-                        (msg.id, text, msg.reply_to)
-                    }
-                    ControlMessage::OpenConv {
-                        initial_message: None,
-                    } => (Uuid::new_v4(), String::new(), None),
-                    ControlMessage::EditMsg { id, new_content } => {
-                        let text = match new_content {
-                            Content::Text(txt) => format!("[edited] {txt}"),
-                        };
-                        (*id, text, None)
-                    }
-                    ControlMessage::DeleteMsg { id } => {
-                        (*id, "[message deleted]".to_string(), None)
-                    }
-                    ControlMessage::AckReception { id } => (*id, String::new(), None),
-                    ControlMessage::AckRead { id } => (*id, String::new(), None),
-                    ControlMessage::IsTyping => (Uuid::new_v4(), String::new(), None),
-                };
-
-                Self {
-                    id,
-                    conversation_id: value.conversation_id,
-                    sender_id: value.sender_id,
-                    content,
-                    timestamp: value.issued_at,
-                    status: MessageStatus::Sent,
-                    reply_to_id,
-                    local_id: None,
-                }
-            }
+        Self {
+            id: content_msg.id,
+            conversation_id,
+            sender_id,
+            content: text_content,
+            timestamp,
+            status: MessageStatus::Sent,
+            reply_to_id: content_msg.reply_to,
+            local_id: None,
         }
     }
 }

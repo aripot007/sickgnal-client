@@ -161,9 +161,10 @@ fn handle_sdk_event(ui: AppWindow, event: Event) {
         Event::MessageStatusUpdate(uuid, message_status) => todo!(),
         Event::ConversationCreated(conversation) => todo!(),
         Event::ConversationDeleted(uuid) => todo!(),
+        Event::MessageEdited { .. } => todo!(),
+        Event::MessageDeleted { .. } => todo!(),
         Event::TypingIndicator(uuid) => todo!(),
         Event::ConnectionStateChanged(connection_state) => todo!(),
-        Event::MessageForUnknownConversation(_) => todo!(),
     }
 }
 

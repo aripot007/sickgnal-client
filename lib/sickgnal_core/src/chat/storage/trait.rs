@@ -52,6 +52,9 @@ pub trait StorageBackend: Send + Sync {
     /// Update the unread count for a conversation
     fn update_conversation_unread_count(&mut self, id: Uuid, count: i32) -> Result<()>;
 
+    /// Mark a conversation as opened (OpenConv has been sent or received)
+    fn mark_conversation_opened(&mut self, id: Uuid) -> Result<()>;
+
     // ========== Message Operations ==========
 
     /// Create a new message

@@ -1,7 +1,9 @@
 mod client;
 mod error;
-mod handle;
+mod sdk;
+mod sync_bridge;
 
 pub use client::*;
 pub use error::*;
-pub use handle::*;
+pub use sdk::*;
+pub use sync_bridge::*;

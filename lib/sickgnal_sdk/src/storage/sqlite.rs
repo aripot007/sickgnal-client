@@ -214,14 +214,15 @@ impl StorageBackend for Sqlite {
         let conn = self.conn.lock().unwrap();
 
         conn.execute(
-            "INSERT INTO conversations (id, peer_user_id, peer_name, last_message_at, unread_count)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO conversations (id, peer_user_id, peer_name, last_message_at, unread_count, opened)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 conversation.id.to_string(),
                 conversation.peer_user_id.to_string(),
                 conversation.peer_name,
                 conversation.last_message_at.map(|t| t.to_rfc3339()),
                 conversation.unread_count,
+                conversation.opened as i32,
             ],
         )
         .map_err(|e| Error::Database(e.to_string()))?;
@@ -234,7 +235,7 @@ impl StorageBackend for Sqlite {
 
         let result = conn
             .query_row(
-                "SELECT id, peer_user_id, peer_name, last_message_at, unread_count FROM conversations WHERE id = ?1",
+                "SELECT id, peer_user_id, peer_name, last_message_at, unread_count, opened FROM conversations WHERE id = ?1",
                 params![id.to_string()],
                 |row| {
                     Ok((
@@ -243,6 +244,7 @@ impl StorageBackend for Sqlite {
                         row.get::<_, String>(2)?,
                         row.get::<_, Option<String>>(3)?,
                         row.get::<_, i32>(4)?,
+                        row.get::<_, i32>(5)?,
                     ))
                 },
             )
@@ -250,7 +252,7 @@ impl StorageBackend for Sqlite {
             .map_err(|e| Error::Database(e.to_string()))?;
 
         match result {
-            Some((id, peer_user_id, peer_name, last_message_at, unread_count)) => {
+            Some((id, peer_user_id, peer_name, last_message_at, unread_count, opened)) => {
                 let id = Uuid::parse_str(&id)
                     .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
                 let peer_user_id = Uuid::parse_str(&peer_user_id)
@@ -269,6 +271,7 @@ impl StorageBackend for Sqlite {
                     peer_name,
                     last_message_at,
                     unread_count,
+                    opened: opened != 0,
                 }))
             }
             None => Ok(None),
@@ -280,7 +283,7 @@ impl StorageBackend for Sqlite {
 
         let result = conn
             .query_row(
-                "SELECT id, peer_user_id, peer_name, last_message_at, unread_count FROM conversations WHERE peer_user_id = ?1",
+                "SELECT id, peer_user_id, peer_name, last_message_at, unread_count, opened FROM conversations WHERE peer_user_id = ?1",
                 params![peer_user_id.to_string()],
                 |row| {
                     Ok((
@@ -289,6 +292,7 @@ impl StorageBackend for Sqlite {
                         row.get::<_, String>(2)?,
                         row.get::<_, Option<String>>(3)?,
                         row.get::<_, i32>(4)?,
+                        row.get::<_, i32>(5)?,
                     ))
                 },
             )
@@ -296,7 +300,7 @@ impl StorageBackend for Sqlite {
             .map_err(|e| Error::Database(e.to_string()))?;
 
         match result {
-            Some((id, peer_user_id, peer_name, last_message_at, unread_count)) => {
+            Some((id, peer_user_id, peer_name, last_message_at, unread_count, opened)) => {
                 let id = Uuid::parse_str(&id)
                     .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
                 let peer_user_id = Uuid::parse_str(&peer_user_id)
@@ -315,6 +319,7 @@ impl StorageBackend for Sqlite {
                     peer_name,
                     last_message_at,
                     unread_count,
+                    opened: opened != 0,
                 }))
             }
             None => Ok(None),
@@ -325,7 +330,7 @@ impl StorageBackend for Sqlite {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn
-            .prepare("SELECT id, peer_user_id, peer_name, last_message_at, unread_count FROM conversations ORDER BY last_message_at DESC")
+            .prepare("SELECT id, peer_user_id, peer_name, last_message_at, unread_count, opened FROM conversations ORDER BY last_message_at DESC")
             .map_err(|e| Error::Database(e.to_string()))?;
 
         let rows = stmt
@@ -336,13 +341,14 @@ impl StorageBackend for Sqlite {
                     row.get::<_, String>(2)?,
                     row.get::<_, Option<String>>(3)?,
                     row.get::<_, i32>(4)?,
+                    row.get::<_, i32>(5)?,
                 ))
             })
             .map_err(|e| Error::Database(e.to_string()))?;
 
         let mut conversations = Vec::new();
         for row in rows {
-            let (id, peer_user_id, peer_name, last_message_at, unread_count) =
+            let (id, peer_user_id, peer_name, last_message_at, unread_count, opened) =
                 row.map_err(|e| Error::Database(e.to_string()))?;
 
             let id = Uuid::parse_str(&id)
@@ -363,6 +369,7 @@ impl StorageBackend for Sqlite {
                 peer_name,
                 last_message_at,
                 unread_count,
+                opened: opened != 0,
             });
         }
 
@@ -420,6 +427,18 @@ impl StorageBackend for Sqlite {
         conn.execute(
             "UPDATE conversations SET unread_count = ?1 WHERE id = ?2",
             params![count, id.to_string()],
+        )
+        .map_err(|e| Error::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    fn mark_conversation_opened(&mut self, id: Uuid) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        conn.execute(
+            "UPDATE conversations SET opened = 1 WHERE id = ?1",
+            params![id.to_string()],
         )
         .map_err(|e| Error::Database(e.to_string()))?;
 

@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     peer_user_id TEXT NOT NULL UNIQUE,  -- Each peer can only have one conversation
     peer_name TEXT NOT NULL,
     last_message_at TEXT,               -- ISO 8601 timestamp
-    unread_count INTEGER NOT NULL DEFAULT 0
+    unread_count INTEGER NOT NULL DEFAULT 0,
+    opened INTEGER NOT NULL DEFAULT 0   -- 0 = OpenConv not yet sent, 1 = opened
 );
 
 -- Messages table: stores all messages for all conversations
@@ -34,10 +35,9 @@ CREATE TABLE IF NOT EXISTS messages (
     content BLOB NOT NULL,              -- Encrypted message content
     timestamp TEXT NOT NULL,            -- ISO 8601 timestamp
     status TEXT NOT NULL,               -- 'sending', 'sent', 'delivered', 'read', 'failed'
-    reply_to_id TEXT,                   -- ID of message being replied to
+    reply_to_id TEXT,                   -- ID of message being replied to (may reference remote messages)
     local_id TEXT UNIQUE,               -- Temporary ID before server confirmation
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-    FOREIGN KEY (reply_to_id) REFERENCES messages(id) ON DELETE SET NULL
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 );
 
 -- Sessions table: stores E2E encryption sessions for each peer
