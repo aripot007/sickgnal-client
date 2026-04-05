@@ -662,13 +662,7 @@ impl App {
                     msg.status = status;
                 }
             }
-            SdkEvent::ConversationCreated(mut conv) => {
-                // Resolve the peer name if it's just a UUID placeholder
-                if let Some(ref sdk) = self.sdk {
-                    if let Ok(profile) = sdk.get_profile_by_id(conv.peer_user_id) {
-                        conv.peer_name = profile.username;
-                    }
-                }
+            SdkEvent::ConversationCreated(conv) => {
                 if !self.conversations.iter().any(|c| c.id == conv.id) {
                     self.conversations.push(conv);
                 }

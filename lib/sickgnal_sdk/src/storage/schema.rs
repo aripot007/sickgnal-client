@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 -- Conversations table: stores information about each conversation
 CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY NOT NULL,
-    peer_user_id TEXT NOT NULL UNIQUE,  -- Each peer can only have one conversation
+    peer_user_id TEXT NOT NULL,          -- A peer may appear in multiple conversations (groups)
     peer_name TEXT NOT NULL,
     last_message_at TEXT,               -- ISO 8601 timestamp
     unread_count INTEGER NOT NULL DEFAULT 0,

@@ -145,6 +145,12 @@ impl SyncBridge {
             .block_on(self.sdk.send_delivery_receipt(conversation_id, message_id))
     }
 
+    // ─── Verification ────────────────────────────────────────────────
+
+    pub fn get_peer_fingerprint(&self, peer_user_id: Uuid) -> String {
+        self.sdk.get_peer_fingerprint(peer_user_id)
+    }
+
     // ─── Profile ────────────────────────────────────────────────────────
 
     pub fn get_profile_by_username(&self, username: String) -> Result<UserProfile> {

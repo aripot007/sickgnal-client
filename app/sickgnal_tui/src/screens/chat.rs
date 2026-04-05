@@ -19,12 +19,31 @@ pub fn draw(f: &mut Frame, app: &App) {
     ])
     .split(area);
 
-    // Find current conversation name
-    let conv_name = app
+    // Find current conversation and peer fingerprint
+    let (conv_name, fingerprint) = app
         .current_conversation
         .and_then(|cid| app.conversations.iter().find(|c| c.id == cid))
-        .map(|c| c.peer_name.clone())
-        .unwrap_or_else(|| "Chat".into());
+        .map(|c| {
+            let fp = app
+                .sdk
+                .as_ref()
+                .map(|sdk| sdk.get_peer_fingerprint(c.peer_user_id))
+                .unwrap_or_default();
+            (c.peer_name.clone(), fp)
+        })
+        .unwrap_or_else(|| ("Chat".into(), String::new()));
+
+    // Format fingerprint for display (groups of 4 hex chars)
+    let fp_display = if fingerprint.is_empty() {
+        String::new()
+    } else {
+        let grouped: Vec<&str> = fingerprint
+            .as_bytes()
+            .chunks(4)
+            .map(|c| std::str::from_utf8(c).unwrap_or(""))
+            .collect();
+        format!("  [{}]", grouped.join(" "))
+    };
 
     // Header
     let header = Paragraph::new(Line::from(vec![
@@ -39,6 +58,7 @@ pub fn draw(f: &mut Frame, app: &App) {
             format!("  ({})", app.username),
             Style::default().fg(Color::DarkGray),
         ),
+        Span::styled(&fp_display, Style::default().fg(Color::Yellow)),
     ]))
     .block(
         Block::default()

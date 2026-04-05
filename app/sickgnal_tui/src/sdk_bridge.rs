@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use sickgnal_core::chat::client::Event as SdkEvent;
 use sickgnal_core::chat::storage::{Conversation, Message};
-use sickgnal_core::e2e::message::UserProfile;
 use sickgnal_sdk::TlsConfig;
 use sickgnal_sdk::client::SyncBridge;
 use tokio::sync::mpsc;
@@ -68,7 +67,7 @@ impl SdkBridge {
             .map_err(|e| format!("{e}"))
     }
 
-    pub fn get_profile_by_id(&self, id: Uuid) -> Result<UserProfile, String> {
-        self.0.get_profile_by_id(id).map_err(|e| format!("{e}"))
+    pub fn get_peer_fingerprint(&self, peer_user_id: Uuid) -> String {
+        self.0.get_peer_fingerprint(peer_user_id)
     }
 }

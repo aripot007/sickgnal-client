@@ -95,6 +95,83 @@ impl Sqlite {
             _ => Err(Error::InvalidData(format!("Invalid status: {}", s)))?,
         }
     }
+
+    /// Parse a UUID string from the database.
+    fn parse_uuid(s: &str) -> Result<Uuid> {
+        Uuid::parse_str(s).map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)).into())
+    }
+
+    /// Parse an optional UUID string from the database.
+    fn parse_opt_uuid(s: Option<String>) -> Result<Option<Uuid>> {
+        s.map(|s| Self::parse_uuid(&s)).transpose()
+    }
+
+    /// Parse an RFC 3339 timestamp string from the database.
+    fn parse_timestamp(s: &str) -> Result<DateTime<Utc>> {
+        DateTime::parse_from_rfc3339(s)
+            .map(|dt| dt.with_timezone(&Utc))
+            .map_err(|e| Error::InvalidData(format!("Invalid timestamp: {}", e)).into())
+    }
+
+    /// Parse an optional RFC 3339 timestamp string from the database.
+    fn parse_opt_timestamp(s: Option<String>) -> Result<Option<DateTime<Utc>>> {
+        s.map(|s| Self::parse_timestamp(&s)).transpose()
+    }
+
+    /// Build a `Conversation` from raw database row values.
+    fn row_to_conversation(
+        row: (String, String, String, Option<String>, i32, i32),
+    ) -> Result<Conversation> {
+        let (id, peer_user_id, peer_name, last_message_at, unread_count, opened) = row;
+        Ok(Conversation {
+            id: Self::parse_uuid(&id)?,
+            peer_user_id: Self::parse_uuid(&peer_user_id)?,
+            peer_name,
+            last_message_at: Self::parse_opt_timestamp(last_message_at)?,
+            unread_count,
+            opened: opened != 0,
+        })
+    }
+
+    /// Build a `Message` from raw database row values.
+    fn row_to_message(
+        row: (
+            String,
+            String,
+            String,
+            Vec<u8>,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+        ),
+    ) -> Result<Message> {
+        let (id, conversation_id, sender_id, content, timestamp, status, reply_to_id, local_id) =
+            row;
+        Ok(Message {
+            id: Self::parse_uuid(&id)?,
+            conversation_id: Self::parse_uuid(&conversation_id)?,
+            sender_id: Self::parse_uuid(&sender_id)?,
+            content: String::from_utf8(content)
+                .map_err(|e| Error::InvalidData(format!("Invalid UTF-8: {}", e)))?,
+            timestamp: Self::parse_timestamp(&timestamp)?,
+            status: Self::string_to_status(&status)?,
+            reply_to_id: Self::parse_opt_uuid(reply_to_id)?,
+            local_id: Self::parse_opt_uuid(local_id)?,
+        })
+    }
+
+    /// Upsert a key into the `keys` table.
+    fn upsert_key(conn: &Connection, key_id: &str, key_type: &str, data: &[u8]) -> K_Result<()> {
+        conn.execute(
+            "INSERT INTO keys (key_id, key_type, key_data, created_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(key_id) DO UPDATE SET key_data = excluded.key_data",
+            params![key_id, key_type, data, Utc::now().to_rfc3339()],
+        )
+        .map_err(Self::db_error)?;
+        Ok(())
+    }
 }
 
 impl StorageBackend for Sqlite {
@@ -251,79 +328,36 @@ impl StorageBackend for Sqlite {
             .optional()
             .map_err(|e| Error::Database(e.to_string()))?;
 
-        match result {
-            Some((id, peer_user_id, peer_name, last_message_at, unread_count, opened)) => {
-                let id = Uuid::parse_str(&id)
-                    .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-                let peer_user_id = Uuid::parse_str(&peer_user_id)
-                    .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-                let last_message_at = last_message_at
-                    .map(|s| {
-                        DateTime::parse_from_rfc3339(&s)
-                            .map(|dt| dt.with_timezone(&Utc))
-                            .map_err(|e| Error::InvalidData(format!("Invalid timestamp: {}", e)))
-                    })
-                    .transpose()?;
-
-                Ok(Some(Conversation {
-                    id,
-                    peer_user_id,
-                    peer_name,
-                    last_message_at,
-                    unread_count,
-                    opened: opened != 0,
-                }))
-            }
-            None => Ok(None),
-        }
+        result.map(Self::row_to_conversation).transpose()
     }
 
-    fn get_conversation_by_peer(&self, peer_user_id: Uuid) -> Result<Option<Conversation>> {
+    fn get_conversations_by_peer(&self, peer_user_id: Uuid) -> Result<Vec<Conversation>> {
         let conn = self.conn.lock().unwrap();
 
-        let result = conn
-            .query_row(
+        let mut stmt = conn
+            .prepare(
                 "SELECT id, peer_user_id, peer_name, last_message_at, unread_count, opened FROM conversations WHERE peer_user_id = ?1",
-                params![peer_user_id.to_string()],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, Option<String>>(3)?,
-                        row.get::<_, i32>(4)?,
-                        row.get::<_, i32>(5)?,
-                    ))
-                },
             )
-            .optional()
             .map_err(|e| Error::Database(e.to_string()))?;
 
-        match result {
-            Some((id, peer_user_id, peer_name, last_message_at, unread_count, opened)) => {
-                let id = Uuid::parse_str(&id)
-                    .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-                let peer_user_id = Uuid::parse_str(&peer_user_id)
-                    .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-                let last_message_at = last_message_at
-                    .map(|s| {
-                        DateTime::parse_from_rfc3339(&s)
-                            .map(|dt| dt.with_timezone(&Utc))
-                            .map_err(|e| Error::InvalidData(format!("Invalid timestamp: {}", e)))
-                    })
-                    .transpose()?;
+        let rows = stmt
+            .query_map(params![peer_user_id.to_string()], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, i32>(4)?,
+                    row.get::<_, i32>(5)?,
+                ))
+            })
+            .map_err(|e| Error::Database(e.to_string()))?;
 
-                Ok(Some(Conversation {
-                    id,
-                    peer_user_id,
-                    peer_name,
-                    last_message_at,
-                    unread_count,
-                    opened: opened != 0,
-                }))
-            }
-            None => Ok(None),
-        }
+        rows.map(|row| {
+            let row = row.map_err(|e| Error::Database(e.to_string()))?;
+            Self::row_to_conversation(row)
+        })
+        .collect()
     }
 
     fn list_conversations(&self) -> Result<Vec<Conversation>> {
@@ -346,34 +380,11 @@ impl StorageBackend for Sqlite {
             })
             .map_err(|e| Error::Database(e.to_string()))?;
 
-        let mut conversations = Vec::new();
-        for row in rows {
-            let (id, peer_user_id, peer_name, last_message_at, unread_count, opened) =
-                row.map_err(|e| Error::Database(e.to_string()))?;
-
-            let id = Uuid::parse_str(&id)
-                .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-            let peer_user_id = Uuid::parse_str(&peer_user_id)
-                .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-            let last_message_at = last_message_at
-                .map(|s| {
-                    DateTime::parse_from_rfc3339(&s)
-                        .map(|dt| dt.with_timezone(&Utc))
-                        .map_err(|e| Error::InvalidData(format!("Invalid timestamp: {}", e)))
-                })
-                .transpose()?;
-
-            conversations.push(Conversation {
-                id,
-                peer_user_id,
-                peer_name,
-                last_message_at,
-                unread_count,
-                opened: opened != 0,
-            });
-        }
-
-        Ok(conversations)
+        rows.map(|row| {
+            let row = row.map_err(|e| Error::Database(e.to_string()))?;
+            Self::row_to_conversation(row)
+        })
+        .collect()
     }
 
     fn update_conversation(&mut self, conversation: &Conversation) -> Result<()> {
@@ -399,6 +410,18 @@ impl StorageBackend for Sqlite {
         conn.execute(
             "DELETE FROM conversations WHERE id = ?1",
             params![id.to_string()],
+        )
+        .map_err(|e| Error::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    fn delete_messages_for_conversation(&mut self, conversation_id: Uuid) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        conn.execute(
+            "DELETE FROM messages WHERE conversation_id = ?1",
+            params![conversation_id.to_string()],
         )
         .map_err(|e| Error::Database(e.to_string()))?;
 
@@ -461,7 +484,7 @@ impl StorageBackend for Sqlite {
                 message.timestamp.to_rfc3339(),
                 Self::status_to_string(message.status),
                 message.reply_to_id.map(|id| id.to_string()),
-                message.local_id,
+                message.local_id.map(|id| id.to_string()),
             ],
         )
         .map_err(|e| Error::Database(e.to_string()))?;
@@ -493,58 +516,17 @@ impl StorageBackend for Sqlite {
             .optional()
             .map_err(|e| Error::Database(e.to_string()))?;
 
-        match result {
-            Some((
-                id,
-                conversation_id,
-                sender_id,
-                content,
-                timestamp,
-                status,
-                reply_to_id,
-                local_id,
-            )) => {
-                let id = Uuid::parse_str(&id)
-                    .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-                let conversation_id = Uuid::parse_str(&conversation_id)
-                    .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-                let sender_id = Uuid::parse_str(&sender_id)
-                    .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-                let timestamp = DateTime::parse_from_rfc3339(&timestamp)
-                    .map_err(|e| Error::InvalidData(format!("Invalid timestamp: {}", e)))?
-                    .with_timezone(&Utc);
-                let status = Self::string_to_status(&status)?;
-                let reply_to_id = reply_to_id
-                    .map(|s| Uuid::parse_str(&s))
-                    .transpose()
-                    .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-
-                let content = String::from_utf8(content)
-                    .map_err(|e| Error::InvalidData(format!("Invalid UTF-8: {}", e)))?;
-
-                Ok(Some(Message {
-                    id,
-                    conversation_id,
-                    sender_id,
-                    content,
-                    timestamp,
-                    status,
-                    reply_to_id,
-                    local_id,
-                }))
-            }
-            None => Ok(None),
-        }
+        result.map(Self::row_to_message).transpose()
     }
 
-    fn get_message_by_local_id(&self, local_id: &str) -> Result<Option<Message>> {
+    fn get_message_by_local_id(&self, local_id: Uuid) -> Result<Option<Message>> {
         let conn = self.conn.lock().unwrap();
 
         let result = conn
             .query_row(
                 "SELECT id, conversation_id, sender_id, content, timestamp, status, reply_to_id, local_id
                  FROM messages WHERE local_id = ?1",
-                params![local_id],
+                params![local_id.to_string()],
                 |row| {
                     Ok((
                         row.get::<_, String>(0)?,
@@ -561,48 +543,7 @@ impl StorageBackend for Sqlite {
             .optional()
             .map_err(|e| Error::Database(e.to_string()))?;
 
-        match result {
-            Some((
-                id,
-                conversation_id,
-                sender_id,
-                content,
-                timestamp,
-                status,
-                reply_to_id,
-                local_id,
-            )) => {
-                let id = Uuid::parse_str(&id)
-                    .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-                let conversation_id = Uuid::parse_str(&conversation_id)
-                    .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-                let sender_id = Uuid::parse_str(&sender_id)
-                    .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-                let timestamp = DateTime::parse_from_rfc3339(&timestamp)
-                    .map_err(|e| Error::InvalidData(format!("Invalid timestamp: {}", e)))?
-                    .with_timezone(&Utc);
-                let status = Self::string_to_status(&status)?;
-                let reply_to_id = reply_to_id
-                    .map(|s| Uuid::parse_str(&s))
-                    .transpose()
-                    .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-
-                let content = String::from_utf8(content)
-                    .map_err(|e| Error::InvalidData(format!("Invalid UTF-8: {}", e)))?;
-
-                Ok(Some(Message {
-                    id,
-                    conversation_id,
-                    sender_id,
-                    content,
-                    timestamp,
-                    status,
-                    reply_to_id,
-                    local_id,
-                }))
-            }
-            None => Ok(None),
-        }
+        result.map(Self::row_to_message).transpose()
     }
 
     fn list_messages(
@@ -613,78 +554,42 @@ impl StorageBackend for Sqlite {
     ) -> Result<Vec<Message>> {
         let conn = self.conn.lock().unwrap();
 
-        let sql = format!(
-            "SELECT id, conversation_id, sender_id, content, timestamp, status, reply_to_id, local_id
-             FROM messages WHERE conversation_id = ?1 ORDER BY timestamp ASC {}{}",
-            limit.map(|_| "LIMIT ?2").unwrap_or(""),
-            offset.map(|_| "OFFSET ?3").unwrap_or(""),
-        );
-
+        // Use LIMIT -1 (no limit) and OFFSET 0 (no offset) as defaults
+        // so we can always use the same static query.
         let mut stmt = conn
-            .prepare(&sql)
+            .prepare(
+                "SELECT id, conversation_id, sender_id, content, timestamp, status, reply_to_id, local_id
+                 FROM messages WHERE conversation_id = ?1 ORDER BY timestamp ASC LIMIT ?2 OFFSET ?3",
+            )
             .map_err(|e| Error::Database(e.to_string()))?;
-
-        let params: Vec<Box<dyn rusqlite::ToSql>> = match (limit, offset) {
-            (Some(l), Some(o)) => vec![
-                Box::new(conversation_id.to_string()),
-                Box::new(l),
-                Box::new(o),
-            ],
-            (Some(l), None) => vec![Box::new(conversation_id.to_string()), Box::new(l)],
-            _ => vec![Box::new(conversation_id.to_string())],
-        };
 
         let rows = stmt
-            .query_map(rusqlite::params_from_iter(params.iter()), |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, Vec<u8>>(3)?,
-                    row.get::<_, String>(4)?,
-                    row.get::<_, String>(5)?,
-                    row.get::<_, Option<String>>(6)?,
-                    row.get::<_, Option<String>>(7)?,
-                ))
-            })
+            .query_map(
+                params![
+                    conversation_id.to_string(),
+                    limit.unwrap_or(-1),
+                    offset.unwrap_or(0),
+                ],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Vec<u8>>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
+                        row.get::<_, Option<String>>(6)?,
+                        row.get::<_, Option<String>>(7)?,
+                    ))
+                },
+            )
             .map_err(|e| Error::Database(e.to_string()))?;
 
-        let mut messages = Vec::new();
-        for row in rows {
-            let (id, conversation_id, sender_id, content, timestamp, status, reply_to_id, local_id) =
-                row.map_err(|e| Error::Database(e.to_string()))?;
-
-            let id = Uuid::parse_str(&id)
-                .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-            let conversation_id = Uuid::parse_str(&conversation_id)
-                .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-            let sender_id = Uuid::parse_str(&sender_id)
-                .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-            let timestamp = DateTime::parse_from_rfc3339(&timestamp)
-                .map_err(|e| Error::InvalidData(format!("Invalid timestamp: {}", e)))?
-                .with_timezone(&Utc);
-            let status = Self::string_to_status(&status)?;
-            let reply_to_id = reply_to_id
-                .map(|s| Uuid::parse_str(&s))
-                .transpose()
-                .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-
-            let content = String::from_utf8(content)
-                .map_err(|e| Error::InvalidData(format!("Invalid UTF-8: {}", e)))?;
-
-            messages.push(Message {
-                id,
-                conversation_id,
-                sender_id,
-                content,
-                timestamp,
-                status,
-                reply_to_id,
-                local_id,
-            });
-        }
-
-        Ok(messages)
+        rows.map(|row| {
+            let row = row.map_err(|e| Error::Database(e.to_string()))?;
+            Self::row_to_message(row)
+        })
+        .collect()
     }
 
     fn update_message_status(&mut self, id: Uuid, status: MessageStatus) -> Result<()> {
@@ -884,13 +789,7 @@ impl E2EStorageBackend for Sqlite {
         let data = Self::serialize_key_data(&identity_keypair)?;
         {
             let conn = self.conn.lock().unwrap();
-            conn.execute(
-                "INSERT INTO keys (key_id, key_type, key_data, created_at)
-                 VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(key_id) DO UPDATE SET key_data = excluded.key_data",
-                params!["identity", "identity", data, Utc::now().to_rfc3339()],
-            )
-            .map_err(Self::db_error)?;
+            Self::upsert_key(&conn, "identity", "identity", &data)?;
         }
         self.identity_keypair_cache = Some(identity_keypair);
         Ok(())
@@ -913,13 +812,7 @@ impl E2EStorageBackend for Sqlite {
         let data = midterm_key.to_bytes().to_vec();
         {
             let conn = self.conn.lock().unwrap();
-            conn.execute(
-                "INSERT INTO keys (key_id, key_type, key_data, created_at)
-                 VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(key_id) DO UPDATE SET key_data = excluded.key_data",
-                params!["midterm", "midterm", data, Utc::now().to_rfc3339()],
-            )
-            .map_err(Self::db_error)?;
+            Self::upsert_key(&conn, "midterm", "midterm", &data)?;
         }
         self.midterm_key_cache = Some(midterm_key);
         Ok(())
@@ -953,18 +846,7 @@ impl E2EStorageBackend for Sqlite {
         let data = keypair.to_bytes().to_vec();
         {
             let conn = self.conn.lock().unwrap();
-            conn.execute(
-                "INSERT INTO keys (key_id, key_type, key_data, created_at)
-                 VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(key_id) DO UPDATE SET key_data = excluded.key_data",
-                params![
-                    new_id.to_string(),
-                    "ephemeral",
-                    data,
-                    Utc::now().to_rfc3339()
-                ],
-            )
-            .map_err(Self::db_error)?;
+            Self::upsert_key(&conn, &new_id.to_string(), "ephemeral", &data)?;
         }
         self.ephemeral_keys_cache.insert(new_id, keypair);
         Ok(new_id)
@@ -1038,18 +920,7 @@ impl E2EStorageBackend for Sqlite {
         let composite_key = format!("{}_{}", user, key_id);
         {
             let conn = self.conn.lock().unwrap();
-            conn.execute(
-                "INSERT INTO keys (key_id, key_type, key_data, created_at)
-                 VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(key_id) DO UPDATE SET key_data = excluded.key_data",
-                params![
-                    composite_key,
-                    "session_key",
-                    key.to_vec(),
-                    Utc::now().to_rfc3339()
-                ],
-            )
-            .map_err(Self::db_error)?;
+            Self::upsert_key(&conn, &composite_key, "session_key", &key)?;
         }
         self.session_keys_cache.insert((user, key_id), key);
         Ok(())
@@ -1077,18 +948,7 @@ impl E2EStorageBackend for Sqlite {
         let data = Self::serialize_key_data(&keys)?;
         {
             let conn = self.conn.lock().unwrap();
-            conn.execute(
-                "INSERT INTO keys (key_id, key_type, key_data, created_at)
-                 VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(key_id) DO UPDATE SET key_data = excluded.key_data",
-                params![
-                    user_id.to_string(),
-                    "user_public_keys",
-                    data,
-                    Utc::now().to_rfc3339()
-                ],
-            )
-            .map_err(Self::db_error)?;
+            Self::upsert_key(&conn, &user_id.to_string(), "user_public_keys", &data)?;
         }
         self.user_public_keys_cache.insert(user_id, keys);
         Ok(())
@@ -1184,13 +1044,7 @@ impl E2EStorageBackend for Sqlite {
         let data = secret.to_bytes().to_vec();
         {
             let conn = self.conn.lock().unwrap();
-            conn.execute(
-                "INSERT INTO keys (key_id, key_type, key_data, created_at)
-                 VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(key_id) DO UPDATE SET key_data = excluded.key_data",
-                params![id.to_string(), "ephemeral", data, Utc::now().to_rfc3339()],
-            )
-            .map_err(Self::db_error)?;
+            Self::upsert_key(&conn, &id.to_string(), "ephemeral", &data)?;
         }
         self.ephemeral_keys_cache.insert(id, secret);
         Ok(())

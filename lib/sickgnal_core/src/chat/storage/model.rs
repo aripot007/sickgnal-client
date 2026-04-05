@@ -65,7 +65,7 @@ pub struct Message {
     pub timestamp: DateTime<Utc>,
     pub status: MessageStatus,
     pub reply_to_id: Option<Uuid>,
-    pub local_id: Option<String>, // For tracking messages before server confirmation
+    pub local_id: Option<Uuid>,
 }
 
 impl Message {

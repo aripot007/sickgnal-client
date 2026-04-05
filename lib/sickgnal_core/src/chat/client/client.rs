@@ -1,9 +1,11 @@
 use crate::chat::client::{Error, Event, Result};
-use crate::chat::message::{ChatMessage, ChatMessageKind, ControlMessage};
+use crate::chat::message::{ChatMessage, ChatMessageKind, ContentMessage, ControlMessage};
 use crate::chat::storage::{Conversation, Message, MessageStatus, StorageBackend};
 
+use chrono::{DateTime, Utc};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
+use uuid::Uuid;
 
 use crate::e2e::client::{Account, E2EClient};
 use crate::e2e::keys::E2EStorageBackend;
@@ -16,6 +18,28 @@ use crate::e2e::message_stream::raw_json::RawJsonMessageStream;
 /// only if the frontend is severely behind.
 fn emit(tx: &mpsc::Sender<Event>, event: Event) {
     let _ = tx.try_send(event);
+}
+
+/// Store an incoming data message and update the conversation metadata.
+///
+/// This is the shared logic for receiving a `ContentMessage` — used by
+/// `handle_message_for_conversation`, `handle_control_message` (OpenConv
+/// with initial message), and `handle_message_for_unknown_conversation`.
+fn store_incoming_data_message<S: StorageBackend>(
+    storage: &mut S,
+    event_tx: &mpsc::Sender<Event>,
+    conv_id: Uuid,
+    unread_count: i32,
+    content_msg: &ContentMessage,
+    sender_id: Uuid,
+    timestamp: DateTime<Utc>,
+) -> Result<()> {
+    let message = Message::from_content_message(content_msg, conv_id, sender_id, timestamp);
+    storage.create_message(&message)?;
+    storage.update_conversation_unread_count(conv_id, unread_count + 1)?;
+    storage.update_conversation_last_message(conv_id, timestamp)?;
+    emit(event_tx, Event::NewMessage(conv_id, message));
+    Ok(())
 }
 
 // ─── Free functions for incoming message processing ────────────────────────
@@ -63,16 +87,15 @@ fn handle_message_for_conversation<S: StorageBackend>(
 ) -> Result<()> {
     match &msg.kind {
         ChatMessageKind::Data(content_msg) => {
-            let message = Message::from_content_message(
+            store_incoming_data_message(
+                storage,
+                event_tx,
+                conv.id,
+                conv.unread_count,
                 content_msg,
-                msg.conversation_id,
                 msg.sender_id,
                 msg.issued_at,
-            );
-            storage.create_message(&message)?;
-            storage.update_conversation_unread_count(conv.id, conv.unread_count + 1)?;
-            storage.update_conversation_last_message(conv.id, msg.issued_at)?;
-            emit(event_tx, Event::NewMessage(conv.id, message));
+            )?;
         }
         ChatMessageKind::Ctrl(ctrl) => {
             handle_control_message(storage, event_tx, &conv, ctrl, &msg)?;
@@ -92,16 +115,15 @@ fn handle_control_message<S: StorageBackend>(
     match ctrl {
         ControlMessage::OpenConv { initial_message } => {
             if let Some(content_msg) = initial_message {
-                let message = Message::from_content_message(
+                store_incoming_data_message(
+                    storage,
+                    event_tx,
+                    conv.id,
+                    conv.unread_count,
                     content_msg,
-                    msg.conversation_id,
                     msg.sender_id,
                     msg.issued_at,
-                );
-                storage.create_message(&message)?;
-                storage.update_conversation_unread_count(conv.id, conv.unread_count + 1)?;
-                storage.update_conversation_last_message(conv.id, msg.issued_at)?;
-                emit(event_tx, Event::NewMessage(conv.id, message));
+                )?;
             }
         }
         ControlMessage::EditMsg { id, new_content } => {
@@ -177,15 +199,15 @@ fn handle_message_for_unknown_conversation<S: StorageBackend>(
             emit(event_tx, Event::ConversationCreated(conv.clone()));
 
             if let Some(content_msg) = initial_message {
-                let message = Message::from_content_message(
+                store_incoming_data_message(
+                    storage,
+                    event_tx,
+                    conv.id,
+                    0, // unread_count starts at 0 for new conversations
                     content_msg,
-                    msg.conversation_id,
                     sender_id,
                     msg.issued_at,
-                );
-                storage.create_message(&message)?;
-                storage.update_conversation_unread_count(conv.id, 1)?;
-                emit(event_tx, Event::NewMessage(conv.id, message));
+                )?;
             }
 
             Ok(())

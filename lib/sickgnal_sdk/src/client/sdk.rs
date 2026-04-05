@@ -104,36 +104,51 @@ impl Sdk {
         tokio::spawn(recv_task);
         tokio::spawn(send_task);
 
+        // Spawn the async command worker (uses ClientHandle directly)
+        let (cmd_tx, cmd_rx) = mpsc::channel(32);
+        tokio::spawn(Self::command_worker(client_handle, cmd_rx));
+
         // Merge sync-phase events and live incoming messages into a single stream.
         let (fwd_tx, fwd_rx) = mpsc::channel::<Event>(64);
 
-        // Forward sync-phase events
+        // Forward sync-phase events, resolving peer names for new conversations
         let fwd_tx_sync = fwd_tx.clone();
+        let cmd_tx_for_sync = cmd_tx.clone();
         tokio::spawn(async move {
             let mut rx = sync_event_rx;
             while let Some(event) = rx.recv().await {
+                let event = Self::resolve_peer_name_if_needed(event, &cmd_tx_for_sync).await;
                 if fwd_tx_sync.send(event).await.is_err() {
                     break;
                 }
             }
         });
 
-        // Forward live chat messages through process_incoming_message
+        // Forward live chat messages through process_incoming_message.
+        // Use an intermediate channel so we can resolve peer names on
+        // ConversationCreated events before they reach the frontend.
+        let (live_tx, mut live_rx) = mpsc::channel::<Event>(64);
+        let cmd_tx_for_live = cmd_tx.clone();
         tokio::spawn(async move {
             let mut rx = chat_msg_rx;
-            let fwd_tx = fwd_tx;
             while let Some(msg) = rx.recv().await {
                 let mut storage = storage_for_forwarder.lock().unwrap();
-                let event_tx = fwd_tx.clone();
-                if let Err(e) = process_incoming_message(&mut *storage, &event_tx, msg) {
+                if let Err(e) = process_incoming_message(&mut *storage, &live_tx, msg) {
                     eprintln!("[sdk] error processing live message: {e}");
                 }
             }
         });
 
-        // Spawn the async command worker (uses ClientHandle directly)
-        let (cmd_tx, cmd_rx) = mpsc::channel(32);
-        tokio::spawn(Self::command_worker(client_handle, cmd_rx));
+        // Post-process live events: resolve peer names, then forward to frontend
+        let fwd_tx_live = fwd_tx.clone();
+        tokio::spawn(async move {
+            while let Some(event) = live_rx.recv().await {
+                let event = Self::resolve_peer_name_if_needed(event, &cmd_tx_for_live).await;
+                if fwd_tx_live.send(event).await.is_err() {
+                    break;
+                }
+            }
+        });
 
         Ok(Self {
             cmd_tx,
@@ -182,11 +197,14 @@ impl Sdk {
     ) -> Result<Conversation> {
         let profile = self.get_profile_by_username(username).await?;
 
-        // Check if conversation already exists
+        // Check if a direct conversation with this peer already exists.
+        // Once groups are supported, there may be multiple conversations
+        // with the same peer. For now, return the first match (1-to-1).
         {
             let storage = self.storage.lock().unwrap();
-            if let Some(existing) = storage.get_conversation_by_peer(profile.id)? {
-                return Ok(existing);
+            let existing = storage.get_conversations_by_peer(profile.id)?;
+            if let Some(conv) = existing.into_iter().next() {
+                return Ok(conv);
             }
         }
 
@@ -221,13 +239,8 @@ impl Sdk {
     /// Delete a conversation and all its messages.
     pub fn delete_conversation(&self, conversation_id: Uuid) -> Result<()> {
         let mut storage = self.storage.lock().unwrap();
-
-        let messages = storage.list_messages(conversation_id, None, None)?;
-        for msg in messages {
-            storage.delete_message(msg.id)?;
-        }
+        storage.delete_messages_for_conversation(conversation_id)?;
         storage.delete_conversation(conversation_id)?;
-
         Ok(())
     }
 
@@ -402,6 +415,20 @@ impl Sdk {
         Ok(())
     }
 
+    // ─── Verification ─────────────────────────────────────────────────
+
+    /// Get the verification fingerprint for a peer's identity key.
+    ///
+    /// This is a **placeholder** that returns the peer's user ID as a hex string.
+    /// Once the E2E library exposes a real fingerprint for the peer's identity key,
+    /// this function will call it instead. The UI should display this value so
+    /// users can verify each other's identities out-of-band.
+    pub fn get_peer_fingerprint(&self, peer_user_id: Uuid) -> String {
+        // TODO: Replace with real identity key fingerprint from the E2E client
+        // e.g. e2e_client.get_peer_identity_fingerprint(peer_user_id)
+        hex::encode(peer_user_id.as_bytes())
+    }
+
     // ─── Profile ────────────────────────────────────────────────────────
 
     /// Get a user's profile by username.
@@ -428,6 +455,33 @@ impl Sdk {
 
     // ─── Internal helpers ───────────────────────────────────────────────
 
+    /// Resolve the peer name on `ConversationCreated` events.
+    ///
+    /// The core layer sets `peer_name = sender_id.to_string()` (a UUID) because
+    /// it doesn't have access to the server profile API. This method replaces
+    /// the UUID placeholder with the actual username, so frontends don't need
+    /// to handle this themselves.
+    async fn resolve_peer_name_if_needed(event: Event, cmd_tx: &mpsc::Sender<SdkCommand>) -> Event {
+        if let Event::ConversationCreated(mut conv) = event {
+            // Try to resolve the peer name from the server
+            let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+            let sent = cmd_tx
+                .send(SdkCommand::GetProfileById {
+                    id: conv.peer_user_id,
+                    reply: reply_tx,
+                })
+                .await;
+            if sent.is_ok() {
+                if let Ok(Ok(profile)) = reply_rx.await {
+                    conv.peer_name = profile.username;
+                }
+            }
+            Event::ConversationCreated(conv)
+        } else {
+            event
+        }
+    }
+
     /// Create an outgoing message in local storage and return it.
     fn store_outgoing(
         &self,
@@ -444,7 +498,7 @@ impl Sdk {
             timestamp: now,
             status: MessageStatus::Sending,
             reply_to_id,
-            local_id: Some(format!("local_{}", Uuid::new_v4())),
+            local_id: Some(Uuid::new_v4()),
         };
 
         let mut storage = self.storage.lock().unwrap();
