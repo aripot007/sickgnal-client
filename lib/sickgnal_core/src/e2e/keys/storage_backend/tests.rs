@@ -36,6 +36,34 @@ macro_rules! test_e2e_storage_backend {
         use ::uuid::Uuid;
 
         #[test]
+        fn test_e2e_backend_clone() {
+            let mut backend = $setup;
+
+            let key = [1; 32];
+            let key_id = Uuid::new_v4();
+            let user_id = Uuid::new_v4();
+
+            assert_eq!(None, backend.session_key(user_id, key_id).unwrap());
+
+            let mut backend_clone = backend.clone();
+
+            backend
+                .add_session_key(user_1, id_1, key_1.clone())
+                .unwrap();
+
+            assert_eq!(Some(key), backend.session_key(user_id, key_id).unwrap());
+            assert_eq!(
+                Some(key),
+                backend_clone.session_key(user_id, key_id).unwrap()
+            );
+
+            backend_clone.delete_session_key(user_id, key_id).unwrap();
+
+            assert_eq!(None, backend.session_key(user_id, key_id).unwrap());
+            assert_eq!(None, backend_clone.session_key(user_id, key_id).unwrap());
+        }
+
+        #[test]
         fn test_identity_keypair() {
             use ::sickgnal_core::e2e::keys::IdentityKeyPair;
 

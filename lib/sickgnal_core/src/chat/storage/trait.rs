@@ -1,13 +1,16 @@
+use std::sync::{Arc, Mutex};
+
 use super::model::*;
-use crate::chat::storage::Result;
+use crate::chat::storage::{Error, Result};
 use chrono::{DateTime, Utc};
+use thiserror::Error;
 use uuid::Uuid;
 
 /// Abstract storage backend trait
 ///
 /// This trait provides a high-level interface for persisting application data.
 /// It handles encryption/decryption transparently for sensitive fields.
-pub trait StorageBackend: Send + Sync {
+pub trait StorageBackend {
     /// Initialize the storage backend (create tables, etc.)
     fn initialize(&mut self) -> Result<()>;
 
@@ -93,4 +96,151 @@ pub trait StorageBackend: Send + Sync {
 
     /// Close the storage backend
     fn close(&mut self) -> Result<()>;
+}
+
+#[derive(Debug, Error)]
+#[error("storage backend mutex poisoned")]
+pub struct PoisonedE2EBackendError;
+
+impl<T: StorageBackend> StorageBackend for Arc<Mutex<T>> {
+    fn initialize(&mut self) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .initialize()
+    }
+
+    fn create_account(&mut self, account: &Account) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .create_account(account)
+    }
+
+    fn load_account(&self, username: String) -> Result<Option<Account>> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .load_account(username)
+    }
+
+    fn update_account(&mut self, account: &Account) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .update_account(account)
+    }
+
+    fn create_conversation(&mut self, conversation: &Conversation) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .create_conversation(conversation)
+    }
+
+    fn get_conversation(&self, id: Uuid) -> Result<Option<Conversation>> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .get_conversation(id)
+    }
+
+    fn get_conversations_by_peer(&self, peer_user_id: Uuid) -> Result<Vec<Conversation>> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .get_conversations_by_peer(peer_user_id)
+    }
+
+    fn list_conversations(&self) -> Result<Vec<Conversation>> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .list_conversations()
+    }
+
+    fn update_conversation(&mut self, conversation: &Conversation) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .update_conversation(conversation)
+    }
+
+    fn delete_conversation(&mut self, id: Uuid) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .delete_conversation(id)
+    }
+
+    fn delete_messages_for_conversation(&mut self, conversation_id: Uuid) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .delete_messages_for_conversation(conversation_id)
+    }
+
+    fn update_conversation_last_message(
+        &mut self,
+        id: Uuid,
+        timestamp: DateTime<Utc>,
+    ) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .update_conversation_last_message(id, timestamp)
+    }
+
+    fn update_conversation_unread_count(&mut self, id: Uuid, count: i32) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .update_conversation_unread_count(id, count)
+    }
+
+    fn mark_conversation_opened(&mut self, id: Uuid) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .mark_conversation_opened(id)
+    }
+
+    fn create_message(&mut self, message: &Message) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .create_message(message)
+    }
+
+    fn get_message(&self, id: Uuid) -> Result<Option<Message>> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .get_message(id)
+    }
+
+    fn get_message_by_local_id(&self, local_id: Uuid) -> Result<Option<Message>> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .get_message_by_local_id(local_id)
+    }
+
+    fn list_messages(
+        &self,
+        conversation_id: Uuid,
+        limit: Option<i32>,
+        offset: Option<i32>,
+    ) -> Result<Vec<Message>> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .list_messages(conversation_id, limit, offset)
+    }
+
+    fn update_message_status(&mut self, id: Uuid, status: MessageStatus) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .update_message_status(id, status)
+    }
+
+    fn update_message(&mut self, message: &Message) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .update_message(message)
+    }
+
+    fn delete_message(&mut self, id: Uuid) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .delete_message(id)
+    }
+
+    fn close(&mut self) -> Result<()> {
+        self.lock()
+            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .close()
+    }
 }
