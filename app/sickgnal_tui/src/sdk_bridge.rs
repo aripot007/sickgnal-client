@@ -55,13 +55,13 @@ impl SdkBridge {
             .map_err(|e| format!("{e}"))
     }
 
-    pub fn start_conversation(&self, username: String) -> Result<Conversation, String> {
+    pub fn start_conversation(&mut self, username: String) -> Result<Conversation, String> {
         self.0
             .start_conversation(username, None)
             .map_err(|e| format!("{e}"))
     }
 
-    pub fn delete_conversation(&self, conv_id: Uuid) -> Result<(), String> {
+    pub fn delete_conversation(&mut self, conv_id: Uuid) -> Result<(), String> {
         self.0
             .delete_conversation(conv_id)
             .map_err(|e| format!("{e}"))

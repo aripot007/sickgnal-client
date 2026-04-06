@@ -48,7 +48,7 @@ impl TestBridge {
     }
 
     pub fn start_conversation(
-        &self,
+        &mut self,
         username: String,
         initial_message: Option<String>,
     ) -> Result<Conversation, String> {
@@ -58,7 +58,7 @@ impl TestBridge {
     }
 
     /// Expose the inner SyncBridge for direct access in advanced tests.
-    pub fn inner(&self) -> &SyncBridge {
-        &self.0
+    pub fn inner(&mut self) -> &mut SyncBridge {
+        &mut self.0
     }
 }

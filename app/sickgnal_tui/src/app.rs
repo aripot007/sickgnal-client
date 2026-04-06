@@ -516,7 +516,7 @@ impl App {
             KeyCode::Char('d') => {
                 if !self.conversations.is_empty() {
                     let conv_id = self.conversations[self.selected_conversation].id;
-                    if let Some(ref sdk) = self.sdk {
+                    if let Some(ref mut sdk) = self.sdk {
                         let _ = sdk.delete_conversation(conv_id);
                     }
                     self.conversations.remove(self.selected_conversation);
@@ -552,7 +552,7 @@ impl App {
                     return;
                 }
 
-                if let Some(ref sdk) = self.sdk {
+                if let Some(ref mut sdk) = self.sdk {
                     match sdk.start_conversation(self.new_conversation_username.clone()) {
                         Ok(conv) => {
                             let conv_id = conv.id;
