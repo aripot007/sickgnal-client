@@ -38,7 +38,7 @@ pub struct PublicIdentityKeys {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct EphemeralSecretKey {
     pub id: Uuid,
-    pub(crate) secret: X25519Secret,
+    pub secret: X25519Secret,
 }
 
 // endregion: Struct definitions

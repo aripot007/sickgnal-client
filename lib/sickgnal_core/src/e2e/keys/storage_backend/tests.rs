@@ -43,24 +43,48 @@ macro_rules! test_e2e_storage_backend {
             let key_id = Uuid::new_v4();
             let user_id = Uuid::new_v4();
 
-            assert_eq!(None, backend.session_key(user_id, key_id).unwrap());
+            assert_eq!(
+                None,
+                backend
+                    .session_key(user_id, key_id)
+                    .expect("error getting session key")
+            );
 
             let mut backend_clone = backend.clone();
 
             backend
-                .add_session_key(user_1, id_1, key_1.clone())
-                .unwrap();
+                .add_session_key(user_id, key_id, key.clone())
+                .expect("error setting session key");
 
-            assert_eq!(Some(key), backend.session_key(user_id, key_id).unwrap());
             assert_eq!(
                 Some(key),
-                backend_clone.session_key(user_id, key_id).unwrap()
+                backend
+                    .session_key(user_id, key_id)
+                    .expect("error getting session key")
+            );
+            assert_eq!(
+                Some(key),
+                backend_clone
+                    .session_key(user_id, key_id)
+                    .expect("error getting session key")
             );
 
-            backend_clone.delete_session_key(user_id, key_id).unwrap();
+            backend_clone
+                .delete_session_key(user_id, key_id)
+                .expect("error deleting session key");
 
-            assert_eq!(None, backend.session_key(user_id, key_id).unwrap());
-            assert_eq!(None, backend_clone.session_key(user_id, key_id).unwrap());
+            assert_eq!(
+                None,
+                backend
+                    .session_key(user_id, key_id)
+                    .expect("error getting session key")
+            );
+            assert_eq!(
+                None,
+                backend_clone
+                    .session_key(user_id, key_id)
+                    .expect("error getting session key")
+            );
         }
 
         #[test]
@@ -70,19 +94,38 @@ macro_rules! test_e2e_storage_backend {
             let mut backend = $setup;
 
             assert!(backend.identity_keypair().is_err());
-            assert!(backend.identity_keypair_opt().unwrap().is_none());
+            assert!(
+                backend
+                    .identity_keypair_opt()
+                    .expect("error getting identity keypair")
+                    .is_none()
+            );
 
             let keypair: IdentityKeyPair = IdentityKeyPair::new_from_rng($rng);
 
-            backend.set_identity_keypair(keypair).unwrap();
+            backend
+                .set_identity_keypair(keypair)
+                .expect("error setting identity keypair");
 
             assert!(backend.identity_keypair().is_ok());
-            assert!(backend.identity_keypair_opt().unwrap().is_some());
+            assert!(
+                backend
+                    .identity_keypair_opt()
+                    .expect("error getting identity keypair")
+                    .is_some()
+            );
 
-            backend.clear_identity_keypair().unwrap();
+            backend
+                .clear_identity_keypair()
+                .expect("error clearing identity keypair");
 
             assert!(backend.identity_keypair().is_err());
-            assert!(backend.identity_keypair_opt().unwrap().is_none());
+            assert!(
+                backend
+                    .identity_keypair_opt()
+                    .expect("error getting identity keypair")
+                    .is_none()
+            );
         }
 
         #[test]
@@ -92,19 +135,38 @@ macro_rules! test_e2e_storage_backend {
             let mut backend = $setup;
 
             assert!(backend.midterm_key().is_err());
-            assert!(backend.midterm_key_opt().unwrap().is_none());
+            assert!(
+                backend
+                    .midterm_key_opt()
+                    .expect("error getting midterm key")
+                    .is_none()
+            );
 
             let key: X25519Secret = X25519Secret::random_from_rng($rng);
 
-            backend.set_midterm_key(key).unwrap();
+            backend
+                .set_midterm_key(key)
+                .expect("error setting midterm key");
 
             assert!(backend.midterm_key().is_ok());
-            assert!(backend.midterm_key_opt().unwrap().is_some());
+            assert!(
+                backend
+                    .midterm_key_opt()
+                    .expect("error getting midterm key")
+                    .is_some()
+            );
 
-            backend.clear_midterm_key().unwrap();
+            backend
+                .clear_midterm_key()
+                .expect("error clearing midterm key");
 
             assert!(backend.midterm_key().is_err());
-            assert!(backend.midterm_key_opt().unwrap().is_none());
+            assert!(
+                backend
+                    .midterm_key_opt()
+                    .expect("error getting midterm key")
+                    .is_none()
+            );
         }
 
         #[test]
@@ -113,21 +175,58 @@ macro_rules! test_e2e_storage_backend {
 
             let mut backend = $setup;
 
-            assert_eq!(0, backend.available_ephemeral_keys().unwrap().count());
+            assert_eq!(
+                0,
+                backend
+                    .available_ephemeral_keys()
+                    .expect("error getting available ephemeral keys")
+                    .len()
+            );
 
             let key = EphemeralSecretKey::new_from_rng($rng);
             let id = key.id;
 
-            backend.save_ephemeral_key(key.clone()).unwrap();
+            backend
+                .save_ephemeral_key(key.clone())
+                .expect("error saving ephemeral key");
 
-            assert_eq!(1, backend.available_ephemeral_keys().unwrap().count());
-            assert!(backend.ephemeral_key(&id).unwrap().is_some());
+            assert_eq!(
+                1,
+                backend
+                    .available_ephemeral_keys()
+                    .expect("error getting available ephemeral keys")
+                    .len()
+            );
+            assert!(
+                backend
+                    .ephemeral_key(&id)
+                    .expect("error getting ephemeral key")
+                    .is_some()
+            );
 
-            backend.delete_ephemeral_key(id).unwrap();
+            backend
+                .delete_ephemeral_key(id)
+                .expect("error deleting ephemeral key");
 
-            assert_eq!(0, backend.available_ephemeral_keys().unwrap().count());
-            assert!(backend.ephemeral_key(&id).unwrap().is_none());
-            assert!(backend.pop_ephemeral_key(&id).unwrap().is_none());
+            assert_eq!(
+                0,
+                backend
+                    .available_ephemeral_keys()
+                    .expect("error getting available ephemeral keys")
+                    .len()
+            );
+            assert!(
+                backend
+                    .ephemeral_key(&id)
+                    .expect("error getting ephemeral key")
+                    .is_none()
+            );
+            assert!(
+                backend
+                    .pop_ephemeral_key(&id)
+                    .expect("error popping ephemeral key")
+                    .is_none()
+            );
         }
 
         #[test]
@@ -136,16 +235,34 @@ macro_rules! test_e2e_storage_backend {
 
             let mut backend = $setup;
 
-            assert_eq!(0, backend.available_ephemeral_keys().unwrap().count());
+            assert_eq!(
+                0,
+                backend
+                    .available_ephemeral_keys()
+                    .expect("error getting available ephemeral keys")
+                    .len()
+            );
 
             let key = EphemeralSecretKey::new_from_rng($rng);
             let id = key.id;
 
-            backend.save_ephemeral_key(key.clone()).unwrap();
+            backend
+                .save_ephemeral_key(key.clone())
+                .expect("error saving ephemeral key");
 
-            assert!(backend.pop_ephemeral_key(&id).unwrap().is_some());
+            assert!(
+                backend
+                    .pop_ephemeral_key(&id)
+                    .expect("error popping ephemeral key")
+                    .is_some()
+            );
 
-            assert!(backend.pop_ephemeral_key(&id).unwrap().is_none());
+            assert!(
+                backend
+                    .pop_ephemeral_key(&id)
+                    .expect("error popping ephemeral key")
+                    .is_none()
+            );
         }
 
         #[test]
@@ -154,7 +271,13 @@ macro_rules! test_e2e_storage_backend {
 
             let mut backend = $setup;
 
-            assert_eq!(0, backend.available_ephemeral_keys().unwrap().count());
+            assert_eq!(
+                0,
+                backend
+                    .available_ephemeral_keys()
+                    .expect("error getting available ephemeral keys")
+                    .len()
+            );
 
             let keys = [
                 EphemeralSecretKey::new_from_rng($rng),
@@ -164,29 +287,72 @@ macro_rules! test_e2e_storage_backend {
 
             backend
                 .save_many_ephemeral_keys(keys.clone().into_iter())
-                .unwrap();
+                .expect("error saving many ephemeral keys");
 
-            assert_eq!(3, backend.available_ephemeral_keys().unwrap().count());
+            assert_eq!(
+                3,
+                backend
+                    .available_ephemeral_keys()
+                    .expect("error getting available ephemeral keys")
+                    .len()
+            );
 
-            assert!(backend.ephemeral_key(&keys[0].id).unwrap().is_some());
-            assert!(backend.ephemeral_key(&keys[1].id).unwrap().is_some());
-            assert!(backend.ephemeral_key(&keys[2].id).unwrap().is_some());
+            assert!(
+                backend
+                    .ephemeral_key(&keys[0].id)
+                    .expect("error getting ephemeral key")
+                    .is_some()
+            );
+            assert!(
+                backend
+                    .ephemeral_key(&keys[1].id)
+                    .expect("error getting ephemeral key")
+                    .is_some()
+            );
+            assert!(
+                backend
+                    .ephemeral_key(&keys[2].id)
+                    .expect("error getting ephemeral key")
+                    .is_some()
+            );
 
             let ids = keys.iter().map(|k| k.id);
-            backend.delete_many_ephemeral_key(ids).unwrap();
+            backend
+                .delete_many_ephemeral_key(ids)
+                .expect("error deleting many ephemeral keys");
 
-            assert_eq!(0, backend.available_ephemeral_keys().unwrap().count());
+            assert_eq!(
+                0,
+                backend
+                    .available_ephemeral_keys()
+                    .expect("error getting available ephemeral keys")
+                    .len()
+            );
 
             // test clearing
             backend
                 .save_many_ephemeral_keys(keys.clone().into_iter())
-                .unwrap();
+                .expect("error saving many ephemeral keys");
 
-            assert_eq!(3, backend.available_ephemeral_keys().unwrap().count());
+            assert_eq!(
+                3,
+                backend
+                    .available_ephemeral_keys()
+                    .expect("error getting available ephemeral keys")
+                    .len()
+            );
 
-            backend.clear_ephemeral_keys().unwrap();
+            backend
+                .clear_ephemeral_keys()
+                .expect("error clearing ephemeral keys");
 
-            assert_eq!(0, backend.available_ephemeral_keys().unwrap().count());
+            assert_eq!(
+                0,
+                backend
+                    .available_ephemeral_keys()
+                    .expect("error getting available ephemeral keys")
+                    .len()
+            );
         }
 
         #[test]
@@ -196,7 +362,13 @@ macro_rules! test_e2e_storage_backend {
 
             let mut backend = $setup;
 
-            assert_eq!(0, backend.available_ephemeral_keys().unwrap().count());
+            assert_eq!(
+                0,
+                backend
+                    .available_ephemeral_keys()
+                    .expect("error getting available ephemeral keys")
+                    .len()
+            );
 
             let mut key_1: SymetricKey = [0; 32];
             $rng.fill_bytes(&mut key_1);
@@ -216,73 +388,98 @@ macro_rules! test_e2e_storage_backend {
 
             backend
                 .add_session_key(user_1, id_1, key_1.clone())
-                .unwrap();
+                .expect("error saving session key");
             backend
                 .add_session_key(user_1, id_2, key_2.clone())
-                .unwrap();
+                .expect("error saving session key");
             backend
                 .add_session_key(user_1, id_3, key_3.clone())
-                .unwrap();
+                .expect("error saving session key");
             backend
                 .add_session_key(user_2, id_3, key_3.clone())
-                .unwrap();
+                .expect("error saving session key");
 
-            assert_eq!(Some(key_1), backend.session_key(user_1, id_1).unwrap());
-            assert_eq!(Some(key_2), backend.session_key(user_1, id_2).unwrap());
-            assert_eq!(Some(key_3), backend.session_key(user_1, id_3).unwrap());
-            assert_eq!(Some(key_3), backend.session_key(user_2, id_3).unwrap());
-
-            backend.delete_session_key(user_2, id_3).unwrap();
-
-            assert_eq!(None, backend.session_key(user_2, id_3).unwrap());
-            assert_eq!(Some(key_3), backend.session_key(user_1, id_3).unwrap());
-
-            backend.cleanup_session_keys(&user_1, &id_1, &id_2).unwrap();
-
-            assert_eq!(Some(key_1), backend.session_key(user_1, id_1).unwrap());
-            assert_eq!(Some(key_2), backend.session_key(user_1, id_2).unwrap());
-            assert_eq!(None, backend.session_key(user_1, id_3).unwrap());
-
-            backend.clear_session_keys().unwrap();
-
-            assert_eq!(None, backend.session_key(user_1, id_1).unwrap());
-            assert_eq!(None, backend.session_key(user_1, id_2).unwrap());
-        }
-
-        #[test]
-        fn test_public_keys() {
-            use ::sickgnal_core::e2e::keys::IdentityKeyPair;
-
-            let mut backend = $setup;
-
-            let keypair = IdentityKeyPair::new_from_rng($rng);
-            let user_id = Uuid::new_v4();
-
-            let public_keypair = keypair.public_keys();
-
-            assert!(backend.user_public_keys(&user_id).unwrap().is_none());
+            assert_eq!(
+                Some(key_1),
+                backend
+                    .session_key(user_1, id_1)
+                    .expect("error getting session key")
+            );
+            assert_eq!(
+                Some(key_2),
+                backend
+                    .session_key(user_1, id_2)
+                    .expect("error getting session key")
+            );
+            assert_eq!(
+                Some(key_3),
+                backend
+                    .session_key(user_1, id_3)
+                    .expect("error getting session key")
+            );
+            assert_eq!(
+                Some(key_3),
+                backend
+                    .session_key(user_2, id_3)
+                    .expect("error getting session key")
+            );
 
             backend
-                .set_user_public_keys(user_id, public_keypair.clone())
-                .unwrap();
+                .delete_session_key(user_2, id_3)
+                .expect("error deleting session key");
 
-            assert!(backend.user_public_keys(&user_id).unwrap().is_some());
-
-            let pks = backend.user_public_keys(&user_id).unwrap().unwrap();
-
-            assert_eq!(public_keypair.ed25519, pks.ed25519);
-            assert_eq!(public_keypair.x25519, pks.x25519);
-
-            backend.delete_user_public_keys(&user_id).unwrap();
-
-            assert!(backend.user_public_keys(&user_id).unwrap().is_none());
+            assert_eq!(
+                None,
+                backend
+                    .session_key(user_2, id_3)
+                    .expect("error saving session key")
+            );
+            assert_eq!(
+                Some(key_3),
+                backend
+                    .session_key(user_1, id_3)
+                    .expect("error getting session key")
+            );
 
             backend
-                .set_user_public_keys(user_id, public_keypair.clone())
-                .unwrap();
-            backend.delete_user_public_keys(&user_id).unwrap();
+                .cleanup_session_keys(&user_1, &id_1, &id_2)
+                .expect("error cleaning up session keys");
 
-            assert!(backend.user_public_keys(&user_id).unwrap().is_none());
+            assert_eq!(
+                Some(key_1),
+                backend
+                    .session_key(user_1, id_1)
+                    .expect("error getting session key")
+            );
+            assert_eq!(
+                Some(key_2),
+                backend
+                    .session_key(user_1, id_2)
+                    .expect("error getting session key")
+            );
+            assert_eq!(
+                None,
+                backend
+                    .session_key(user_1, id_3)
+                    .expect("error getting session key")
+            );
+
+            backend
+                .clear_session_keys()
+                .expect("error clearing session keys");
+
+            assert_eq!(
+                None,
+                backend
+                    .session_key(user_1, id_1)
+                    .expect("error getting session key")
+            );
+            assert_eq!(
+                None,
+                backend
+                    .session_key(user_1, id_2)
+                    .expect("error getting session key")
+            );
         }
 
         #[test]
@@ -304,22 +501,40 @@ macro_rules! test_e2e_storage_backend {
                 receiving_key,
             };
 
-            assert!(backend.load_all_sessions().unwrap().is_empty());
+            assert!(
+                backend
+                    .load_all_sessions()
+                    .expect("error loading all sessions")
+                    .is_empty()
+            );
 
-            backend.save_session(&sess).unwrap();
+            backend.save_session(&sess).expect("error saving session");
 
-            assert_eq!(1, backend.load_all_sessions().unwrap().len());
+            assert_eq!(
+                1,
+                backend
+                    .load_all_sessions()
+                    .expect("error loading all sessions")
+                    .len()
+            );
 
             assert_eq!(
                 Some(sending_key),
-                backend.session_key(user_id, sess.sending_key_id).unwrap()
+                backend
+                    .session_key(user_id, sess.sending_key_id)
+                    .expect("error getting session key")
             );
             assert_eq!(
                 Some(receiving_key),
-                backend.session_key(user_id, sess.receiving_key_id).unwrap()
+                backend
+                    .session_key(user_id, sess.receiving_key_id)
+                    .expect("error getting session key")
             );
 
-            let stored_sess = backend.load_session(&user_id).unwrap().unwrap();
+            let stored_sess = backend
+                .load_session(&user_id)
+                .expect("error loading session")
+                .expect("the session was not stored");
 
             assert_eq!(stored_sess.correspondant_id, sess.correspondant_id);
             assert_eq!(stored_sess.sending_key_id, sess.sending_key_id);
@@ -328,41 +543,22 @@ macro_rules! test_e2e_storage_backend {
             assert_eq!(stored_sess.receiving_key_id, sess.receiving_key_id);
             assert_eq!(stored_sess.receiving_key, sess.receiving_key);
 
-            backend.delete_session(&user_id).unwrap();
+            backend
+                .delete_session(&user_id)
+                .expect("error deleting session");
 
-            assert!(backend.load_session(&user_id).unwrap().is_none());
-            assert!(backend.load_all_sessions().unwrap().is_empty());
-        }
-
-        #[test]
-        fn test_batch_sessions() {
-            use ::sickgnal_core::e2e::client::session::E2ESession;
-
-            let mut backend = $setup;
-
-            let sess_1 = E2ESession {
-                correspondant_id: Uuid::new_v4(),
-                sending_key_id: Uuid::new_v4(),
-                sending_key: [1; 32],
-                key_msg_count: 42,
-                receiving_key_id: Uuid::new_v4(),
-                receiving_key: [2; 32],
-            };
-
-            let sess_2 = E2ESession {
-                correspondant_id: Uuid::new_v4(),
-                sending_key_id: Uuid::new_v4(),
-                sending_key: [3; 32],
-                key_msg_count: 69,
-                receiving_key_id: Uuid::new_v4(),
-                receiving_key: [4; 32],
-            };
-
-            assert!(backend.load_all_sessions().unwrap().is_empty());
-
-            backend.save_many_sessions(&[&sess_1, &sess_2]).unwrap();
-
-            assert_eq!(2, backend.load_all_sessions().unwrap().len());
+            assert!(
+                backend
+                    .load_session(&user_id)
+                    .expect("error loading session")
+                    .is_none()
+            );
+            assert!(
+                backend
+                    .load_all_sessions()
+                    .expect("error loading all sessions")
+                    .is_empty()
+            );
         }
     };
 }

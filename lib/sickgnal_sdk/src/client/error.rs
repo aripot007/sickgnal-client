@@ -13,9 +13,18 @@ pub enum Error {
     #[error("E2E error: {0}")]
     E2E(#[from] sickgnal_core::e2e::client::Error),
 
+    // FIXME: groupe storage errors
     /// Error originating from the SDK storage layer (config, SQLite setup)
     #[error("Storage error: {0}")]
-    Storage(#[from] sickgnal_core::chat::storage::Error),
+    Storage(#[from] crate::storage::Error),
+
+    /// Error originating from the SDK storage layer (config, SQLite setup)
+    #[error("Chat Storage error: {0}")]
+    ChatStorage(#[from] sickgnal_core::chat::storage::Error),
+
+    /// Error originating from the SDK storage layer (config, SQLite setup)
+    #[error("E2E Storage error: {0}")]
+    E2EStorage(#[from] sickgnal_core::e2e::keys::KeyStorageError),
 
     /// Low-level I/O error (e.g. TCP connection)
     #[error("IO error: {0}")]

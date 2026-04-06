@@ -6,8 +6,8 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::e2e::{
-    client::session::E2ESession,
-    keys::{EphemeralSecretKey, IdentityKeyPair, PublicIdentityKeys, SymetricKey, X25519Secret},
+    client::{Account, session::E2ESession},
+    keys::{EphemeralSecretKey, IdentityKeyPair, SymetricKey, X25519Secret},
 };
 
 /// A trait for anything that can store keys
@@ -15,6 +15,17 @@ use crate::e2e::{
 /// This should be a handle that can be cloned and still point
 /// to the same data, ie both cloned handles will still be synchronized.
 pub trait E2EStorageBackend {
+    // Account
+
+    /// Load the account
+    fn load_account(&self) -> Result<Option<Account>>;
+
+    /// Update account information
+    fn set_account(&mut self, account: &Account) -> Result<()>;
+
+    /// Update the account token
+    fn set_account_token(&mut self, token: String) -> Result<()>;
+
     // Identity and mid-term keys
 
     /// Get the identity keypair
@@ -75,16 +86,12 @@ pub trait E2EStorageBackend {
     /// Delete all session keys
     fn clear_session_keys(&mut self) -> Result<()>;
 
-    /// Delete all user public keys
-    fn clear_user_public_keys(&mut self) -> Result<()>;
-
     /// Delete all stored keys
     fn clear(&mut self) -> Result<()> {
         self.clear_identity_keypair()?;
         self.clear_midterm_key()?;
         self.clear_ephemeral_keys()?;
         self.clear_session_keys()?;
-        self.clear_user_public_keys()?;
         Ok(())
     }
 
@@ -106,16 +113,6 @@ pub trait E2EStorageBackend {
         current_receiving_key: &Uuid,
     ) -> Result<()>;
 
-    // Public user keys
-    /// Get the public key of a user
-    fn user_public_keys(&self, user_id: &Uuid) -> Result<Option<PublicIdentityKeys>>;
-
-    /// Set the public key of a user
-    fn set_user_public_keys(&mut self, user_id: Uuid, keys: PublicIdentityKeys) -> Result<()>;
-
-    /// Delete the public key of a user
-    fn delete_user_public_keys(&mut self, user_id: &Uuid) -> Result<()>;
-
     // Session management
 
     /// Load the session with the given user
@@ -130,18 +127,6 @@ pub trait E2EStorageBackend {
     ///
     /// Saves the session keys if needed
     fn save_session(&mut self, session: &E2ESession) -> Result<()>;
-
-    /// Save multiple sessions
-    ///
-    /// Default implementation loops over sessions calling [`Self::save_session`], but this
-    /// can be overriden when bulk-saving optimizations are available
-    fn save_many_sessions(&mut self, sessions: &[&E2ESession]) -> Result<()> {
-        for s in sessions {
-            self.save_session(s)?;
-        }
-
-        Ok(())
-    }
 
     /// Delete a session from the storage
     fn delete_session(&mut self, user_id: &Uuid) -> Result<()>;
@@ -174,6 +159,24 @@ pub type Result<T> = std::result::Result<T, KeyStorageError>;
 pub struct PoisonedE2EBackendError;
 
 impl<T: E2EStorageBackend> E2EStorageBackend for Arc<Mutex<T>> {
+    fn load_account(&self) -> Result<Option<Account>> {
+        self.lock()
+            .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
+            .load_account()
+    }
+
+    fn set_account(&mut self, account: &Account) -> Result<()> {
+        self.lock()
+            .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
+            .set_account(account)
+    }
+
+    fn set_account_token(&mut self, token: String) -> Result<()> {
+        self.lock()
+            .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
+            .set_account_token(token)
+    }
+
     fn identity_keypair(&self) -> Result<IdentityKeyPair> {
         self.lock()
             .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
@@ -279,12 +282,6 @@ impl<T: E2EStorageBackend> E2EStorageBackend for Arc<Mutex<T>> {
             .clear_session_keys()
     }
 
-    fn clear_user_public_keys(&mut self) -> Result<()> {
-        self.lock()
-            .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
-            .clear_user_public_keys()
-    }
-
     fn session_key(&self, user: Uuid, key_id: Uuid) -> Result<Option<SymetricKey>> {
         self.lock()
             .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
@@ -312,24 +309,6 @@ impl<T: E2EStorageBackend> E2EStorageBackend for Arc<Mutex<T>> {
         self.lock()
             .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
             .cleanup_session_keys(user, current_sending_key, current_receiving_key)
-    }
-
-    fn user_public_keys(&self, user_id: &Uuid) -> Result<Option<PublicIdentityKeys>> {
-        self.lock()
-            .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
-            .user_public_keys(user_id)
-    }
-
-    fn set_user_public_keys(&mut self, user_id: Uuid, keys: PublicIdentityKeys) -> Result<()> {
-        self.lock()
-            .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
-            .set_user_public_keys(user_id, keys)
-    }
-
-    fn delete_user_public_keys(&mut self, user_id: &Uuid) -> Result<()> {
-        self.lock()
-            .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
-            .delete_user_public_keys(user_id)
     }
 
     fn load_session(&mut self, user_id: &Uuid) -> Result<Option<E2ESession>> {

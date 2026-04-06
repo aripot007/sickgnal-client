@@ -94,8 +94,8 @@ impl Sdk {
         let sync_event_rx = sdk_client.event_rx;
 
         // Clone storage for different owners
-        let storage = Arc::new(Mutex::new(sdk_client.chatclient.storage.clone()));
-        let storage_for_forwarder = Arc::new(Mutex::new(sdk_client.chatclient.storage.clone()));
+        let storage = sdk_client.chatclient.storage.clone();
+        let storage_for_forwarder = sdk_client.chatclient.storage.clone();
 
         // Sync queued messages and start async workers
         let (client_handle, chat_msg_rx, recv_task, send_task) =
@@ -177,8 +177,7 @@ impl Sdk {
 
     /// List all conversations, ordered by last message time.
     pub fn list_conversations(&self) -> Result<Vec<Conversation>> {
-        let storage = self.storage.lock().unwrap();
-        Ok(storage.list_conversations()?)
+        Ok(self.storage.list_conversations()?)
     }
 
     /// Start a new conversation with a user by username.
@@ -191,7 +190,7 @@ impl Sdk {
     /// conversation is created locally and the first `send_message` call will
     /// send the `OpenConv` automatically.
     pub async fn start_conversation(
-        &self,
+        &mut self,
         username: String,
         initial_message: Option<String>,
     ) -> Result<Conversation> {
@@ -199,13 +198,9 @@ impl Sdk {
 
         // Check if a direct conversation with this peer already exists.
         // Once groups are supported, there may be multiple conversations
-        // with the same peer. For now, return the first match (1-to-1).
-        {
-            let storage = self.storage.lock().unwrap();
-            let existing = storage.get_conversations_by_peer(profile.id)?;
-            if let Some(conv) = existing.into_iter().next() {
-                return Ok(conv);
-            }
+        let existing = self.storage.get_conversations_by_peer(profile.id)?;
+        if let Some(conv) = existing.into_iter().next() {
+            return Ok(conv);
         }
 
         let conv = Conversation {
@@ -217,10 +212,7 @@ impl Sdk {
             opened: initial_message.is_some(),
         };
 
-        {
-            let mut storage = self.storage.lock().unwrap();
-            storage.create_conversation(&conv)?;
-        }
+        self.storage.create_conversation(&conv)?;
 
         // If an initial message is provided, send OpenConv immediately
         if let Some(text) = initial_message {
@@ -237,17 +229,16 @@ impl Sdk {
     }
 
     /// Delete a conversation and all its messages.
-    pub fn delete_conversation(&self, conversation_id: Uuid) -> Result<()> {
-        let mut storage = self.storage.lock().unwrap();
-        storage.delete_messages_for_conversation(conversation_id)?;
-        storage.delete_conversation(conversation_id)?;
+    pub fn delete_conversation(&mut self, conversation_id: Uuid) -> Result<()> {
+        self.storage
+            .delete_messages_for_conversation(conversation_id)?;
+        self.storage.delete_conversation(conversation_id)?;
         Ok(())
     }
 
     /// Get a single conversation by ID.
     pub fn get_conversation(&self, conversation_id: Uuid) -> Result<Option<Conversation>> {
-        let storage = self.storage.lock().unwrap();
-        Ok(storage.get_conversation(conversation_id)?)
+        Ok(self.storage.get_conversation(conversation_id)?)
     }
 
     /// Mark all messages in a conversation as read and reset unread count.
@@ -261,8 +252,7 @@ impl Sdk {
 
     /// Get messages for a conversation, with optional pagination.
     pub fn get_messages(&self, conversation_id: Uuid) -> Result<Vec<Message>> {
-        let storage = self.storage.lock().unwrap();
-        Ok(storage.list_messages(conversation_id, None, None)?)
+        Ok(self.storage.list_messages(conversation_id, None, None)?)
     }
 
     /// Get messages for a conversation with pagination.
@@ -272,8 +262,9 @@ impl Sdk {
         limit: i32,
         offset: i32,
     ) -> Result<Vec<Message>> {
-        let storage = self.storage.lock().unwrap();
-        Ok(storage.list_messages(conversation_id, Some(limit), Some(offset))?)
+        Ok(self
+            .storage
+            .list_messages(conversation_id, Some(limit), Some(offset))?)
     }
 
     /// Send a text message to a conversation.

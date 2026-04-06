@@ -14,17 +14,6 @@ pub trait StorageBackend {
     /// Initialize the storage backend (create tables, etc.)
     fn initialize(&mut self) -> Result<()>;
 
-    // ========== Account Operations ==========
-
-    /// Create a new account
-    fn create_account(&mut self, account: &Account) -> Result<()>;
-
-    /// Load the account (there should only be one)
-    fn load_account(&self, username: String) -> Result<Option<Account>>;
-
-    /// Update account information
-    fn update_account(&mut self, account: &Account) -> Result<()>;
-
     // ========== Conversation Operations ==========
 
     /// Create a new conversation
@@ -107,24 +96,6 @@ impl<T: StorageBackend> StorageBackend for Arc<Mutex<T>> {
         self.lock()
             .map_err(|_| Error::new(PoisonedE2EBackendError))?
             .initialize()
-    }
-
-    fn create_account(&mut self, account: &Account) -> Result<()> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .create_account(account)
-    }
-
-    fn load_account(&self, username: String) -> Result<Option<Account>> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .load_account(username)
-    }
-
-    fn update_account(&mut self, account: &Account) -> Result<()> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .update_account(account)
     }
 
     fn create_conversation(&mut self, conversation: &Conversation) -> Result<()> {

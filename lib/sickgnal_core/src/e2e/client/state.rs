@@ -480,8 +480,7 @@ where
         let payload = PayloadMessage::try_from_bytes(&bytes)?;
 
         // Save the keys and session information
-        self.storage
-            .set_user_public_keys(sender_id, kex_data.identity_key.clone())?;
+        // TODO: Save the peer's public key
 
         // Key ids are inverted since they're from the sender's POV
         self.storage

@@ -1,35 +1,37 @@
-use super::Error;
+use super::{Error, Result};
 use crate::storage::Config;
 use crate::storage::schema;
+use crate::storage::store::account::AccountStore;
+use crate::storage::store::ephemeral_keys::EphemeralKeyStore;
+use crate::storage::store::session::SessionStore;
+use crate::storage::store::session_keys::SessionKeyStore;
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, OptionalExtension, params};
-use sickgnal_core::chat::storage::*;
+use rusqlite::Connection;
+use sickgnal_core::chat::storage::Conversation;
+use sickgnal_core::chat::storage::Message;
+use sickgnal_core::chat::storage::MessageStatus;
+use sickgnal_core::chat::storage::Result as S_Result;
+use sickgnal_core::chat::storage::StorageBackend;
+use sickgnal_core::e2e::client::Account;
 use sickgnal_core::e2e::keys::Result as K_Result;
 use sickgnal_core::e2e::{
     client::session::E2ESession,
     keys::{
-        E2EStorageBackend, EphemeralSecretKey, IdentityKeyPair, KeyStorageError,
-        PublicIdentityKeys, SymetricKey, X25519Secret,
+        E2EStorageBackend, EphemeralSecretKey, IdentityKeyPair, KeyStorageError, SymetricKey,
+        X25519Secret,
     },
 };
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 /// SQLite implementation of the StorageBackend trait
 ///
 /// This implementation uses rusqlite for SQLite access and Pragma
 /// for encrypting the all database.
-#[derive(Clone)]
 pub struct Sqlite {
-    conn: Arc<Mutex<Connection>>,
-    /// In-memory cache for keys that must return references (trait requirement)
-    identity_keypair_cache: Option<IdentityKeyPair>,
-    midterm_key_cache: Option<X25519Secret>,
-    user_public_keys_cache: HashMap<Uuid, PublicIdentityKeys>,
-    session_keys_cache: HashMap<(Uuid, Uuid), SymetricKey>,
-    ephemeral_keys_cache: HashMap<Uuid, X25519Secret>,
+    conn: Connection,
 }
+
+const DATABASE_FILE_NAME: &str = "db.sqlite";
 
 impl Sqlite {
     /// Create a new SqliteStorage instance
@@ -41,36 +43,31 @@ impl Sqlite {
     /// A new SqliteStorage instance, ready to be initialized
 
     pub fn new(mut config: Config) -> Result<Self> {
-        std::fs::create_dir_all(&config.db_dir).map_err(Error::from)?;
+        #[cfg(test)]
+        if let Some(conn_f) = config.test_conn {
+            return Self::init_connection(conn_f()?, config.encryption_key);
+        }
 
-        config.db_dir.push("db.sqlite");
+        std::fs::create_dir_all(&config.db_dir)?;
+        config.db_dir.push(DATABASE_FILE_NAME);
+        let conn = Connection::open(&config.db_dir)?;
 
-        let conn = Connection::open(&config.db_dir).map_err(|e| Error::Database(e.to_string()))?;
+        Self::init_connection(conn, config.encryption_key)
+    }
 
+    fn init_connection(conn: Connection, encryption_key: Vec<u8>) -> Result<Self> {
         // Set encryption key using SQLCipher's PRAGMA
-        let key_hex = hex::encode(&config.encryption_key);
-        conn.pragma_update(None, "key", &format!("\"x'{}'\"", key_hex))
-            .map_err(|e| Error::Encryption(format!("Failed to set encryption key: {}", e)))?;
+        let key_hex = hex::encode(&encryption_key);
+        conn.pragma_update(None, "key", &format!("\"x'{}'\"", key_hex))?;
 
         // Verify the key is correct by attempting a simple query
-        conn.execute_batch("SELECT count(*) FROM sqlite_master")
-            .map_err(|_| Error::Encryption("Invalid encryption key".to_string()))?;
+        conn.query_one("SELECT count(*) FROM sqlite_master", (), |_| Ok(()))
+            .map_err(|err| {
+                println!("Error selecting count : {}", err);
+                Error::InvalidEncryptionKey
+            })?;
 
-        // Try to load keys from DB into cache (silently ignore errors if tables don't exist yet)
-        let identity_keypair_cache = Self::load_identity_keypair_from_db(&conn);
-        let midterm_key_cache = Self::load_midterm_key_from_db(&conn);
-        let user_public_keys_cache = Self::load_user_public_keys_from_db(&conn);
-        let session_keys_cache = Self::load_session_keys_from_db(&conn);
-        let ephemeral_keys_cache = Self::load_ephemeral_keys_from_db(&conn);
-
-        Ok(Self {
-            conn: Arc::new(Mutex::new(conn)),
-            identity_keypair_cache,
-            midterm_key_cache,
-            user_public_keys_cache,
-            session_keys_cache,
-            ephemeral_keys_cache,
-        })
+        Ok(Self { conn })
     }
 
     /// Convert MessageStatus to string for database storage
@@ -160,22 +157,11 @@ impl Sqlite {
             local_id: Self::parse_opt_uuid(local_id)?,
         })
     }
-
-    /// Upsert a key into the `keys` table.
-    fn upsert_key(conn: &Connection, key_id: &str, key_type: &str, data: &[u8]) -> K_Result<()> {
-        conn.execute(
-            "INSERT INTO keys (key_id, key_type, key_data, created_at)
-             VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(key_id) DO UPDATE SET key_data = excluded.key_data",
-            params![key_id, key_type, data, Utc::now().to_rfc3339()],
-        )
-        .map_err(Self::db_error)?;
-        Ok(())
-    }
 }
 
+#[cfg(false)]
 impl StorageBackend for Sqlite {
-    fn initialize(&mut self) -> Result<()> {
+    fn initialize(&mut self) -> S_Result<()> {
         {
             let conn = self.conn.lock().unwrap();
             for sql in schema::get_initialization_sql() {
@@ -185,103 +171,11 @@ impl StorageBackend for Sqlite {
         }
         // Reload key cache now that tables are guaranteed to exist
         let conn = self.conn.lock().unwrap();
-        self.identity_keypair_cache = Self::load_identity_keypair_from_db(&conn);
-        self.midterm_key_cache = Self::load_midterm_key_from_db(&conn);
-        self.user_public_keys_cache = Self::load_user_public_keys_from_db(&conn);
-        self.session_keys_cache = Self::load_session_keys_from_db(&conn);
-        self.ephemeral_keys_cache = Self::load_ephemeral_keys_from_db(&conn);
-        Ok(())
-    }
-
-    // ========== Account Operations ==========
-
-    fn create_account(&mut self, account: &Account) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-
-        conn.execute(
-            "INSERT INTO accounts (user_id, username, auth_token, created_at)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![
-                account.user_id.to_string(),
-                account.username,
-                account.auth_token,
-                account.created_at.to_rfc3339(),
-            ],
-        )
-        .map_err(|e| Error::Database(e.to_string()))?;
-
-        Ok(())
-    }
-
-    fn load_account(&self, username: String) -> Result<Option<Account>> {
-        let conn = self.conn.lock().unwrap();
-
-        // 1. Prepare the statement without a LIMIT
-        let mut stmt = conn
-            .prepare("SELECT user_id, username, auth_token, created_at FROM accounts WHERE username = ?1")
-            .map_err(|e| Error::Database(e.to_string()))?;
-
-        // 2. Map the rows into a vector
-        let mut rows = stmt
-            .query_map([&username], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                ))
-            })
-            .map_err(|e| Error::Database(e.to_string()))?;
-
-        // 3. Extract the first result and check for duplicates
-        let first_row = rows.next();
-
-        // If there is a second row in the iterator, we have a problem
-        if rows.next().is_some() {
-            return Err(sickgnal_core::chat::storage::Error::from(
-                Error::InvalidData(format!(
-                    "Multiple accounts found for username: {}",
-                    username
-                )),
-            ));
-        }
-
-        // 4. Process the single result (if it exists)
-        match first_row {
-            Some(Ok((user_id, username, auth_token, created_at))) => {
-                let user_id = Uuid::parse_str(&user_id)
-                    .map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)))?;
-                let created_at = DateTime::parse_from_rfc3339(&created_at)
-                    .map_err(|e| Error::InvalidData(format!("Invalid timestamp: {}", e)))?
-                    .with_timezone(&Utc);
-
-                Ok(Some(Account {
-                    user_id,
-                    username,
-                    auth_token,
-                    created_at,
-                }))
-            }
-            Some(Err(e)) => Err(sickgnal_core::chat::storage::Error::from(Error::Database(
-                e.to_string(),
-            ))),
-            None => Ok(None),
-        }
-    }
-
-    fn update_account(&mut self, account: &Account) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-
-        conn.execute(
-            "UPDATE accounts SET username = ?1, auth_token = ?2 WHERE user_id = ?3",
-            params![
-                account.username,
-                account.auth_token,
-                account.user_id.to_string(),
-            ],
-        )
-        .map_err(|e| Error::Database(e.to_string()))?;
-
+        // self.identity_keypair_cache = Self::load_identity_keypair_from_db(&conn);
+        // self.midterm_key_cache = Self::load_midterm_key_from_db(&conn);
+        // self.user_public_keys_cache = Self::load_user_public_keys_from_db(&conn);
+        // self.session_keys_cache = Self::load_session_keys_from_db(&conn);
+        // self.ephemeral_keys_cache = Self::load_ephemeral_keys_from_db(&conn);
         Ok(())
     }
 
@@ -641,330 +535,268 @@ impl StorageBackend for Sqlite {
     }
 }
 
-impl Sqlite {
-    fn load_identity_keypair_from_db(conn: &Connection) -> Option<IdentityKeyPair> {
-        let result: Option<Vec<u8>> = conn
-            .query_row(
-                "SELECT key_data FROM keys WHERE key_id = 'identity'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()
-            .ok()
-            .flatten();
-        result.and_then(|data| bincode::deserialize(&data).ok())
-    }
-
-    fn load_midterm_key_from_db(conn: &Connection) -> Option<X25519Secret> {
-        let result: Option<Vec<u8>> = conn
-            .query_row(
-                "SELECT key_data FROM keys WHERE key_id = 'midterm'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()
-            .ok()
-            .flatten();
-        result.and_then(|data| {
-            let arr: [u8; 32] = data.try_into().ok()?;
-            Some(X25519Secret::from(arr))
-        })
-    }
-
-    fn load_user_public_keys_from_db(conn: &Connection) -> HashMap<Uuid, PublicIdentityKeys> {
-        let mut map = HashMap::new();
-        let mut stmt = match conn
-            .prepare("SELECT key_id, key_data FROM keys WHERE key_type = 'user_public_keys'")
-        {
-            Ok(s) => s,
-            Err(_) => return map,
-        };
-        let rows = match stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
-        }) {
-            Ok(r) => r,
-            Err(_) => return map,
-        };
-        for row in rows.flatten() {
-            let (key_id, data) = row;
-            if let (Ok(uuid), Ok(keys)) = (
-                Uuid::parse_str(&key_id),
-                bincode::deserialize::<PublicIdentityKeys>(&data),
-            ) {
-                map.insert(uuid, keys);
-            }
+impl StorageBackend for Sqlite {
+    fn initialize(&mut self) -> S_Result<()> {
+        for sql in schema::get_initialization_sql() {
+            self.conn
+                .execute_batch(sql)
+                .map_err(|e| Error::Database(e.to_string()))?;
         }
-        map
+        Ok(())
     }
 
-    fn load_session_keys_from_db(conn: &Connection) -> HashMap<(Uuid, Uuid), SymetricKey> {
-        let mut map = HashMap::new();
-        let mut stmt = match conn
-            .prepare("SELECT key_id, key_data FROM keys WHERE key_type = 'session_key'")
-        {
-            Ok(s) => s,
-            Err(_) => return map,
-        };
-        let rows = match stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
-        }) {
-            Ok(r) => r,
-            Err(_) => return map,
-        };
-        for row in rows.flatten() {
-            let (composite_id, data) = row;
-            // composite_id format: "{user_uuid}_{key_uuid}" — both UUIDs are 36 chars
-            if composite_id.len() == 73 {
-                if let (Ok(user), Ok(key_id), Ok(arr)) = (
-                    Uuid::parse_str(&composite_id[..36]),
-                    Uuid::parse_str(&composite_id[37..]),
-                    <[u8; 32]>::try_from(data.as_slice()),
-                ) {
-                    map.insert((user, key_id), arr);
-                }
-            }
-        }
-        map
+    fn create_conversation(
+        &mut self,
+        conversation: &Conversation,
+    ) -> sickgnal_core::chat::storage::Result<()> {
+        todo!()
     }
 
-    fn load_ephemeral_keys_from_db(conn: &Connection) -> HashMap<Uuid, X25519Secret> {
-        let mut map = HashMap::new();
-        let mut stmt =
-            match conn.prepare("SELECT key_id, key_data FROM keys WHERE key_type = 'ephemeral'") {
-                Ok(s) => s,
-                Err(_) => return map,
-            };
-        let rows = match stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?))
-        }) {
-            Ok(r) => r,
-            Err(_) => return map,
-        };
-        for row in rows.flatten() {
-            let (key_id, data) = row;
-            if let (Ok(uuid), Ok(arr)) = (
-                Uuid::parse_str(&key_id),
-                <[u8; 32]>::try_from(data.as_slice()),
-            ) {
-                map.insert(uuid, X25519Secret::from(arr));
-            }
-        }
-        map
+    fn get_conversation(
+        &self,
+        id: Uuid,
+    ) -> sickgnal_core::chat::storage::Result<Option<Conversation>> {
+        todo!()
     }
 
-    fn serialize_key_data<T: serde::Serialize>(data: &T) -> K_Result<Vec<u8>> {
-        bincode::serialize(data).map_err(|e| {
-            KeyStorageError::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-        })
+    fn get_conversations_by_peer(
+        &self,
+        peer_user_id: Uuid,
+    ) -> sickgnal_core::chat::storage::Result<Vec<Conversation>> {
+        todo!()
     }
 
-    fn deserialize_key_data<T: serde::de::DeserializeOwned>(data: &[u8]) -> K_Result<T> {
-        bincode::deserialize(data).map_err(|e| {
-            KeyStorageError::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-        })
+    fn list_conversations(&self) -> sickgnal_core::chat::storage::Result<Vec<Conversation>> {
+        todo!()
     }
 
-    fn db_error(e: rusqlite::Error) -> KeyStorageError {
-        KeyStorageError::new(std::io::Error::new(std::io::ErrorKind::Other, e))
+    fn update_conversation(
+        &mut self,
+        conversation: &Conversation,
+    ) -> sickgnal_core::chat::storage::Result<()> {
+        todo!()
+    }
+
+    fn delete_conversation(&mut self, id: Uuid) -> sickgnal_core::chat::storage::Result<()> {
+        todo!()
+    }
+
+    fn delete_messages_for_conversation(
+        &mut self,
+        conversation_id: Uuid,
+    ) -> sickgnal_core::chat::storage::Result<()> {
+        todo!()
+    }
+
+    fn update_conversation_last_message(
+        &mut self,
+        id: Uuid,
+        timestamp: DateTime<Utc>,
+    ) -> sickgnal_core::chat::storage::Result<()> {
+        todo!()
+    }
+
+    fn update_conversation_unread_count(
+        &mut self,
+        id: Uuid,
+        count: i32,
+    ) -> sickgnal_core::chat::storage::Result<()> {
+        todo!()
+    }
+
+    fn mark_conversation_opened(&mut self, id: Uuid) -> sickgnal_core::chat::storage::Result<()> {
+        todo!()
+    }
+
+    fn create_message(&mut self, message: &Message) -> sickgnal_core::chat::storage::Result<()> {
+        todo!()
+    }
+
+    fn get_message(&self, id: Uuid) -> sickgnal_core::chat::storage::Result<Option<Message>> {
+        todo!()
+    }
+
+    fn get_message_by_local_id(
+        &self,
+        local_id: Uuid,
+    ) -> sickgnal_core::chat::storage::Result<Option<Message>> {
+        todo!()
+    }
+
+    fn list_messages(
+        &self,
+        conversation_id: Uuid,
+        limit: Option<i32>,
+        offset: Option<i32>,
+    ) -> sickgnal_core::chat::storage::Result<Vec<Message>> {
+        todo!()
+    }
+
+    fn update_message_status(
+        &mut self,
+        id: Uuid,
+        status: MessageStatus,
+    ) -> sickgnal_core::chat::storage::Result<()> {
+        todo!()
+    }
+
+    fn update_message(&mut self, message: &Message) -> sickgnal_core::chat::storage::Result<()> {
+        todo!()
+    }
+
+    fn delete_message(&mut self, id: Uuid) -> sickgnal_core::chat::storage::Result<()> {
+        todo!()
+    }
+
+    fn close(&mut self) -> sickgnal_core::chat::storage::Result<()> {
+        todo!()
     }
 }
 
 impl E2EStorageBackend for Sqlite {
-    // ========== Identity and mid-term keys ==========
-
-    fn identity_keypair(&self) -> K_Result<&IdentityKeyPair> {
-        self.identity_keypair_opt()?.ok_or_else(|| {
-            KeyStorageError::new(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "Identity keypair not found",
-            ))
-        })
+    /// Load the account
+    fn load_account(&self) -> K_Result<Option<Account>> {
+        AccountStore::load(&self.conn).map_err(KeyStorageError::from)
     }
 
-    fn identity_keypair_opt(&self) -> K_Result<Option<&IdentityKeyPair>> {
-        Ok(self.identity_keypair_cache.as_ref())
+    /// Update account information
+    fn set_account(&mut self, account: &Account) -> K_Result<()> {
+        AccountStore::persist(&self.conn, account).map_err(KeyStorageError::from)
+    }
+
+    /// Update the account token
+    fn set_account_token(&mut self, token: String) -> K_Result<()> {
+        AccountStore::set_auth_token(&self.conn, token).map_err(KeyStorageError::from)
+    }
+
+    // ========== Identity and mid-term keys ==========
+
+    fn identity_keypair(&self) -> K_Result<IdentityKeyPair> {
+        self.identity_keypair_opt()?
+            .ok_or_else(|| Error::MissingIdentityKey.into())
+    }
+
+    fn identity_keypair_opt(&self) -> K_Result<Option<IdentityKeyPair>> {
+        AccountStore::identity_keypair(&self.conn).map_err(KeyStorageError::from)
     }
 
     fn set_identity_keypair(&mut self, identity_keypair: IdentityKeyPair) -> K_Result<()> {
-        let data = Self::serialize_key_data(&identity_keypair)?;
-        {
-            let conn = self.conn.lock().unwrap();
-            Self::upsert_key(&conn, "identity", "identity", &data)?;
-        }
-        self.identity_keypair_cache = Some(identity_keypair);
-        Ok(())
+        AccountStore::set_identity_keypair(&self.conn, &identity_keypair)
+            .map_err(KeyStorageError::from)
     }
 
-    fn midterm_key(&self) -> K_Result<&X25519Secret> {
-        self.midterm_key_opt()?.ok_or_else(|| {
-            KeyStorageError::new(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "Midterm key not found",
-            ))
-        })
+    fn midterm_key(&self) -> K_Result<X25519Secret> {
+        self.midterm_key_opt()?
+            .ok_or_else(|| Error::MissingMidtermKey.into())
     }
 
-    fn midterm_key_opt(&self) -> K_Result<Option<&X25519Secret>> {
-        Ok(self.midterm_key_cache.as_ref())
+    fn midterm_key_opt(&self) -> K_Result<Option<X25519Secret>> {
+        AccountStore::midterm_key(&self.conn).map_err(KeyStorageError::from)
     }
 
     fn set_midterm_key(&mut self, midterm_key: X25519Secret) -> K_Result<()> {
-        let data = midterm_key.to_bytes().to_vec();
-        {
-            let conn = self.conn.lock().unwrap();
-            Self::upsert_key(&conn, "midterm", "midterm", &data)?;
-        }
-        self.midterm_key_cache = Some(midterm_key);
-        Ok(())
+        AccountStore::set_midterm_key(&self.conn, &midterm_key).map_err(KeyStorageError::from)
     }
 
-    // ========== Ephemeral keys ==========
-
-    fn ephemeral_key(&self, id: &Uuid) -> K_Result<Option<&X25519Secret>> {
-        Ok(self.ephemeral_keys_cache.get(id))
+    fn ephemeral_key(&self, id: &Uuid) -> K_Result<Option<X25519Secret>> {
+        let key = EphemeralKeyStore::find(&self.conn, *id)?;
+        Ok(key.map(|k| k.secret))
     }
 
     fn pop_ephemeral_key(&mut self, id: &Uuid) -> K_Result<Option<X25519Secret>> {
-        let secret = self.ephemeral_keys_cache.remove(id);
-        if secret.is_some() {
-            let conn = self.conn.lock().unwrap();
-            conn.execute(
-                "DELETE FROM keys WHERE key_id = ?1 AND key_type = 'ephemeral'",
-                params![id.to_string()],
-            )
-            .map_err(Self::db_error)?;
+        if let Some(key) = self.ephemeral_key(id)? {
+            self.delete_ephemeral_key(*id)?;
+            return Ok(Some(key));
         }
-        Ok(secret)
+        Ok(None)
     }
 
-    fn available_ephemeral_keys(&self) -> K_Result<impl Iterator<Item = &Uuid>> {
-        Ok(self.ephemeral_keys_cache.keys())
+    fn available_ephemeral_keys(&self) -> K_Result<Vec<Uuid>> {
+        EphemeralKeyStore::available_ids(&self.conn).map_err(KeyStorageError::from)
     }
 
-    fn add_ephemeral_key(&mut self, keypair: X25519Secret) -> K_Result<Uuid> {
-        let new_id = Uuid::new_v4();
-        let data = keypair.to_bytes().to_vec();
-        {
-            let conn = self.conn.lock().unwrap();
-            Self::upsert_key(&conn, &new_id.to_string(), "ephemeral", &data)?;
-        }
-        self.ephemeral_keys_cache.insert(new_id, keypair);
-        Ok(new_id)
+    fn save_ephemeral_key(&mut self, keypair: EphemeralSecretKey) -> K_Result<()> {
+        EphemeralKeyStore::persist(&self.conn, &keypair).map_err(KeyStorageError::from)
+    }
+
+    fn save_many_ephemeral_keys(
+        &mut self,
+        keypairs: impl Iterator<Item = EphemeralSecretKey>,
+    ) -> K_Result<()> {
+        EphemeralKeyStore::save_many(&mut self.conn, keypairs).map_err(KeyStorageError::from)
     }
 
     fn delete_ephemeral_key(&mut self, id: Uuid) -> K_Result<()> {
-        self.ephemeral_keys_cache.remove(&id);
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "DELETE FROM keys WHERE key_id = ?1 AND key_type = 'ephemeral'",
-            params![id.to_string()],
-        )
-        .map_err(Self::db_error)?;
-        Ok(())
+        EphemeralKeyStore::delete_by_id(&self.conn, &id).map_err(KeyStorageError::from)
     }
 
     fn delete_many_ephemeral_key(&mut self, ids: impl Iterator<Item = Uuid>) -> K_Result<()> {
-        for id in ids {
-            self.delete_ephemeral_key(id)?;
-        }
-        Ok(())
+        EphemeralKeyStore::delete_many(&mut self.conn, ids).map_err(KeyStorageError::from)
     }
 
-    // ========== Clear methods ==========
-
     fn clear_identity_keypair(&mut self) -> K_Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM keys WHERE key_type = 'identity'", [])
-            .map_err(Self::db_error)?;
-        Ok(())
+        AccountStore::clear_identity_keypair(&self.conn).map_err(KeyStorageError::from)
     }
 
     fn clear_midterm_key(&mut self) -> K_Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM keys WHERE key_type = 'midterm'", [])
-            .map_err(Self::db_error)?;
-        Ok(())
+        AccountStore::clear_midterm_key(&self.conn).map_err(KeyStorageError::from)
     }
 
     fn clear_ephemeral_keys(&mut self) -> K_Result<()> {
-        self.ephemeral_keys_cache.clear();
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM keys WHERE key_type = 'ephemeral'", [])
-            .map_err(Self::db_error)?;
-        Ok(())
+        EphemeralKeyStore::clear(&self.conn).map_err(KeyStorageError::from)
     }
 
     fn clear_session_keys(&mut self) -> K_Result<()> {
-        self.session_keys_cache.clear();
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM keys WHERE key_type = 'session_key'", [])
-            .map_err(Self::db_error)?;
-        Ok(())
+        SessionKeyStore::clear(&self.conn).map_err(KeyStorageError::from)
     }
 
-    fn clear_user_public_keys(&mut self) -> K_Result<()> {
-        self.user_public_keys_cache.clear();
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM keys WHERE key_type = 'user_public_keys'", [])
-            .map_err(Self::db_error)?;
-        Ok(())
-    }
-
-    // ========== Session keys ==========
-
-    fn session_key(&self, user: Uuid, key_id: Uuid) -> K_Result<Option<&SymetricKey>> {
-        Ok(self.session_keys_cache.get(&(user, key_id)))
+    fn session_key(&self, user: Uuid, key_id: Uuid) -> K_Result<Option<SymetricKey>> {
+        SessionKeyStore::find(&self.conn, &user, &key_id).map_err(KeyStorageError::from)
     }
 
     fn add_session_key(&mut self, user: Uuid, key_id: Uuid, key: SymetricKey) -> K_Result<()> {
-        let composite_key = format!("{}_{}", user, key_id);
-        {
-            let conn = self.conn.lock().unwrap();
-            Self::upsert_key(&conn, &composite_key, "session_key", &key)?;
-        }
-        self.session_keys_cache.insert((user, key_id), key);
+        SessionKeyStore::persist(&mut self.conn, user, key_id, &key)?;
         Ok(())
     }
 
     fn delete_session_key(&mut self, user: Uuid, key_id: Uuid) -> K_Result<()> {
-        self.session_keys_cache.remove(&(user, key_id));
-        let conn = self.conn.lock().unwrap();
-        let composite_key = format!("{}_{}", user, key_id);
-        conn.execute(
-            "DELETE FROM keys WHERE key_id = ?1 AND key_type = 'session_key'",
-            params![composite_key],
+        SessionKeyStore::delete_by_id(&self.conn, &user, &key_id).map_err(KeyStorageError::from)
+    }
+
+    fn cleanup_session_keys(
+        &mut self,
+        user: &Uuid,
+        current_sending_key: &Uuid,
+        current_receiving_key: &Uuid,
+    ) -> K_Result<()> {
+        SessionKeyStore::cleanup_session_keys(
+            &self.conn,
+            user,
+            current_sending_key,
+            current_receiving_key,
         )
-        .map_err(Self::db_error)?;
-        Ok(())
+        .map_err(KeyStorageError::from)
     }
 
-    // ========== Public user keys ==========
-
-    fn user_public_keys(&self, user_id: &Uuid) -> K_Result<Option<&PublicIdentityKeys>> {
-        Ok(self.user_public_keys_cache.get(user_id))
+    fn load_session(&mut self, user_id: &Uuid) -> K_Result<Option<E2ESession>> {
+        SessionStore::find(&self.conn, user_id).map_err(KeyStorageError::from)
     }
 
-    fn set_user_public_keys(&mut self, user_id: Uuid, keys: PublicIdentityKeys) -> K_Result<()> {
-        let data = Self::serialize_key_data(&keys)?;
-        {
-            let conn = self.conn.lock().unwrap();
-            Self::upsert_key(&conn, &user_id.to_string(), "user_public_keys", &data)?;
-        }
-        self.user_public_keys_cache.insert(user_id, keys);
-        Ok(())
+    fn load_all_sessions(&mut self) -> K_Result<Vec<E2ESession>> {
+        SessionStore::all(&self.conn).map_err(KeyStorageError::from)
     }
 
-    fn delete_user_public_keys(&mut self, user_id: &Uuid) -> K_Result<()> {
-        self.user_public_keys_cache.remove(user_id);
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "DELETE FROM keys WHERE key_id = ?1 AND key_type = 'user_public_keys'",
-            params![user_id.to_string()],
-        )
-        .map_err(Self::db_error)?;
-        Ok(())
+    fn save_session(&mut self, session: &E2ESession) -> K_Result<()> {
+        SessionStore::persist(&mut self.conn, session).map_err(KeyStorageError::from)
     }
 
+    fn delete_session(&mut self, user_id: &Uuid) -> K_Result<()> {
+        SessionStore::delete_by_id(&mut self.conn, user_id).map_err(KeyStorageError::from)
+    }
+}
+
+#[cfg(false)]
+impl E2EStorageBackend for Sqlite {
     // ========== Session management ==========
 
     fn load_session(&mut self, user_id: &Uuid) -> K_Result<Option<E2ESession>> {
@@ -1100,19 +932,18 @@ impl E2EStorageBackend for Sqlite {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
+    use sickgnal_core::test_e2e_storage_backend;
 
     fn create_test_config() -> Config {
-        let temp_bundle = tempdir().unwrap();
-        let dir = temp_bundle.path();
-        let db_dir = dir.join("test");
-
         // Generate a random encryption key for testing
         let mut encryption_key = [0u8; 32];
         getrandom::fill(&mut encryption_key).unwrap();
 
+        let conn_fn = || Connection::open_in_memory().map_err(Error::from);
+
         Config {
-            db_dir,
+            test_conn: Some(conn_fn),
+            db_dir: PathBuf::new(),
             encryption_key: encryption_key.to_vec(),
         }
     }
@@ -1120,24 +951,50 @@ mod tests {
     #[tokio::test]
     async fn test_create_and_load_account() {
         let config = create_test_config();
-        let mut storage = Sqlite::new(config).unwrap();
-        storage.initialize().unwrap();
+        let mut storage = Sqlite::new(config).expect("error creating storage");
+        storage.initialize().expect("error initializing storage");
 
         let account = Account {
-            user_id: Uuid::new_v4(),
+            id: Uuid::new_v4(),
             username: "test_user".to_string(),
-            auth_token: "test_token".to_string(),
-            created_at: Utc::now(),
+            token: "test_token".to_string(),
         };
 
-        storage.create_account(&account).unwrap();
-        let loaded = storage
-            .load_account(account.username.clone())
-            .expect("Erreur DB")
-            .unwrap();
+        storage.set_account(&account).unwrap();
+        let loaded = storage.load_account().expect("Erreur DB").unwrap();
 
-        assert_eq!(loaded.user_id, account.user_id);
+        assert_eq!(loaded.id, account.id);
         assert_eq!(loaded.username, account.username);
-        assert_eq!(loaded.auth_token, account.auth_token);
+        assert_eq!(loaded.token, account.token);
     }
+
+    use argon2::password_hash::rand_core::{OsRng, RngCore};
+    use std::{
+        path::PathBuf,
+        sync::{Arc, Mutex},
+    };
+
+    use rusqlite::Connection;
+
+    use crate::storage::Sqlite;
+
+    // Create an in-memory database with a test account and no keys
+    fn setup() -> Arc<Mutex<Sqlite>> {
+        let conn = Connection::open_in_memory().unwrap();
+
+        let mut sqlite = Sqlite { conn };
+        sqlite.initialize().unwrap();
+
+        let account = Account {
+            username: "PLACEHOLDER_USERNAME".into(),
+            id: Uuid::nil(),
+            token: "PLACEHOLDER_TOKEN".into(),
+        };
+
+        sqlite.set_account(&account).unwrap();
+
+        Arc::new(Mutex::new(sqlite))
+    }
+
+    test_e2e_storage_backend! {setup(), OsRng}
 }

@@ -271,8 +271,8 @@ where
     }
 
     /// Get the current account.
-    pub fn account(&self) -> Account {
-        self.e2e_client.account().clone()
+    pub fn account(&self) -> &Account {
+        self.e2e_client.account()
     }
 
     /// Process queued messages (sync phase), then start async workers.

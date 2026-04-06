@@ -64,7 +64,7 @@ impl SyncBridge {
     }
 
     pub fn start_conversation(
-        &self,
+        &mut self,
         username: String,
         initial_message: Option<String>,
     ) -> Result<Conversation> {
@@ -72,7 +72,7 @@ impl SyncBridge {
             .block_on(self.sdk.start_conversation(username, initial_message))
     }
 
-    pub fn delete_conversation(&self, conversation_id: Uuid) -> Result<()> {
+    pub fn delete_conversation(&mut self, conversation_id: Uuid) -> Result<()> {
         self.sdk.delete_conversation(conversation_id)
     }
 
