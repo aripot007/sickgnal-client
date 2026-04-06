@@ -1,3 +1,5 @@
+mod tests;
+
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -47,15 +49,6 @@ pub trait E2EStorageBackend {
         &mut self,
         keypairs: impl Iterator<Item = EphemeralSecretKey>,
     ) -> Result<()>;
-
-    /// Add a new ephemeral keypair and return its generated id
-    fn add_ephemeral_key(&mut self, keypair: X25519Secret) -> Result<Uuid>;
-
-    /// Add many new ephemeral keypairs and return their generated id
-    fn add_many_ephemeral_key(
-        &mut self,
-        keypairs: impl Iterator<Item = X25519Secret>,
-    ) -> Result<impl Iterator<Item = Uuid>>;
 
     /// Delete an ephemeral keypair
     fn delete_ephemeral_key(&mut self, id: Uuid) -> Result<()>;
@@ -129,6 +122,8 @@ pub trait E2EStorageBackend {
     fn load_all_sessions(&mut self) -> Result<Vec<E2ESession>>;
 
     /// Save a session
+    ///
+    /// Saves the session keys if needed
     fn save_session(&mut self, session: &E2ESession) -> Result<()>;
 
     /// Save multiple sessions
