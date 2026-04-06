@@ -1,25 +1,30 @@
 use crate::chat::client::ConnectionState;
+use crate::chat::message::Content;
 use crate::chat::storage::{Conversation, Message, MessageStatus};
 use uuid::Uuid;
 
 pub enum Event {
-    /// Event triggered when a new message is received in a conversation.
-    /// Uuid of the conversation
+    /// A new message was received or sent in a conversation.
     NewMessage(Uuid, Message),
-    /// Event triggered when a new message is received in a conversation.
-    /// Uuid of the conversation
-    MessageForUnknownConversation(Message),
-    /// Event triggered when the status of a message is updated.
-    /// Uuid of the message
+    /// The status of a message was updated (Sent, Delivered, Read).
     MessageStatusUpdate(Uuid, MessageStatus),
-    /// Event triggered when a new conversation is created.
+    /// A new conversation was created (incoming OpenConv or outgoing).
     ConversationCreated(Conversation),
-    /// Event triggered when a new conversation is created.
-    /// Uuid of the conversation
+    /// A conversation was deleted.
     ConversationDeleted(Uuid),
-    /// Event triggered when a typing indicator is received for a conversation.
-    /// Uuid of the conversation
+    /// A message was edited by the peer.
+    MessageEdited {
+        conversation_id: Uuid,
+        message_id: Uuid,
+        new_content: Content,
+    },
+    /// A message was deleted by the peer.
+    MessageDeleted {
+        conversation_id: Uuid,
+        message_id: Uuid,
+    },
+    /// Typing indicator received for a conversation.
     TypingIndicator(Uuid),
-    /// Event triggered when the connection state changes.
+    /// The connection state changed.
     ConnectionStateChanged(ConnectionState),
 }

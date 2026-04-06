@@ -48,7 +48,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         Constraint::Length(1), // Confirm input
         Constraint::Length(1), // spacing
         Constraint::Length(1), // error or status
-        Constraint::Min(0),   // filler
+        Constraint::Min(0),    // filler
     ];
 
     let chunks = Layout::vertical(constraints).split(inner);
@@ -57,7 +57,9 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     // Username
     let label_style = if app.auth_field == AuthField::Username {
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::White)
     };
@@ -76,7 +78,12 @@ pub fn draw(f: &mut Frame, app: &App) {
         Paragraph::new(Line::from(vec![
             Span::styled("> ", Style::default().fg(Color::DarkGray)),
             Span::styled(&app.username, input_style),
-            Span::styled(cursor, Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK)),
+            Span::styled(
+                cursor,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::SLOW_BLINK),
+            ),
         ])),
         chunks[idx],
     );
@@ -84,7 +91,9 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     // Password
     let label_style = if app.auth_field == AuthField::Password {
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::White)
     };
@@ -104,7 +113,12 @@ pub fn draw(f: &mut Frame, app: &App) {
         Paragraph::new(Line::from(vec![
             Span::styled("> ", Style::default().fg(Color::DarkGray)),
             Span::styled(&masked, input_style),
-            Span::styled(cursor, Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK)),
+            Span::styled(
+                cursor,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::SLOW_BLINK),
+            ),
         ])),
         chunks[idx],
     );
@@ -112,7 +126,9 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     // Confirm Password
     let label_style = if app.auth_field == AuthField::ConfirmPassword {
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::White)
     };
@@ -132,7 +148,12 @@ pub fn draw(f: &mut Frame, app: &App) {
         Paragraph::new(Line::from(vec![
             Span::styled("> ", Style::default().fg(Color::DarkGray)),
             Span::styled(&masked, input_style),
-            Span::styled(cursor, Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK)),
+            Span::styled(
+                cursor,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::SLOW_BLINK),
+            ),
         ])),
         chunks[idx],
     );

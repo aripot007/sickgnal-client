@@ -175,15 +175,33 @@ impl ChatMessage {
         }
     }
 
-    ///
-    ///
-    ///
+    /// Create a new typing indicator message
     pub fn new_is_typing(conversation_id: Uuid) -> Self {
         ChatMessage {
             sender_id: Uuid::default(),
             issued_at: Utc::now(),
             conversation_id,
             kind: ChatMessageKind::Ctrl(ControlMessage::IsTyping),
+        }
+    }
+
+    /// Create a new acknowledgement of reception (delivery receipt)
+    pub fn new_ack_reception(conversation_id: Uuid, message_id: Uuid) -> Self {
+        ChatMessage {
+            sender_id: Uuid::default(),
+            issued_at: Utc::now(),
+            conversation_id,
+            kind: ChatMessageKind::Ctrl(ControlMessage::AckReception { id: message_id }),
+        }
+    }
+
+    /// Create a new acknowledgement of read (read receipt)
+    pub fn new_ack_read(conversation_id: Uuid, message_id: Uuid) -> Self {
+        ChatMessage {
+            sender_id: Uuid::default(),
+            issued_at: Utc::now(),
+            conversation_id,
+            kind: ChatMessageKind::Ctrl(ControlMessage::AckRead { id: message_id }),
         }
     }
 }

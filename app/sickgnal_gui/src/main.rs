@@ -125,10 +125,24 @@ fn spawn_sdk(
     rt.spawn(async move {
         let sdk_result = if existing_account {
             println!("Existing Account");
-            SdkClient::load(username.clone(), dir, &password, "127.0.0.1:8000").await
+            SdkClient::load(
+                username.clone(),
+                dir,
+                &password,
+                "127.0.0.1:8000",
+                &sickgnal_sdk::TlsConfig::None,
+            )
+            .await
         } else {
             println!("Unexisting Account");
-            SdkClient::new(username.clone(), dir, &password, "127.0.0.1:8000").await
+            SdkClient::new(
+                username.clone(),
+                dir,
+                &password,
+                "127.0.0.1:8000",
+                &sickgnal_sdk::TlsConfig::None,
+            )
+            .await
         };
 
         let mut sdk = match sdk_result {
@@ -161,9 +175,10 @@ fn handle_sdk_event(ui: AppWindow, event: Event) {
         Event::MessageStatusUpdate(uuid, message_status) => todo!(),
         Event::ConversationCreated(conversation) => todo!(),
         Event::ConversationDeleted(uuid) => todo!(),
+        Event::MessageEdited { .. } => todo!(),
+        Event::MessageDeleted { .. } => todo!(),
         Event::TypingIndicator(uuid) => todo!(),
         Event::ConnectionStateChanged(connection_state) => todo!(),
-        Event::MessageForUnknownConversation(_) => todo!(),
     }
 }
 
