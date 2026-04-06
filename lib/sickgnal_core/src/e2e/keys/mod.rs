@@ -1,6 +1,5 @@
 //! Everything related to key management
 //!
-pub mod memory_storage;
 pub mod storage_backend;
 use base64::{DecodeSliceError, Engine, engine::general_purpose};
 use rand::{CryptoRng, RngCore};

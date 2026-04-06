@@ -108,7 +108,7 @@ where
         };
 
         // Register the username on the server
-        let m = E2EMessage::create_account(idk, username.clone());
+        let m = E2EMessage::create_account(&idk, username.clone());
         msg_stream.send_untagged(m).await?;
 
         // Wait for the response
@@ -249,7 +249,7 @@ where
         // Remove keys on the server that are not on the client
         let server_keys: HashSet<Uuid> = HashSet::from_iter(available_keys.into_iter());
         let stored_keys: HashSet<Uuid> =
-            HashSet::from_iter(self.state.storage.available_ephemeral_keys()?.cloned());
+            HashSet::from_iter(self.state.storage.available_ephemeral_keys()?);
 
         let to_remove: Vec<Uuid> = server_keys.difference(&stored_keys).cloned().collect();
 

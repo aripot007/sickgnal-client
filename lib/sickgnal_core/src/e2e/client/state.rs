@@ -1,7 +1,7 @@
 //! Shared client state
 //!
 
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 use chacha20poly1305::{
     AeadCore, KeyInit, XChaCha20Poly1305,
@@ -183,17 +183,17 @@ where
 
         // Try to get the key
         let key = if ciphertext.key_id == session.receiving_key_id {
-            &session.receiving_key
+            Cow::Borrowed(&session.receiving_key)
         } else {
             // Try to get the key from the storage if its not the most recent one
             match self.storage.session_key(sender_id, ciphertext.key_id)? {
-                Some(key) => key,
+                Some(key) => Cow::Owned(key),
                 None => return Err(Error::NoSessionKey(sender_id, ciphertext.key_id)),
             }
         };
 
         // Decrypt the message
-        let aead = XChaCha20Poly1305::new_from_slice(key)
+        let aead = XChaCha20Poly1305::new_from_slice(key.as_ref())
             .expect("stored session key should have a valid length");
 
         let payload = ciphertext.decrypt(&aead)?;
@@ -231,7 +231,7 @@ where
     pub(super) fn create_identity_keypair<T: RngCore + CryptoRng>(
         storage: &mut Storage,
         rng: T,
-    ) -> Result<&IdentityKeyPair> {
+    ) -> Result<IdentityKeyPair> {
         let idk = IdentityKeyPair::new_from_rng(rng);
         storage.set_identity_keypair(idk.clone())?;
         storage.identity_keypair().map_err(Error::from)

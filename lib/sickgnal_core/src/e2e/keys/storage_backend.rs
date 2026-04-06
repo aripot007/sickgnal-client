@@ -11,19 +11,19 @@ pub trait E2EStorageBackend {
     // Identity and mid-term keys
 
     /// Get the identity keypair
-    fn identity_keypair(&self) -> Result<&IdentityKeyPair>;
+    fn identity_keypair(&self) -> Result<IdentityKeyPair>;
 
     // Get the identity keypair if set
-    fn identity_keypair_opt(&self) -> Result<Option<&IdentityKeyPair>>;
+    fn identity_keypair_opt(&self) -> Result<Option<IdentityKeyPair>>;
 
     /// Set the identity keypair
     fn set_identity_keypair(&mut self, identity_keypair: IdentityKeyPair) -> Result<()>;
 
     /// Get the midterm keypair
-    fn midterm_key(&self) -> Result<&X25519Secret>;
+    fn midterm_key(&self) -> Result<X25519Secret>;
 
     // Get the midterm keypair if set
-    fn midterm_key_opt(&self) -> Result<Option<&X25519Secret>>;
+    fn midterm_key_opt(&self) -> Result<Option<X25519Secret>>;
 
     /// Set the midterm keypair
     fn set_midterm_key(&mut self, midterm_key: X25519Secret) -> Result<()>;
@@ -31,13 +31,13 @@ pub trait E2EStorageBackend {
     // Ephemeral keys
 
     /// Retrieve an ephemeral keypair by its id
-    fn ephemeral_key(&self, id: &Uuid) -> Result<Option<&X25519Secret>>;
+    fn ephemeral_key(&self, id: &Uuid) -> Result<Option<X25519Secret>>;
 
     /// Retrieve and delete an ephemeral keypair by its id
     fn pop_ephemeral_key(&mut self, id: &Uuid) -> Result<Option<X25519Secret>>;
 
     /// Get a list of all available ephemeral keys
-    fn available_ephemeral_keys(&self) -> Result<impl Iterator<Item = &Uuid>>;
+    fn available_ephemeral_keys(&self) -> Result<impl Iterator<Item = Uuid>>;
 
     /// Save a new ephemeral keypair
     fn save_ephemeral_key(&mut self, keypair: EphemeralSecretKey) -> Result<()>;
@@ -92,7 +92,7 @@ pub trait E2EStorageBackend {
 
     // session keys
     /// Get the session for a correspondant
-    fn session_key(&self, user: Uuid, key_id: Uuid) -> Result<Option<&SymetricKey>>;
+    fn session_key(&self, user: Uuid, key_id: Uuid) -> Result<Option<SymetricKey>>;
 
     /// Add a session key
     fn add_session_key(&mut self, user: Uuid, key_id: Uuid, key: SymetricKey) -> Result<()>;
@@ -110,7 +110,7 @@ pub trait E2EStorageBackend {
 
     // Public user keys
     /// Get the public key of a user
-    fn user_public_keys(&self, user_id: &Uuid) -> Result<Option<&PublicIdentityKeys>>;
+    fn user_public_keys(&self, user_id: &Uuid) -> Result<Option<PublicIdentityKeys>>;
 
     /// Set the public key of a user
     fn set_user_public_keys(&mut self, user_id: Uuid, keys: PublicIdentityKeys) -> Result<()>;
