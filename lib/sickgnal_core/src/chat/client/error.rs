@@ -17,8 +17,27 @@ pub enum Error {
     #[error("Not connected")]
     NotConnected,
 
-    #[error("No converstation found")]
+    #[error("No conversation found: {0}")]
     NoConversation(Uuid),
+
+    #[error(
+        "Sender {sender_id} is not authorized in conversation {conversation_id} \
+         (expected peer {expected_peer})"
+    )]
+    UnauthorizedSender {
+        sender_id: Uuid,
+        conversation_id: Uuid,
+        expected_peer: Uuid,
+    },
+
+    #[error(
+        "Unexpected message for unknown conversation {conversation_id} from {sender_id} \
+         (expected OpenConv)"
+    )]
+    UnexpectedMessageForUnknownConversation {
+        conversation_id: Uuid,
+        sender_id: Uuid,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

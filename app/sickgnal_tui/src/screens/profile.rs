@@ -16,25 +16,23 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     // Vertical layout: title, cards, password/help
     let chunks = Layout::vertical([
-        Constraint::Min(3),           // Top spacer
-        Constraint::Length(3),        // Title
-        Constraint::Length(1),        // Spacer
+        Constraint::Min(3),              // Top spacer
+        Constraint::Length(3),           // Title
+        Constraint::Length(1),           // Spacer
         Constraint::Length(CARD_HEIGHT), // Cards row
-        Constraint::Length(2),        // Spacer
-        Constraint::Length(3),        // Password / help area
-        Constraint::Min(1),           // Bottom spacer
+        Constraint::Length(2),           // Spacer
+        Constraint::Length(3),           // Password / help area
+        Constraint::Min(1),              // Bottom spacer
     ])
     .split(area);
 
     // Title
-    let title = Paragraph::new(Line::from(vec![
-        Span::styled(
-            "Who's using sickgnal?",
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
-        ),
-    ]))
+    let title = Paragraph::new(Line::from(vec![Span::styled(
+        "Who's using sickgnal?",
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD),
+    )]))
     .alignment(Alignment::Center);
     f.render_widget(title, chunks[1]);
 
@@ -90,7 +88,11 @@ pub fn draw(f: &mut Frame, app: &App) {
             Line::from(Span::styled(
                 &initial,
                 Style::default()
-                    .fg(if is_selected { Color::Cyan } else { Color::White })
+                    .fg(if is_selected {
+                        Color::Cyan
+                    } else {
+                        Color::White
+                    })
                     .add_modifier(Modifier::BOLD),
             )),
             Line::from(""),

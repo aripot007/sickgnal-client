@@ -1,6 +1,6 @@
 mod app;
-mod sdk_bridge;
 mod screens;
+mod sdk_bridge;
 mod ui;
 
 use std::io;
