@@ -6,7 +6,7 @@ use crate::{
         dto::Conversation,
         storage::{ChatStorageError, Result},
     },
-    e2e::keys::E2EStorageBackend,
+    e2e::{keys::E2EStorageBackend, peer::Peer},
 };
 use thiserror::Error;
 use uuid::Uuid;
@@ -49,6 +49,11 @@ pub trait StorageBackend: E2EStorageBackend {
 
     /// Get a conversation by ID
     fn get_conversation(&self, id: &Uuid) -> Result<Option<Conversation>>;
+
+    /// Get the peers in a conversation
+    ///
+    /// Returns `None` if the conversation does not exist
+    fn get_conversation_peers(&self, id: &Uuid) -> Result<Option<Vec<Peer>>>;
 
     /// Save or update a message
     fn save_message(&mut self, message: &Message) -> Result<()>;
@@ -123,6 +128,12 @@ impl<T: StorageBackend> StorageBackend for Arc<Mutex<T>> {
         self.lock()
             .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
             .get_conversation(id)
+    }
+
+    fn get_conversation_peers(&self, id: &Uuid) -> Result<Option<Vec<Peer>>> {
+        self.lock()
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
+            .get_conversation_peers(id)
     }
 
     fn save_message(&mut self, message: &Message) -> Result<()> {

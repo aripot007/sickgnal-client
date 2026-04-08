@@ -1,5 +1,6 @@
 pub mod account;
 pub mod ephemeral_keys;
+pub mod peers;
 pub mod session;
 pub mod session_keys;
 

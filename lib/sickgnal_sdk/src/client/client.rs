@@ -1,27 +1,26 @@
-use sickgnal_core::chat::client::{ChatClient, Event};
-use sickgnal_core::chat::storage::StorageBackend;
-use sickgnal_core::e2e::client::Account;
+use sickgnal_core::chat::client::builder::ClientBuilder;
+use sickgnal_core::chat::client::{ChatClientHandle, ChatEvent};
+use sickgnal_core::chat::storage::SharedStorageBackend;
 use sickgnal_core::e2e::keys::E2EStorageBackend;
 use sickgnal_core::e2e::message_stream::raw_json::RawJsonMessageStream;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
 
 use crate::client::Result;
-use crate::storage::{self, Config, Sqlite};
+use crate::storage::{Config, Sqlite};
 use crate::tls::{TlsConfig, Transport, connect_transport};
 
-pub struct SdkClient<S, P>
+pub struct SdkClient<S>
 where
-    S: StorageBackend + E2EStorageBackend + Send,
-    P: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    S: SharedStorageBackend + 'static,
 {
-    pub chatclient: ChatClient<S, P>,
-    pub event_rx: mpsc::Receiver<Event>,
+    pub storage: S,
+    pub chatclient: ChatClientHandle<S>,
+    pub event_rx: mpsc::Receiver<ChatEvent>,
 }
 
-impl SdkClient<Arc<Mutex<Sqlite>>, Transport> {
+impl SdkClient<Arc<Mutex<Sqlite>>> {
     /// Common setup for both new and load scenarios
     async fn init(
         db_path: PathBuf,
@@ -31,8 +30,8 @@ impl SdkClient<Arc<Mutex<Sqlite>>, Transport> {
     ) -> Result<(
         Arc<Mutex<Sqlite>>,
         RawJsonMessageStream<Transport>,
-        mpsc::Sender<Event>,
-        mpsc::Receiver<Event>,
+        mpsc::Sender<ChatEvent>,
+        mpsc::Receiver<ChatEvent>,
     )> {
         let (event_tx, event_rx) = mpsc::channel(32);
 
@@ -53,17 +52,20 @@ impl SdkClient<Arc<Mutex<Sqlite>>, Transport> {
         server_addr: &str,
         tls_config: &TlsConfig,
     ) -> Result<Self> {
-        let (mut storage, msg_stream, event_tx, event_rx) =
+        let (storage, msg_stream, event_tx, event_rx) =
             Self::init(db_path, password, server_addr, tls_config).await?;
 
-        storage.initialize()?;
+        storage.lock().unwrap().initialize()?;
 
-        let chatclient = ChatClient::new(username, msg_stream, storage.clone(), event_tx).await?;
+        let client_builder =
+            ClientBuilder::create_account(username, storage.clone(), msg_stream, event_tx).await?;
 
-        // FIXME: should be done by the client
-        storage.set_account(chatclient.account())?;
+        let runtime = tokio::runtime::Handle::current();
+
+        let chatclient = client_builder.start(runtime).await?;
 
         Ok(Self {
+            storage,
             chatclient,
             event_rx,
         })
@@ -84,11 +86,16 @@ impl SdkClient<Arc<Mutex<Sqlite>>, Transport> {
             .ok_or(crate::storage::Error::NotFound(
                 "No account found in database".into(),
             ))
-            .map_err(sickgnal_core::chat::storage::Error::from)?;
+            .map_err(sickgnal_core::chat::storage::ChatStorageError::from)?;
 
-        let chatclient = ChatClient::load(account, msg_stream, storage, event_tx)?;
+        let client_builder = ClientBuilder::load(account, storage.clone(), msg_stream, event_tx)?;
+
+        let runtime = tokio::runtime::Handle::current();
+
+        let chatclient = client_builder.start(runtime).await?;
 
         Ok(Self {
+            storage,
             chatclient,
             event_rx,
         })

@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Peer {
     pub id: Uuid,
     pub username: Option<String>,
@@ -17,5 +17,14 @@ impl Peer {
         }
 
         format!("Peer#{}", self.id)
+    }
+
+    /// Create a default [`Peer`] with only its id
+    pub fn default(id: Uuid) -> Self {
+        Self {
+            id,
+            username: None,
+            fingerprint: None,
+        }
     }
 }

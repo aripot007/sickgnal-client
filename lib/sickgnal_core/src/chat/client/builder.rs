@@ -44,8 +44,8 @@ where
     /// Load an existing account from storage.
     pub fn load(
         account: Account,
-        msg_stream: M,
         storage: S,
+        msg_stream: M,
         event_tx: mpsc::Sender<ChatEvent>,
     ) -> Result<Self> {
         let e2e_client = E2EClient::load(account, storage.clone(), msg_stream)?;

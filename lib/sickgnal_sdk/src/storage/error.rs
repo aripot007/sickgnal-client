@@ -1,4 +1,4 @@
-use sickgnal_core::{chat::storage::Error as StorageError, e2e::keys::KeyStorageError};
+use sickgnal_core::{chat::storage::ChatStorageError as StorageError, e2e::keys::KeyStorageError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -48,9 +48,21 @@ impl From<Error> for StorageError {
     }
 }
 
+impl From<StorageError> for Error {
+    fn from(value: StorageError) -> Self {
+        value.into()
+    }
+}
+
 impl From<Error> for KeyStorageError {
     fn from(value: Error) -> Self {
         KeyStorageError::new(value)
+    }
+}
+
+impl From<KeyStorageError> for Error {
+    fn from(value: KeyStorageError) -> Self {
+        value.into()
     }
 }
 

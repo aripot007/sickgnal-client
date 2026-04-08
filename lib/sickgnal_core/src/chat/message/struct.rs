@@ -102,33 +102,58 @@ pub enum ControlMessage {
 // endregion: Struct definitions
 
 impl ContentMessage {
-    pub fn new_text(content: impl Into<String>, reply_to: Option<Uuid>) -> Self {
+    pub fn new(content: impl Into<Content>, reply_to: Option<Uuid>) -> Self {
         ContentMessage {
             id: Uuid::new_v4(),
             reply_to,
-            content: Content::Text(content.into()),
+            content: content.into(),
         }
     }
 }
 
+impl<T: Into<String>> From<T> for Content {
+    fn from(value: T) -> Self {
+        Content::Text(value.into())
+    }
+}
+
 impl ChatMessage {
-    /// Create a new text message with an optional reply id
-    pub fn new_text_reply(
+    /// Return this message with another sender id
+    pub(crate) fn with_sender_id(mut self, id: Uuid) -> Self {
+        self.sender_id = id;
+        self
+    }
+
+    pub(crate) fn new_open_conv(
         conversation_id: Uuid,
-        message: impl Into<String>,
+        initial_message: Option<ContentMessage>,
+    ) -> Self {
+        ChatMessage {
+            sender_id: Uuid::default(),
+            issued_at: Utc::now(),
+            conversation_id,
+            kind: ChatMessageKind::Ctrl(ControlMessage::OpenConv { initial_message }),
+        }
+    }
+
+    /// Create a new content message with an optional reply id
+    pub fn new_content_reply(
+        conversation_id: Uuid,
+        content: impl Into<Content>,
         reply_to: Option<Uuid>,
     ) -> Self {
         ChatMessage {
             sender_id: Uuid::default(),
             issued_at: Utc::now(),
             conversation_id,
-            kind: ChatMessageKind::Data(ContentMessage::new_text(message, reply_to)),
+            kind: ChatMessageKind::Data(ContentMessage::new(content, reply_to)),
         }
     }
 
     /// Create a new text message in a conversation
-    pub fn new_text(conversation_id: Uuid, message: impl Into<String>) -> Self {
-        Self::new_text_reply(conversation_id, message, None)
+    #[inline]
+    pub fn new_content(conversation_id: Uuid, content: impl Into<Content>) -> Self {
+        Self::new_content_reply(conversation_id, content, None)
     }
 
     /// Create a new control message to edit a text message
@@ -155,31 +180,6 @@ impl ChatMessage {
             issued_at: Utc::now(),
             conversation_id,
             kind: ChatMessageKind::Ctrl(ControlMessage::DeleteMsg { id: message_id }),
-        }
-    }
-
-    /// Create a new OPEN_CONV message with an optional conversation id and initial text message
-    ///
-    /// Generates a new conversation id if `conversation_id` is None.
-    pub fn new_open_conv_with_id(
-        conversation_id: Option<Uuid>,
-        initial_message: Option<impl Into<String>>,
-    ) -> Self {
-        let conversation_id = match conversation_id {
-            Some(id) => id,
-            None => Uuid::new_v4(),
-        };
-
-        let initial_message = match initial_message {
-            None => None,
-            Some(msg) => Some(ContentMessage::new_text(msg, None)),
-        };
-
-        ChatMessage {
-            sender_id: Uuid::default(),
-            issued_at: Utc::now(),
-            conversation_id,
-            kind: ChatMessageKind::Ctrl(ControlMessage::OpenConv { initial_message }),
         }
     }
 

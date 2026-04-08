@@ -3,14 +3,15 @@ use crate::storage::Config;
 use crate::storage::schema;
 use crate::storage::store::account::AccountStore;
 use crate::storage::store::ephemeral_keys::EphemeralKeyStore;
+use crate::storage::store::peers::PeerStore;
 use crate::storage::store::session::SessionStore;
 use crate::storage::store::session_keys::SessionKeyStore;
 use chrono::{DateTime, Utc};
 use rusqlite::Connection;
-use sickgnal_core::chat::storage::Conversation;
 use sickgnal_core::chat::storage::Message;
 use sickgnal_core::chat::storage::MessageStatus;
 use sickgnal_core::chat::storage::Result as S_Result;
+use sickgnal_core::chat::storage::SharedStorageBackend;
 use sickgnal_core::chat::storage::StorageBackend;
 use sickgnal_core::e2e::client::Account;
 use sickgnal_core::e2e::keys::Result as K_Result;
@@ -70,6 +71,16 @@ impl Sqlite {
         Ok(Self { conn })
     }
 
+    /// Create the tables
+    pub fn initialize(&mut self) -> S_Result<()> {
+        for sql in schema::get_initialization_sql() {
+            self.conn
+                .execute_batch(sql)
+                .map_err(|e| Error::Database(e.to_string()))?;
+        }
+        Ok(())
+    }
+
     /// Convert MessageStatus to string for database storage
     fn status_to_string(status: MessageStatus) -> &'static str {
         match status {
@@ -115,21 +126,6 @@ impl Sqlite {
         s.map(|s| Self::parse_timestamp(&s)).transpose()
     }
 
-    /// Build a `Conversation` from raw database row values.
-    fn row_to_conversation(
-        row: (String, String, String, Option<String>, i32, i32),
-    ) -> Result<Conversation> {
-        let (id, peer_user_id, peer_name, last_message_at, unread_count, opened) = row;
-        Ok(Conversation {
-            id: Self::parse_uuid(&id)?,
-            peer_user_id: Self::parse_uuid(&peer_user_id)?,
-            peer_name,
-            last_message_at: Self::parse_opt_timestamp(last_message_at)?,
-            unread_count,
-            opened: opened != 0,
-        })
-    }
-
     /// Build a `Message` from raw database row values.
     fn row_to_message(
         row: (
@@ -151,10 +147,9 @@ impl Sqlite {
             sender_id: Self::parse_uuid(&sender_id)?,
             content: String::from_utf8(content)
                 .map_err(|e| Error::InvalidData(format!("Invalid UTF-8: {}", e)))?,
-            timestamp: Self::parse_timestamp(&timestamp)?,
+            issued_at: Self::parse_timestamp(&timestamp)?,
             status: Self::string_to_status(&status)?,
             reply_to_id: Self::parse_opt_uuid(reply_to_id)?,
-            local_id: Self::parse_opt_uuid(local_id)?,
         })
     }
 }
@@ -536,119 +531,76 @@ impl StorageBackend for Sqlite {
 }
 
 impl StorageBackend for Sqlite {
-    fn initialize(&mut self) -> S_Result<()> {
-        for sql in schema::get_initialization_sql() {
-            self.conn
-                .execute_batch(sql)
-                .map_err(|e| Error::Database(e.to_string()))?;
-        }
-        Ok(())
+    fn conversation_exists(&self, conversation_id: &Uuid) -> S_Result<bool> {
+        todo!()
+    }
+
+    fn conversation_has_peer(&self, conv_id: &Uuid, peer_id: &Uuid) -> S_Result<bool> {
+        todo!()
     }
 
     fn create_conversation(
         &mut self,
-        conversation: &Conversation,
-    ) -> sickgnal_core::chat::storage::Result<()> {
+        conversation: &sickgnal_core::chat::storage::ConversationInfo,
+        peer_id: &Uuid,
+    ) -> S_Result<()> {
+        todo!()
+    }
+
+    fn create_group_conversation(
+        &mut self,
+        conversation: &sickgnal_core::chat::storage::ConversationInfo,
+        peers: impl Iterator<Item = Uuid>,
+    ) -> S_Result<()> {
+        todo!()
+    }
+
+    fn get_conversation_info(
+        &self,
+        id: &Uuid,
+    ) -> S_Result<Option<sickgnal_core::chat::storage::ConversationInfo>> {
+        todo!()
+    }
+
+    fn update_conversation_info(
+        &mut self,
+        info: &sickgnal_core::chat::storage::ConversationInfo,
+    ) -> S_Result<()> {
         todo!()
     }
 
     fn get_conversation(
         &self,
-        id: Uuid,
-    ) -> sickgnal_core::chat::storage::Result<Option<Conversation>> {
+        id: &Uuid,
+    ) -> S_Result<Option<sickgnal_core::chat::dto::Conversation>> {
         todo!()
     }
 
-    fn get_conversations_by_peer(
+    fn get_conversation_peers(
         &self,
-        peer_user_id: Uuid,
-    ) -> sickgnal_core::chat::storage::Result<Vec<Conversation>> {
+        id: &Uuid,
+    ) -> S_Result<Option<Vec<sickgnal_core::e2e::peer::Peer>>> {
         todo!()
     }
 
-    fn list_conversations(&self) -> sickgnal_core::chat::storage::Result<Vec<Conversation>> {
+    fn save_message(&mut self, message: &Message) -> S_Result<()> {
         todo!()
     }
 
-    fn update_conversation(
-        &mut self,
-        conversation: &Conversation,
-    ) -> sickgnal_core::chat::storage::Result<()> {
+    fn get_message(&self, conv_id: &Uuid, msg_id: &Uuid) -> S_Result<Option<Message>> {
         todo!()
     }
 
-    fn delete_conversation(&mut self, id: Uuid) -> sickgnal_core::chat::storage::Result<()> {
-        todo!()
-    }
-
-    fn delete_messages_for_conversation(
-        &mut self,
-        conversation_id: Uuid,
-    ) -> sickgnal_core::chat::storage::Result<()> {
-        todo!()
-    }
-
-    fn update_conversation_last_message(
-        &mut self,
-        id: Uuid,
-        timestamp: DateTime<Utc>,
-    ) -> sickgnal_core::chat::storage::Result<()> {
-        todo!()
-    }
-
-    fn update_conversation_unread_count(
-        &mut self,
-        id: Uuid,
-        count: i32,
-    ) -> sickgnal_core::chat::storage::Result<()> {
-        todo!()
-    }
-
-    fn mark_conversation_opened(&mut self, id: Uuid) -> sickgnal_core::chat::storage::Result<()> {
-        todo!()
-    }
-
-    fn create_message(&mut self, message: &Message) -> sickgnal_core::chat::storage::Result<()> {
-        todo!()
-    }
-
-    fn get_message(&self, id: Uuid) -> sickgnal_core::chat::storage::Result<Option<Message>> {
-        todo!()
-    }
-
-    fn get_message_by_local_id(
-        &self,
-        local_id: Uuid,
-    ) -> sickgnal_core::chat::storage::Result<Option<Message>> {
-        todo!()
-    }
-
-    fn list_messages(
-        &self,
-        conversation_id: Uuid,
-        limit: Option<i32>,
-        offset: Option<i32>,
-    ) -> sickgnal_core::chat::storage::Result<Vec<Message>> {
+    fn delete_message(&mut self, conversation_id: &Uuid, message_id: &Uuid) -> S_Result<()> {
         todo!()
     }
 
     fn update_message_status(
         &mut self,
-        id: Uuid,
+        conversation_id: &Uuid,
+        message_id: &Uuid,
         status: MessageStatus,
-    ) -> sickgnal_core::chat::storage::Result<()> {
-        todo!()
-    }
-
-    fn update_message(&mut self, message: &Message) -> sickgnal_core::chat::storage::Result<()> {
-        todo!()
-    }
-
-    fn delete_message(&mut self, id: Uuid) -> sickgnal_core::chat::storage::Result<()> {
-        todo!()
-    }
-
-    fn close(&mut self) -> sickgnal_core::chat::storage::Result<()> {
+    ) -> S_Result<()> {
         todo!()
     }
 }
@@ -667,6 +619,18 @@ impl E2EStorageBackend for Sqlite {
     /// Update the account token
     fn set_account_token(&mut self, token: String) -> K_Result<()> {
         AccountStore::set_auth_token(&self.conn, token).map_err(KeyStorageError::from)
+    }
+
+    fn peer(&self, id: &Uuid) -> K_Result<Option<sickgnal_core::e2e::peer::Peer>> {
+        PeerStore::find(&self.conn, *id).map_err(KeyStorageError::from)
+    }
+
+    fn save_peer(&self, peer: &sickgnal_core::e2e::peer::Peer) -> K_Result<()> {
+        PeerStore::persist(&self.conn, peer).map_err(KeyStorageError::from)
+    }
+
+    fn delete_peer(&self, id: &Uuid) -> K_Result<()> {
+        PeerStore::delete_by_id(&self.conn, id).map_err(KeyStorageError::from)
     }
 
     // ========== Identity and mid-term keys ==========
@@ -792,140 +756,6 @@ impl E2EStorageBackend for Sqlite {
 
     fn delete_session(&mut self, user_id: &Uuid) -> K_Result<()> {
         SessionStore::delete_by_id(&mut self.conn, user_id).map_err(KeyStorageError::from)
-    }
-}
-
-#[cfg(false)]
-impl E2EStorageBackend for Sqlite {
-    // ========== Session management ==========
-
-    fn load_session(&mut self, user_id: &Uuid) -> K_Result<Option<E2ESession>> {
-        let conn = self.conn.lock().unwrap();
-
-        let result: Option<Vec<u8>> = conn
-            .query_row(
-                "SELECT session_data_json FROM sessions WHERE peer_user_id = ?1",
-                params![user_id.to_string()],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(Self::db_error)?;
-
-        if let Some(data) = result {
-            let session: E2ESession = Self::deserialize_key_data(&data)?;
-            Ok(Some(session))
-        } else {
-            Ok(None)
-        }
-    }
-
-    fn load_all_sessions(&mut self) -> K_Result<Vec<E2ESession>> {
-        let conn = self.conn.lock().unwrap();
-
-        let mut stmt = conn
-            .prepare("SELECT session_data_json FROM sessions")
-            .map_err(Self::db_error)?;
-
-        let rows = stmt
-            .query_map([], |row| row.get::<_, Vec<u8>>(0))
-            .map_err(Self::db_error)?;
-
-        let mut sessions = Vec::new();
-        for row in rows {
-            let data = row.map_err(Self::db_error)?;
-            let session: E2ESession = Self::deserialize_key_data(&data)?;
-            sessions.push(session);
-        }
-
-        Ok(sessions)
-    }
-
-    fn save_session(&mut self, session: &E2ESession) -> K_Result<()> {
-        let conn = self.conn.lock().unwrap();
-        let data = Self::serialize_key_data(session)?;
-
-        conn.execute(
-            "INSERT INTO sessions (peer_user_id, session_data_json, updated_at)
-             VALUES (?1, ?2, ?3)
-             ON CONFLICT(peer_user_id) DO UPDATE SET
-             session_data_json = excluded.session_data_json,
-             updated_at = excluded.updated_at",
-            params![
-                session.correspondant_id.to_string(),
-                data,
-                Utc::now().to_rfc3339(),
-            ],
-        )
-        .map_err(Self::db_error)?;
-
-        Ok(())
-    }
-
-    fn delete_session(&mut self, user_id: &Uuid) -> K_Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "DELETE FROM sessions WHERE peer_user_id = ?1",
-            params![user_id.to_string()],
-        )
-        .map_err(Self::db_error)?;
-        Ok(())
-    }
-
-    fn save_ephemeral_key(&mut self, keypair: EphemeralSecretKey) -> K_Result<()> {
-        let (id, secret) = keypair.into_parts();
-        let data = secret.to_bytes().to_vec();
-        {
-            let conn = self.conn.lock().unwrap();
-            Self::upsert_key(&conn, &id.to_string(), "ephemeral", &data)?;
-        }
-        self.ephemeral_keys_cache.insert(id, secret);
-        Ok(())
-    }
-
-    fn save_many_ephemeral_keys(
-        &mut self,
-        keypairs: impl Iterator<Item = EphemeralSecretKey>,
-    ) -> K_Result<()> {
-        for keypair in keypairs {
-            self.save_ephemeral_key(keypair)?;
-        }
-        Ok(())
-    }
-
-    fn add_many_ephemeral_key(
-        &mut self,
-        keypairs: impl Iterator<Item = X25519Secret>,
-    ) -> K_Result<impl Iterator<Item = Uuid>> {
-        let mut ids = Vec::new();
-        for keypair in keypairs {
-            ids.push(self.add_ephemeral_key(keypair)?);
-        }
-        Ok(ids.into_iter())
-    }
-
-    fn cleanup_session_keys(
-        &mut self,
-        user: &Uuid,
-        current_sending_key: &Uuid,
-        current_receiving_key: &Uuid,
-    ) -> K_Result<()> {
-        let keep_send = format!("{}_{}", user, current_sending_key);
-        let keep_recv = format!("{}_{}", user, current_receiving_key);
-        let user_str = user.to_string();
-        {
-            let conn = self.conn.lock().unwrap();
-            conn.execute(
-                "DELETE FROM keys WHERE key_type = 'session_key'
-                 AND substr(key_id, 1, 36) = ?1
-                 AND key_id != ?2 AND key_id != ?3",
-                params![user_str, keep_send, keep_recv],
-            )
-            .map_err(Self::db_error)?;
-        }
-        self.session_keys_cache.retain(|(u, k), _| {
-            *u != *user || *k == *current_sending_key || *k == *current_receiving_key
-        });
-        Ok(())
     }
 }
 

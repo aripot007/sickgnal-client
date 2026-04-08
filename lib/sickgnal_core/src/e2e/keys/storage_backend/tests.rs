@@ -88,6 +88,70 @@ macro_rules! test_e2e_storage_backend {
         }
 
         #[test]
+        fn test_peer() {
+            use ::sickgnal_core::e2e::peer::Peer;
+            use ::uuid::Uuid;
+
+            let mut backend = $setup;
+
+            let peer = Peer {
+                id: Uuid::new_v4(),
+                username: Some("Bob".into()).into(),
+                fingerprint: Some("0000000000000000000000000000000000000000".into()),
+            };
+
+            assert!(
+                backend
+                    .peer(&peer.id)
+                    .expect("error getting peer")
+                    .is_none()
+            );
+
+            backend.save_peer(&peer).expect("error saving peer");
+
+            let stored_peer = backend
+                .peer(&peer.id)
+                .expect("error getting peer")
+                .expect("the peer was not stored");
+
+            assert_eq!(stored_peer, peer);
+
+            backend.delete_peer(&peer.id).expect("error deleting peer");
+
+            assert!(
+                backend
+                    .peer(&peer.id)
+                    .expect("error getting peer")
+                    .is_none()
+            );
+
+            // Try some peer without some fields
+            backend
+                .save_peer(&Peer {
+                    id: Uuid::new_v4(),
+                    username: None,
+                    fingerprint: None,
+                })
+                .expect("error saving peer with only id");
+
+            backend
+                .save_peer(&Peer {
+                    id: Uuid::new_v4(),
+                    username: None,
+                    fingerprint: Some("0000000000000000000000000000000000000000".into()),
+                })
+                .expect("error saving peer without username");
+
+            backend
+                .save_peer(&Peer {
+                    id: Uuid::new_v4(),
+                    username: Some("Bob".into()).into(),
+                    fingerprint: None,
+                })
+                .expect("error saving peer without fingerprint");
+        }
+
+        #[test]
         fn test_identity_keypair() {
             use ::sickgnal_core::e2e::keys::IdentityKeyPair;
 
@@ -485,7 +549,6 @@ macro_rules! test_e2e_storage_backend {
         #[test]
         fn test_sessions() {
             use ::sickgnal_core::e2e::client::session::E2ESession;
-
             let mut backend = $setup;
 
             let user_id = Uuid::new_v4();

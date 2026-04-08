@@ -48,7 +48,7 @@ where
     /// Send a [`ChatMessage`] to a user.
     ///
     /// Opens a new session if necessary
-    pub async fn send(&mut self, to: Uuid, message: ChatMessage) -> Result<()> {
+    pub(crate) async fn send(&mut self, to: Uuid, message: ChatMessage) -> Result<()> {
         let request;
         {
             let mut state = self.client_state.lock().unwrap();
@@ -137,6 +137,8 @@ where
     // region:    Util functions
 
     /// Send a synchronous request and wait for the response
+    ///
+    /// Maps error responses to the corresponding [`Error`]
     async fn request(&mut self, message: E2EMessage) -> Result<E2EMessage> {
         let (rq, channel) = {
             let mut state = self.client_state.lock().unwrap();
@@ -147,7 +149,12 @@ where
 
         // FIXME: Handle error correctly
         // Wait for the response
-        channel.await.or(Err(Error::ReceiveWorkerStopped))
+        let resp = channel.await.or(Err(Error::ReceiveWorkerStopped))?;
+
+        match resp {
+            E2EMessage::Error { code } => Err(Error::from(code)),
+            m => Ok(m),
+        }
     }
 
     // endregion: Util functions

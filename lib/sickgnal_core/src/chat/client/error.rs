@@ -2,8 +2,11 @@ use uuid::Uuid;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Storage error: {0}")]
-    Storage(#[from] crate::chat::storage::ChatStorageError),
+    #[error("Chat Storage error: {0}")]
+    ChatStorage(#[from] crate::chat::storage::ChatStorageError),
+
+    #[error("E2E Storage error: {0}")]
+    E2EStorage(#[from] crate::e2e::keys::storage_backend::KeyStorageError),
 
     #[error("E2E protocol error: {0}")]
     E2E(#[from] crate::e2e::client::Error),
@@ -17,8 +20,8 @@ pub enum Error {
     #[error("Not connected")]
     NotConnected,
 
-    #[error("No conversation found: {0}")]
-    NoConversation(Uuid),
+    #[error("conversation {0} not found")]
+    ConversationNotFound(Uuid),
 
     #[error("Unknown peer {0}")]
     UnknownPeer(Uuid),

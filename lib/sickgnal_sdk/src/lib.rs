@@ -3,7 +3,6 @@ pub mod client;
 pub mod storage;
 pub mod tls;
 
-pub use client::*;
 pub use tls::TlsConfig;
 
 // Re-export core crate

@@ -7,8 +7,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use sickgnal_core::chat::client::Event;
-use sickgnal_core::chat::storage::{Conversation, Message};
+use sickgnal_core::chat::storage::Message;
+use sickgnal_core::chat::{client::ChatEvent, dto::Conversation};
 use sickgnal_core::e2e::message::UserProfile;
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -34,10 +34,10 @@ impl SyncBridge {
         existing_account: bool,
         server_addr: &str,
         tls_config: &TlsConfig,
-    ) -> Result<Self> {
+    ) -> Result<(Self, mpsc::Receiver<ChatEvent>)> {
         let rt = Arc::new(tokio::runtime::Runtime::new()?);
 
-        let sdk = rt.block_on(Sdk::connect(
+        let (sdk, event_rx) = rt.block_on(Sdk::connect(
             username,
             password,
             dir,
@@ -46,15 +46,11 @@ impl SyncBridge {
             tls_config,
         ))?;
 
-        Ok(Self { rt, sdk })
+        Ok((Self { rt, sdk }, event_rx))
     }
 
     pub fn user_id(&self) -> Uuid {
         self.sdk.user_id()
-    }
-
-    pub fn take_event_rx(&mut self) -> mpsc::Receiver<Event> {
-        self.sdk.take_event_rx()
     }
 
     // ─── Conversations ──────────────────────────────────────────────────
@@ -100,19 +96,21 @@ impl SyncBridge {
             .get_messages_paginated(conversation_id, limit, offset)
     }
 
-    pub fn send_message(&self, conversation_id: Uuid, text: String) -> Result<Message> {
+    pub fn send_message(&mut self, conversation_id: Uuid, text: String) -> Result<Message> {
         self.rt
-            .block_on(self.sdk.send_message(conversation_id, text))
+            .block_on(self.sdk.send_message(conversation_id, text, None))
     }
 
     pub fn send_reply(
-        &self,
+        &mut self,
         conversation_id: Uuid,
         text: String,
         reply_to_id: Uuid,
     ) -> Result<Message> {
-        self.rt
-            .block_on(self.sdk.send_reply(conversation_id, text, reply_to_id))
+        self.rt.block_on(
+            self.sdk
+                .send_message(conversation_id, text, Some(reply_to_id)),
+        )
     }
 
     pub fn edit_message(
@@ -153,11 +151,11 @@ impl SyncBridge {
 
     // ─── Profile ────────────────────────────────────────────────────────
 
-    pub fn get_profile_by_username(&self, username: String) -> Result<UserProfile> {
+    pub fn get_profile_by_username(&mut self, username: String) -> Result<UserProfile> {
         self.rt.block_on(self.sdk.get_profile_by_username(username))
     }
 
-    pub fn get_profile_by_id(&self, id: Uuid) -> Result<UserProfile> {
+    pub fn get_profile_by_id(&mut self, id: Uuid) -> Result<UserProfile> {
         self.rt.block_on(self.sdk.get_profile_by_id(id))
     }
 }

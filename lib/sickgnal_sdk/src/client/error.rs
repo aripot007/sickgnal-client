@@ -1,3 +1,4 @@
+use sickgnal_core::{chat::storage::ChatStorageError, e2e::keys::KeyStorageError};
 use thiserror::Error;
 
 /// Top-level SDK error type.
@@ -18,17 +19,26 @@ pub enum Error {
     #[error("Storage error: {0}")]
     Storage(#[from] crate::storage::Error),
 
-    /// Error originating from the SDK storage layer (config, SQLite setup)
-    #[error("Chat Storage error: {0}")]
-    ChatStorage(#[from] sickgnal_core::chat::storage::Error),
-
-    /// Error originating from the SDK storage layer (config, SQLite setup)
-    #[error("E2E Storage error: {0}")]
-    E2EStorage(#[from] sickgnal_core::e2e::keys::KeyStorageError),
-
     /// Low-level I/O error (e.g. TCP connection)
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    /// We cannot find the requested conversation
+    #[error("conversation not found")]
+    ConversationNotFound,
+}
+
+// Convert back our storage errors
+impl From<ChatStorageError> for Error {
+    fn from(value: ChatStorageError) -> Self {
+        Error::Storage(value.into())
+    }
+}
+
+impl From<KeyStorageError> for Error {
+    fn from(value: KeyStorageError) -> Self {
+        Error::Storage(value.into())
+    }
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -32,7 +32,7 @@ pub trait E2EStorageBackend {
     fn peer(&self, id: &Uuid) -> Result<Option<Peer>>;
 
     /// Save or update information about a peer
-    fn save_peer(&self, id: &Peer) -> Result<()>;
+    fn save_peer(&self, peer: &Peer) -> Result<()>;
 
     /// Delete a known peer
     fn delete_peer(&self, id: &Uuid) -> Result<()>;

@@ -1,8 +1,8 @@
 use const_format::{concatcp, formatcp};
 
 use crate::storage::store::{
-    account::AccountStore, ephemeral_keys::EphemeralKeyStore, session::SessionStore,
-    session_keys::SessionKeyStore,
+    account::AccountStore, ephemeral_keys::EphemeralKeyStore, peers::PeerStore,
+    session::SessionStore, session_keys::SessionKeyStore,
 };
 
 /// SQL schema for the SQLite database
@@ -32,12 +32,6 @@ macro_rules! create_store_tables {
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
--- Known peers, we don't necessarily have a session with them
-CREATE TABLE IF NOT EXISTS peers (
-    id TEXT PRIMARY KEY NOT NULL,
-    name TEXT
-);
-
 -- Conversations table: stores information about each conversation
 CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY NOT NULL,
@@ -82,10 +76,6 @@ CREATE INDEX IF NOT EXISTS idx_messages_status
 -- Index for finding unread messages
 CREATE INDEX IF NOT EXISTS idx_unread_messages
     ON messages(conversation_id, sender_id) WHERE status = 'delivered';
-
--- Index peers we need to resolve the name of
-CREATE INDEX IF NOT EXISTS idx_unknown_peers
-    ON peers(id) WHERE name IS NULL;
 "#;
 
 /// SQL to enable WAL mode for better concurrency
@@ -104,7 +94,8 @@ pub fn get_initialization_sql() -> Vec<&'static str> {
             AccountStore,
             EphemeralKeyStore,
             SessionKeyStore,
-            SessionStore
+            SessionStore,
+            PeerStore
         ),
         CREATE_INDEXES,
     ];

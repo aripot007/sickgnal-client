@@ -5,13 +5,14 @@ use uuid::Uuid;
 
 use crate::{
     chat::{
-        client::{ChatEvent, ClientBuilder, Error, error::Result, worker},
-        message::{ChatMessage, ChatMessageKind, ContentMessage, ControlMessage},
+        client::{ChatEvent, Error, builder::ClientBuilder, error::Result, worker},
+        dto::Conversation,
+        message::{ChatMessage, ChatMessageKind, Content, ContentMessage, ControlMessage},
         storage::{ConversationInfo, Message, MessageStatus, SharedStorageBackend, StorageBackend},
     },
     e2e::{
-        client::{Account, client_handle::ClientHandle},
-        message_stream::E2EMessageStream,
+        client::client_handle::ClientHandle, message::UserProfile,
+        message_stream::E2EMessageStream, peer::Peer,
     },
 };
 
@@ -23,8 +24,14 @@ pub struct ChatClientHandle<S>
 where
     S: SharedStorageBackend + 'static,
 {
+    /// The id of the current E2E account
+    ///
+    /// It should not get out of sync with the E2E client since it does not change,
+    /// unless the `e2e_client` field gets manually changed
+    account_id: Uuid,
+    e2e_client: ClientHandle<S>,
+
     pub(super) storage: S,
-    pub(super) e2e_client: ClientHandle<S>,
     pub(super) event_tx: mpsc::Sender<ChatEvent>,
 }
 
@@ -61,6 +68,7 @@ where
         let (e2e_client, recv_rx, recv_task, send_task) = e2e_client.start_async_workers().await?;
 
         let state = Self {
+            account_id: e2e_client.account().id,
             storage,
             e2e_client,
             event_tx,
@@ -76,15 +84,142 @@ where
         todo!()
     }
 
-    /// Get the current account
-    pub fn account(&self) -> Account {
-        self.e2e_client.account()
-    }
-
     /// Handle an incoming message
     pub(super) async fn handle_incomming_message(&mut self, msg: ChatMessage) -> Result<()> {
         handle_incomming_message(&mut self.storage, &self.event_tx, msg).await
     }
+
+    // region:    Public API
+
+    /// Get the current account id
+    #[inline]
+    pub fn account_id(&self) -> Uuid {
+        self.account_id
+    }
+
+    /// Get a user's profile by its id
+    #[inline]
+    pub async fn get_profile_by_id(&mut self, id: Uuid) -> Result<UserProfile> {
+        self.e2e_client
+            .get_profile_by_id(id)
+            .await
+            .map_err(Error::from)
+    }
+
+    /// Get a user's profile by its username
+    #[inline]
+    pub async fn get_profile_by_username(&mut self, username: String) -> Result<UserProfile> {
+        self.e2e_client
+            .get_profile_by_username(username)
+            .await
+            .map_err(Error::from)
+    }
+
+    /// Create a new conversation with a peer
+    ///
+    /// Returns the created conversation
+    pub async fn create_conversation(
+        &mut self,
+        peer_id: Uuid,
+        initial_message: Option<Content>,
+    ) -> Result<Conversation> {
+        // FIXME: Created conversations might appear at the end since there is no message
+
+        let info = ConversationInfo {
+            id: Uuid::new_v4(),
+            custom_title: None,
+        };
+
+        let initial_message = initial_message.map(|content| ContentMessage {
+            id: Uuid::new_v4(),
+            reply_to: None,
+            content,
+        });
+
+        let rq = ChatMessage::new_open_conv(info.id, initial_message.clone());
+
+        // First message of the conversation that should be saved
+        // when the conversation is opened
+        let first_msg = initial_message.map(|msg| {
+            Message::from_content_message_with_status(
+                self.account_id,
+                rq.conversation_id,
+                rq.issued_at,
+                msg,
+                MessageStatus::Sent, // We only store the message after sending it
+            )
+        });
+
+        self.e2e_client.send(peer_id, rq).await?;
+
+        self.storage.create_conversation(&info, &peer_id)?;
+
+        // Save the initial message if there was one
+        if let Some(msg) = first_msg {
+            self.storage.save_message(&msg)?;
+        }
+
+        let peer = self
+            .storage
+            .peer(&peer_id)?
+            .unwrap_or(Peer::default(peer_id));
+
+        let conv = Conversation::from_info(info, vec![peer]);
+
+        Ok(conv)
+    }
+
+    /// Send a message in a conversation, return the created message
+    pub async fn send_message(
+        &mut self,
+        conversation_id: Uuid,
+        content: Content,
+        reply_to: Option<Uuid>,
+    ) -> Result<Message> {
+        let peers = self
+            .storage
+            .get_conversation_peers(&conversation_id)?
+            .ok_or(Error::ConversationNotFound(conversation_id))?;
+
+        let chat_msg = ChatMessage::new_content_reply(conversation_id, content, reply_to)
+            .with_sender_id(self.account_id);
+
+        let mut msg_dto = Message::from_message_unchecked(chat_msg.clone());
+
+        self.storage.save_message(&msg_dto)?;
+
+        for peer in peers {
+            self.e2e_client.send(peer.id, chat_msg.clone()).await?;
+        }
+
+        self.storage
+            .update_message_status(&conversation_id, &msg_dto.id, MessageStatus::Sent)?;
+
+        msg_dto.status = MessageStatus::Sent;
+
+        Ok(msg_dto)
+    }
+
+    // endregion: Public API
+
+    // async fn update_msg_status(
+    //     &mut self,
+    //     conversation_id: Uuid,
+    //     message_id: Uuid,
+    //     status: MessageStatus,
+    // ) -> Result<()> {
+    //     self.storage
+    //         .update_message_status(&conversation_id, &message_id, status)?;
+
+    //     self.event_tx
+    //         .send(ChatEvent::MessageStatusUpdated {
+    //             conversation_id,
+    //             message_id,
+    //             status,
+    //         })
+    //         .await
+    //         .map_err(|_| Error::EventChannelClosed)
+    // }
 }
 
 // We need to detach the processing functions to be able to use them
