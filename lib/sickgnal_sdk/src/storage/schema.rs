@@ -3,7 +3,7 @@ use sickgnal_core::{chat::dto::Conversation, e2e::peer::Peer};
 
 use crate::storage::store::{
     account::AccountStore, conversation::ConversationStore, ephemeral_keys::EphemeralKeyStore,
-    peers::PeerStore, session::SessionStore, session_keys::SessionKeyStore,
+    message::MessageStore, peers::PeerStore, session::SessionStore, session_keys::SessionKeyStore,
 };
 
 /// SQL schema for the SQLite database
@@ -45,6 +45,7 @@ const CREATE_TABLES: &str = create_store_tables!(
     PeerStore,
     ConversationStore as Store<Conversation>,
     ConversationStore as Store<Peer>,
+    MessageStore,
 );
 
 /// SQL to enable WAL mode for better concurrency

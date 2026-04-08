@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use sickgnal_core::chat::client::Event as SdkEvent;
+use sickgnal_core::chat::client::ChatEvent as SdkEvent;
 use sickgnal_core::chat::storage::{Conversation, Message};
 use sickgnal_sdk::TlsConfig;
 use sickgnal_sdk::client::SyncBridge;

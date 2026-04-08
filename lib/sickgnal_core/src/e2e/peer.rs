@@ -27,4 +27,9 @@ impl Peer {
             fingerprint: None,
         }
     }
+
+    /// Format the fingerprint as a displayable string to the user
+    pub fn format_fingerprint(&self) -> String {
+        todo!()
+    }
 }

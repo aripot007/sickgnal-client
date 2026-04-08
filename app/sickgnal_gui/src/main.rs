@@ -1,4 +1,4 @@
-use sickgnal_sdk::{account::AccountFile, client::SdkClient, core::chat::client::Event};
+use sickgnal_sdk::{account::AccountFile, client::SdkClient, core::chat::client::ChatEvent};
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -169,16 +169,16 @@ fn spawn_sdk(
     });
 }
 
-fn handle_sdk_event(ui: AppWindow, event: Event) {
+fn handle_sdk_event(ui: AppWindow, event: ChatEvent) {
     match event {
-        Event::NewMessage(id, msg) => todo!(),
-        Event::MessageStatusUpdate(uuid, message_status) => todo!(),
-        Event::ConversationCreated(conversation) => todo!(),
-        Event::ConversationDeleted(uuid) => todo!(),
-        Event::MessageEdited { .. } => todo!(),
-        Event::MessageDeleted { .. } => todo!(),
-        Event::TypingIndicator(uuid) => todo!(),
-        Event::ConnectionStateChanged(connection_state) => todo!(),
+        ChatEvent::NewMessage(id, msg) => todo!(),
+        ChatEvent::MessageStatusUpdated(uuid, message_status) => todo!(),
+        ChatEvent::ConversationCreated(conversation) => todo!(),
+        ChatEvent::ConversationDeleted(uuid) => todo!(),
+        ChatEvent::MessageEdited { .. } => todo!(),
+        ChatEvent::MessageDeleted { .. } => todo!(),
+        ChatEvent::TypingIndicator(uuid) => todo!(),
+        ChatEvent::ConnectionStateChanged(connection_state) => todo!(),
     }
 }
 

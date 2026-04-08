@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-use sickgnal_core::chat::client::Event as SdkEvent;
+use sickgnal_core::chat::client::ChatEvent as SdkEvent;
 use sickgnal_core::chat::storage::MessageStatus;
 use sickgnal_sdk::TlsConfig;
 use uuid::Uuid;
@@ -388,7 +388,7 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     println!("    OK - send_read_receipt call succeeded");
 
     let read_event = wait_for_event(&mut alice_event_rx, Duration::from_secs(5), |e| {
-        matches!(e, SdkEvent::MessageStatusUpdate(_, MessageStatus::Read))
+        matches!(e, SdkEvent::MessageStatusUpdated(_, MessageStatus::Read))
     });
     assert!(
         read_event.is_some(),
@@ -409,7 +409,7 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     let delivered_event = wait_for_event(&mut alice_event_rx, Duration::from_secs(5), |e| {
         matches!(
             e,
-            SdkEvent::MessageStatusUpdate(_, MessageStatus::Delivered)
+            SdkEvent::MessageStatusUpdated(_, MessageStatus::Delivered)
         )
     });
     assert!(

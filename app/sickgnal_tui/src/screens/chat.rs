@@ -86,7 +86,7 @@ pub fn draw(f: &mut Frame, app: &App) {
 
         for msg in &app.messages {
             let is_mine = my_id.is_some_and(|id| id == msg.sender_id);
-            let time = msg.timestamp.format("%H:%M").to_string();
+            let time = msg.issued_at.format("%H:%M").to_string();
 
             let status_str = if is_mine {
                 match msg.status {

@@ -1,5 +1,6 @@
 pub mod account;
 pub mod client;
+pub mod dto;
 pub mod storage;
 pub mod tls;
 

@@ -27,6 +27,7 @@ use sickgnal_core::chat::storage::{Message, MessageStatus, SharedStorageBackend,
 use sickgnal_core::e2e::message::UserProfile;
 
 use crate::client::Error;
+use crate::dto::ConversationEntry;
 use crate::storage::Sqlite;
 use crate::tls::TlsConfig;
 
@@ -34,15 +35,12 @@ use super::{Result, SdkClient};
 
 /// High-level SDK for the Sickgnal messaging client.
 ///
-/// This is the main interface for any frontend (TUI, GUI, mobile, web, etc.).
-/// It owns the connection lifecycle, storage, event routing, and provides
-/// simple methods for all chat operations.
+/// This is a handle to the underlying clients, and can be `cloned` and passed to
+/// multiple trheads safely
+#[derive(Clone)]
 pub struct Sdk {
     /// chat client
     chat_client: ChatClientHandle<Arc<Mutex<Sqlite>>>,
-
-    /// Current user ID
-    user_id: Uuid,
 
     /// Shared storage for synchronous queries
     storage: Arc<Mutex<Sqlite>>,
@@ -64,15 +62,12 @@ impl Sdk {
             SdkClient::new(username, dir, password, server_addr, tls_config).await?
         };
 
-        let user_id = sdk_client.chatclient.account_id();
-
         // Clone storage for different owners
         let storage = sdk_client.storage.clone();
 
         Ok((
             Self {
                 chat_client: sdk_client.chatclient,
-                user_id,
                 storage,
             },
             sdk_client.event_rx,
@@ -82,33 +77,33 @@ impl Sdk {
     // ─── Public API ─────────────────────────────────────────────────────
 
     /// Get the current user's ID.
+    #[inline]
     pub fn user_id(&self) -> Uuid {
-        self.user_id
+        self.chat_client.account_id()
     }
 
     // ─── Conversations ──────────────────────────────────────────────────
 
     /// List all conversations, ordered by last message time.
-    pub fn list_conversations(&self) -> Result<Vec<Conversation>> {
+    pub fn list_conversations(&self) -> Result<Vec<ConversationEntry>> {
         let a: usize;
         todo!()
         // Ok(self.storage.lock().unwrap().list_conversations()?)
     }
 
-    /// Start a new conversation with a peer by username.
+    /// Start a new conversation with a peer by uuid.
+    ///
+    /// User [`Sdk::get_profile_by_username`] if you need to get the id
+    /// from a username.
     pub async fn start_conversation(
         &mut self,
-        username: String,
-        initial_message: Option<String>,
+        user_id: Uuid,
+        initial_message: Option<Content>,
     ) -> Result<Conversation> {
-        let profile = self.get_profile_by_username(username).await?;
-
-        let initial_message = initial_message.map(Content::Text);
-
         // Create a new conversation
         let conv = self
             .chat_client
-            .create_conversation(profile.id, initial_message)
+            .create_conversation(user_id, initial_message)
             .await?;
 
         Ok(conv)
@@ -126,7 +121,7 @@ impl Sdk {
         // Ok(self.storage.get_conversation(conversation_id)?)
     }
 
-    /// Mark all messages in a conversation as read and reset unread count.
+    /// Mark all messages in a conversation as read
     pub fn mark_conversation_as_read(&self, conversation_id: Uuid) -> Result<()> {
         todo!()
         // let mut storage = self.storage.lock().unwrap();
@@ -215,8 +210,8 @@ impl Sdk {
         Ok(())
     }
 
-    /// Send a read receipt for a message.
-    pub async fn send_read_receipt(&self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
+    /// Mark a message as read
+    pub async fn mark_as_read(&self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
         // let peer_user_id = self.peer_for_conversation(conversation_id)?;
 
         // let chat_message = ChatMessage::new_ack_read(conversation_id, message_id);
@@ -239,34 +234,9 @@ impl Sdk {
         // self.send_raw(peer_user_id, chat_message).await
     }
 
-    /// Send a delivery receipt for a message.
-    pub async fn send_delivery_receipt(
-        &self,
-        conversation_id: Uuid,
-        message_id: Uuid,
-    ) -> Result<()> {
-        todo!()
-        // let peer_user_id = self.peer_for_conversation(conversation_id)?;
-
-        // let chat_message = ChatMessage::new_ack_reception(conversation_id, message_id);
-        // self.send_raw(peer_user_id, chat_message).await?;
-
-        // {
-        //     let mut storage = self.storage.lock().unwrap();
-        //     let _ = storage.update_message_status(message_id, MessageStatus::Delivered);
-        // }
-
-        // Ok(())
-    }
-
     // ─── Verification ─────────────────────────────────────────────────
 
     /// Get the verification fingerprint for a peer's identity key.
-    ///
-    /// This is a **placeholder** that returns the peer's user ID as a hex string.
-    /// Once the E2E library exposes a real fingerprint for the peer's identity key,
-    /// this function will call it instead. The UI should display this value so
-    /// users can verify each other's identities out-of-band.
     pub fn get_peer_fingerprint(&self, peer_user_id: Uuid) -> String {
         // TODO: Replace with real identity key fingerprint from the E2E client
         // e.g. e2e_client.get_peer_identity_fingerprint(peer_user_id)

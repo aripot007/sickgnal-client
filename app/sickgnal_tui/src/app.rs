@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::Utc;
 use crossterm::event::{KeyCode, KeyEvent};
-use sickgnal_core::chat::client::Event as SdkEvent;
+use sickgnal_core::chat::client::ChatEvent as SdkEvent;
 use sickgnal_core::chat::storage::{Conversation, Message};
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -657,7 +657,7 @@ impl App {
                     conv.last_message_at = Some(Utc::now());
                 }
             }
-            SdkEvent::MessageStatusUpdate(msg_id, status) => {
+            SdkEvent::MessageStatusUpdated(msg_id, status) => {
                 if let Some(msg) = self.messages.iter_mut().find(|m| m.id == msg_id) {
                     msg.status = status;
                 }

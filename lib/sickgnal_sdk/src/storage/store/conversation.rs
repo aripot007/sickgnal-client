@@ -1,11 +1,17 @@
 use rusqlite::{OptionalExtension, params};
 use sickgnal_core::{
-    chat::{dto::Conversation, storage::ConversationInfo},
+    chat::{
+        dto::Conversation,
+        storage::{ConversationInfo, Message},
+    },
     e2e::peer::Peer,
 };
 use uuid::Uuid;
 
-use crate::storage::{Error, error::Result, store::Store};
+use crate::{
+    dto::ConversationEntry,
+    storage::{Error, error::Result, store::Store},
+};
 
 pub struct ConversationStore;
 
@@ -171,8 +177,89 @@ impl ConversationStore {
         Ok(Some(Conversation::from_info(info, peers)))
     }
 
+    pub fn list_conversations(
+        conn: &rusqlite::Connection,
+        conv_id: &Uuid,
+    ) -> Result<Vec<ConversationEntry>> {
+        ConversationEntry {
+            conversation: Conversation {
+                id: todo!(),
+                title: todo!(),
+                peers: todo!(),
+            },
+            unread_messages_count: 0,
+            last_message: Some(Message {
+                id: todo!(),
+                conversation_id: todo!(),
+                sender_id: todo!(),
+                content: todo!(),
+                issued_at: todo!(),
+                status: todo!(),
+                reply_to_id: todo!(),
+            }),
+        };
+
+        todo!()
+    }
+
     pub fn delete_by_id(conn: &rusqlite::Connection, id: &Uuid) -> Result<()> {
         conn.execute("DELETE FROM conversations WHERE id = ?1", [id.to_string()])?;
         Ok(())
     }
 }
+
+const LIST_CONVERSATIONS_STMT: &str = r#"
+WITH MyAccount AS (
+    SELECT user_id FROM account LIMIT 1
+),
+UnreadCounts AS (
+    -- Get the number of unread messages for each conversation
+    SELECT 
+        m.conversation_id,
+        COUNT(*) as count
+    FROM messages m
+    WHERE m.status = 'delivered' 
+      AND m.sender_id != (SELECT user_id FROM MyAccount)
+    GROUP BY m.conversation_id
+),
+LatestMessages AS (
+    -- Get the latest message for each conversation
+    SELECT * FROM (
+        SELECT 
+            *,
+            ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY timestamp DESC) as rn
+        FROM messages
+    ) WHERE rn = 1
+),
+PeerList AS (
+    -- Aggregates peers into a JSON array for easy mapping to Vec<Peer>
+    SELECT 
+        cp.conversation_id,
+        json_group_array(json_object(
+            'id', p.id,
+            'username', p.username,
+            'fingerprint', p.fingerprint
+        )) as peers_json
+    FROM conversation_participants cp
+    JOIN peers p ON cp.peer_id = p.id
+    GROUP BY cp.conversation_id
+)
+SELECT 
+    c.id,
+    c.custom_title,
+    COALESCE(pl.peers_json, '[]') as peers_json,
+    COALESCE(uc.count, 0) as unread_messages_count,
+    -- Last Message Fields
+    lm.id as last_msg_id,
+    lm.sender_id as last_msg_sender,
+    lm.content as last_msg_content,
+    lm.timestamp as last_msg_at,
+    lm.status as last_msg_status,
+    lm.reply_to_id as last_msg_reply_id
+FROM conversations c
+LEFT JOIN PeerList pl ON c.id = pl.conversation_id
+LEFT JOIN UnreadCounts uc ON c.id = uc.conversation_id
+LEFT JOIN LatestMessages lm ON c.id = lm.conversation_id
+ORDER BY lm.timestamp DESC
+LIMIT :limit OFFSET :offset; 
+"#;
