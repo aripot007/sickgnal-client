@@ -19,20 +19,18 @@ use crate::{
 ///
 /// The state contains information shared between the sync and async mode of the client
 #[derive(Clone)]
-pub struct ChatClientState<S>
+pub struct ChatClientHandle<S>
 where
     S: SharedStorageBackend + 'static,
-    // M: E2EMessageStream,
 {
     pub(super) storage: S,
     pub(super) e2e_client: ClientHandle<S>,
     pub(super) event_tx: mpsc::Sender<ChatEvent>,
 }
 
-impl<S> ChatClientState<S>
+impl<S> ChatClientHandle<S>
 where
     S: SharedStorageBackend + 'static,
-    // M: E2EMessageStream,
 {
     /// Create a client state by synchronizing with the server
     pub(crate) async fn sync_builder<M: E2EMessageStream>(

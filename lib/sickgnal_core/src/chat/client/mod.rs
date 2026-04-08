@@ -1,7 +1,7 @@
 mod builder;
+mod client;
 mod error;
 mod event;
-mod state;
 mod r#struct;
 mod worker;
 

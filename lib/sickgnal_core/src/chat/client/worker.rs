@@ -2,13 +2,15 @@ use tokio::sync::mpsc;
 use tracing::{debug, error};
 
 use crate::chat::{
-    client::state::ChatClientState, message::ChatMessage, storage::SharedStorageBackend,
+    client::client::ChatClientHandle, message::ChatMessage, storage::SharedStorageBackend,
 };
 
 /// The worker to receive and handle [`ChatMessage`], and
 /// dispatch the correct events to the client
-pub async fn receive_loop<S>(mut state: ChatClientState<S>, mut msg_rx: mpsc::Receiver<ChatMessage>)
-where
+pub async fn receive_loop<S>(
+    mut state: ChatClientHandle<S>,
+    mut msg_rx: mpsc::Receiver<ChatMessage>,
+) where
     S: SharedStorageBackend + 'static,
 {
     debug!("Starting chat messages receiving worker");

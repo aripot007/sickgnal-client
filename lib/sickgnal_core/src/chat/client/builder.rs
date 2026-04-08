@@ -1,5 +1,5 @@
 use crate::chat::client::ChatEvent;
-use crate::chat::client::state::ChatClientState;
+use crate::chat::client::client::ChatClientHandle;
 use crate::e2e::client::{Account, E2EClient};
 use crate::{
     chat::{client::error::Result, storage::SharedStorageBackend},
@@ -58,8 +58,8 @@ where
 
     /// Synchronizes the client with the server, and return the initialized
     /// client with the worker tasks.
-    pub async fn start(self, runtime: tokio::runtime::Handle) -> Result<ChatClientState<S>> {
-        let state = ChatClientState::sync_builder(self, runtime).await?;
+    pub async fn start(self, runtime: tokio::runtime::Handle) -> Result<ChatClientHandle<S>> {
+        let state = ChatClientHandle::sync_builder(self, runtime).await?;
 
         Ok(state)
     }
