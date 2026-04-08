@@ -22,6 +22,20 @@ pub enum Error {
     /// Low-level I/O error (e.g. TCP connection)
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    /// When we try to load a non-existant account
+    #[error("no account")]
+    NoAccount,
+
+    /// When the account file is not in the expected format
+    #[error("invalid account file")]
+    InvalidAccountFile,
+
+    #[error("argon2 error: {0}")]
+    Argon2(argon2::Error),
+
+    #[error("invalid password")]
+    InvalidPassword,
 }
 
 // Convert back our storage errors
@@ -34,6 +48,18 @@ impl From<ChatStorageError> for Error {
 impl From<KeyStorageError> for Error {
     fn from(value: KeyStorageError) -> Self {
         Error::Storage(value.into())
+    }
+}
+
+impl From<argon2::Error> for Error {
+    fn from(value: argon2::Error) -> Self {
+        Error::Argon2(value)
+    }
+}
+
+impl From<argon2::password_hash::Error> for Error {
+    fn from(_value: argon2::password_hash::Error) -> Self {
+        Error::InvalidPassword
     }
 }
 

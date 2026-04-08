@@ -26,6 +26,9 @@ pub enum Error {
     #[error("uuid error : {0}")]
     UuidError(#[from] uuid::Error),
 
+    #[error("invalid date : {0}")]
+    InvalidDate(#[from] chrono::ParseError),
+
     #[error("error encoding / decoding : {0}")]
     BincodeError(#[from] bincode::Error),
 
@@ -36,8 +39,8 @@ pub enum Error {
     #[error("conversation not found")]
     ConversationNotFound,
 
-    #[error("Invalid data")]
-    InvalidData(),
+    #[error("invalid message status {0}")]
+    InvalidStatus(String),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

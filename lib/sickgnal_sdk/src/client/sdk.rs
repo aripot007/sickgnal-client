@@ -67,7 +67,7 @@ impl Sdk {
         tls_config: &TlsConfig,
     ) -> Result<(Self, mpsc::Receiver<ChatEvent>)> {
         let sdk_client = if existing_account {
-            SdkClient::load(username, dir, password, server_addr, tls_config).await?
+            SdkClient::load(dir, password, server_addr, tls_config).await?
         } else {
             SdkClient::new(username, dir, password, server_addr, tls_config).await?
         };

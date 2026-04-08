@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 
-use crate::client::Result;
+use crate::client::{Error, Result};
 use crate::storage::{Config, Sqlite};
 use crate::tls::{TlsConfig, Transport, connect_transport};
 
@@ -73,7 +73,6 @@ impl SdkClient<Arc<Mutex<Sqlite>>> {
 
     /// Loads an existing account from storage
     pub async fn load(
-        username: String,
         db_path: PathBuf,
         password: &str,
         server_addr: &str,
@@ -81,12 +80,7 @@ impl SdkClient<Arc<Mutex<Sqlite>>> {
     ) -> Result<Self> {
         let (storage, msg_stream, event_tx, event_rx) =
             Self::init(db_path, password, server_addr, tls_config).await?;
-        let account = storage
-            .load_account()?
-            .ok_or(crate::storage::Error::NotFound(
-                "No account found in database".into(),
-            ))
-            .map_err(sickgnal_core::chat::storage::ChatStorageError::from)?;
+        let account = storage.load_account()?.ok_or(Error::NoAccount)?;
 
         let client_builder = ClientBuilder::load(account, storage.clone(), msg_stream, event_tx)?;
 

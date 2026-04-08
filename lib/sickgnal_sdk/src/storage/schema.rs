@@ -37,65 +37,24 @@ macro_rules! create_store_tables {
 }
 
 /// SQL to create all tables
-pub const CREATE_TABLES: &str = r#"
--- Messages table: stores all messages for all conversations
-CREATE TABLE IF NOT EXISTS messages (
-    id TEXT PRIMARY KEY NOT NULL,
-    conversation_id TEXT NOT NULL,
-    sender_id TEXT NOT NULL,
-    content TEXT NOT NULL,
-    timestamp TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('sending', 'sent', 'delivered', 'read', 'failed')),               -- 'sending', 'sent', 'delivered', 'read', 'failed'
-    reply_to_id TEXT,                   -- ID of message being replied to (may reference remote messages)
-    
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-    FOREIGN KEY (sender_id) REFERENCES peers(id)
+const CREATE_TABLES: &str = create_store_tables!(
+    AccountStore,
+    EphemeralKeyStore,
+    SessionKeyStore,
+    SessionStore,
+    PeerStore,
+    ConversationStore as Store<Conversation>,
+    ConversationStore as Store<Peer>,
 );
-"#;
-
-/// SQL to create indexes for optimized queries
-pub const CREATE_INDEXES: &str = r#"
--- Index for quickly listing messages in a conversation
-CREATE INDEX IF NOT EXISTS idx_messages_conversation 
-    ON messages(conversation_id, timestamp DESC);
-
--- Index for finding messages by status (to find failed/sending messages)
-CREATE INDEX IF NOT EXISTS idx_messages_status 
-    ON messages(status) WHERE status IN ('sending', 'failed');
-
--- Index for finding unread messages
-CREATE INDEX IF NOT EXISTS idx_unread_messages
-    ON messages(conversation_id, sender_id) WHERE status = 'delivered';
-"#;
 
 /// SQL to enable WAL mode for better concurrency
-pub const ENABLE_WAL: &str = "PRAGMA journal_mode = WAL;";
+const ENABLE_WAL: &str = "PRAGMA journal_mode = WAL;";
 
 /// SQL to enable foreign keys
-pub const ENABLE_FOREIGN_KEYS: &str = "PRAGMA foreign_keys = ON;";
+const ENABLE_FOREIGN_KEYS: &str = "PRAGMA foreign_keys = ON;";
 
 /// Initialize the database with all tables and indexes
-pub fn get_initialization_sql() -> Vec<&'static str> {
-    let mut stmts = vec![
-        ENABLE_FOREIGN_KEYS,
-        ENABLE_WAL,
-        CREATE_TABLES,
-        create_store_tables!(
-            AccountStore,
-            EphemeralKeyStore,
-            SessionKeyStore,
-            SessionStore,
-            PeerStore,
-            ConversationStore as Store<Conversation>,
-            ConversationStore as Store<Peer>,
-        ),
-        CREATE_INDEXES,
-    ];
-
-    stmts.push(CREATE_INDEXES);
-
-    stmts
-}
+pub const INITIALIZATION_SQL: &str = concatcp!(ENABLE_FOREIGN_KEYS, ENABLE_WAL, CREATE_TABLES);
 
 #[cfg(test)]
 mod tests {
@@ -159,11 +118,9 @@ mod tests {
     fn test_sql_syntax() {
         let conn = Connection::open_in_memory().unwrap();
 
-        for sql in get_initialization_sql() {
-            if let Err(err) = conn.execute_batch(sql) {
-                print_syntax_error(&err);
-                panic!("error executing SQL statement : {}", err);
-            }
+        if let Err(err) = conn.execute_batch(INITIALIZATION_SQL) {
+            print_syntax_error(&err);
+            panic!("error executing SQL statement : {}", err);
         }
     }
 }

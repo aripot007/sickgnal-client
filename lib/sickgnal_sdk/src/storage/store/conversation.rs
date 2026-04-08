@@ -172,8 +172,7 @@ impl ConversationStore {
     }
 
     pub fn delete_by_id(conn: &rusqlite::Connection, id: &Uuid) -> Result<()> {
-        let mut stmt = conn.prepare_cached("DELETE FROM peers WHERE id = ?1")?;
-        stmt.execute([id.to_string()])?;
+        conn.execute("DELETE FROM conversations WHERE id = ?1", [id.to_string()])?;
         Ok(())
     }
 }

@@ -64,7 +64,7 @@ pub trait StorageBackend: E2EStorageBackend {
     fn get_message(&self, conv_id: &Uuid, msg_id: &Uuid) -> Result<Option<Message>>;
 
     /// Delete a message in a conversation
-    fn delete_message(&mut self, conversation_id: &Uuid, message_id: &Uuid) -> Result<()>;
+    fn delete_message(&mut self, conv_id: &Uuid, msg_id: &Uuid) -> Result<()>;
 
     /// Update the status of a message
     fn update_message_status(

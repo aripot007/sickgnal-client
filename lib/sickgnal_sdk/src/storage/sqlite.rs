@@ -1,13 +1,13 @@
 use super::{Error, Result};
 use crate::storage::Config;
-use crate::storage::schema;
+use crate::storage::INITIALIZATION_SQL;
 use crate::storage::store::account::AccountStore;
 use crate::storage::store::conversation::ConversationStore;
 use crate::storage::store::ephemeral_keys::EphemeralKeyStore;
+use crate::storage::store::message::MessageStore;
 use crate::storage::store::peers::PeerStore;
 use crate::storage::store::session::SessionStore;
 use crate::storage::store::session_keys::SessionKeyStore;
-use chrono::{DateTime, Utc};
 use rusqlite::Connection;
 use sickgnal_core::chat::dto::Conversation;
 use sickgnal_core::chat::storage::ChatStorageError;
@@ -76,10 +76,8 @@ impl Sqlite {
     }
 
     /// Create the tables
-    pub fn initialize(&mut self) -> S_Result<()> {
-        for sql in schema::get_initialization_sql() {
-            self.conn.execute_batch(sql).map_err(Error::from)?;
-        }
+    pub fn initialize(&mut self) -> Result<()> {
+        self.conn.execute_batch(INITIALIZATION_SQL)?;
         Ok(())
     }
 
@@ -575,24 +573,25 @@ impl StorageBackend for Sqlite {
     }
 
     fn save_message(&mut self, message: &Message) -> S_Result<()> {
-        todo!()
+        MessageStore::save_message(&self.conn, message).map_err(ChatStorageError::from)
     }
 
     fn get_message(&self, conv_id: &Uuid, msg_id: &Uuid) -> S_Result<Option<Message>> {
-        todo!()
+        MessageStore::find(&self.conn, conv_id, msg_id).map_err(ChatStorageError::from)
     }
 
-    fn delete_message(&mut self, conversation_id: &Uuid, message_id: &Uuid) -> S_Result<()> {
-        todo!()
+    fn delete_message(&mut self, conv_id: &Uuid, msg_id: &Uuid) -> S_Result<()> {
+        MessageStore::delete_by_id(&self.conn, conv_id, msg_id).map_err(ChatStorageError::from)
     }
 
     fn update_message_status(
         &mut self,
-        conversation_id: &Uuid,
-        message_id: &Uuid,
+        conv_id: &Uuid,
+        msg_id: &Uuid,
         status: MessageStatus,
     ) -> S_Result<()> {
-        todo!()
+        MessageStore::update_status(&self.conn, conv_id, msg_id, &status)
+            .map_err(ChatStorageError::from)
     }
 }
 
