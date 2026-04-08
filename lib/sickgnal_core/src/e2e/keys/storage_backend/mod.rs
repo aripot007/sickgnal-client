@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::e2e::{
     client::{Account, session::E2ESession},
     keys::{EphemeralSecretKey, IdentityKeyPair, SymetricKey, X25519Secret},
+    peer::Peer,
 };
 
 /// A trait for anything that can store keys
@@ -25,6 +26,16 @@ pub trait E2EStorageBackend {
 
     /// Update the account token
     fn set_account_token(&mut self, token: String) -> Result<()>;
+
+    // Peers
+    /// Get information about a known per
+    fn peer(&self, id: &Uuid) -> Result<Option<Peer>>;
+
+    /// Save or update information about a peer
+    fn save_peer(&self, id: &Peer) -> Result<()>;
+
+    /// Delete a known peer
+    fn delete_peer(&self, id: &Uuid) -> Result<()>;
 
     // Identity and mid-term keys
 
@@ -333,6 +344,24 @@ impl<T: E2EStorageBackend> E2EStorageBackend for Arc<Mutex<T>> {
         self.lock()
             .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
             .delete_session(user_id)
+    }
+
+    fn peer(&self, id: &Uuid) -> Result<Option<Peer>> {
+        self.lock()
+            .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
+            .peer(id)
+    }
+
+    fn save_peer(&self, id: &Peer) -> Result<()> {
+        self.lock()
+            .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
+            .save_peer(id)
+    }
+
+    fn delete_peer(&self, id: &Uuid) -> Result<()> {
+        self.lock()
+            .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
+            .delete_peer(id)
     }
 }
 

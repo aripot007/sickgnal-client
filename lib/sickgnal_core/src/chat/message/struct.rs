@@ -55,6 +55,14 @@ pub enum Content {
     Text(String),
 }
 
+impl ToString for Content {
+    fn to_string(&self) -> String {
+        match self {
+            Content::Text(t) => t.clone(),
+        }
+    }
+}
+
 /// Message de contrôle
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "act", rename_all = "SCREAMING_SNAKE_CASE")]

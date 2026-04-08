@@ -124,6 +124,8 @@ where
             m => return Err(Error::UnexpectedE2EMessage(m)),
         };
 
+        storage.set_account(&account)?;
+
         let state = E2EClientState::new(account, storage, rng, HashMap::new());
 
         let mut client = Self { msg_stream, state };

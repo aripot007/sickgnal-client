@@ -5,3 +5,4 @@ pub(self) mod kdf;
 pub mod keys;
 pub mod message;
 pub mod message_stream;
+pub mod peer;

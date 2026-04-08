@@ -1,15 +1,20 @@
 use crate::chat::client::ConnectionState;
+use crate::chat::dto::Conversation;
 use crate::chat::message::Content;
-use crate::chat::storage::{Conversation, Message, MessageStatus};
+use crate::chat::storage::{Message, MessageStatus};
 use uuid::Uuid;
 
-pub enum Event {
-    /// A new message was received or sent in a conversation.
-    NewMessage(Uuid, Message),
+pub enum ChatEvent {
+    /// A new message was received in a conversation
+    MessageReceived { conversation_id: Uuid, msg: Message },
     /// The status of a message was updated (Sent, Delivered, Read).
-    MessageStatusUpdate(Uuid, MessageStatus),
-    /// A new conversation was created (incoming OpenConv or outgoing).
-    ConversationCreated(Conversation),
+    MessageStatusUpdated {
+        conversation_id: Uuid,
+        message_id: Uuid,
+        status: MessageStatus,
+    },
+    /// A new conversation was created by a peer
+    ConversationCreatedByPeer(Conversation),
     /// A conversation was deleted.
     ConversationDeleted(Uuid),
     /// A message was edited by the peer.
@@ -24,7 +29,10 @@ pub enum Event {
         message_id: Uuid,
     },
     /// Typing indicator received for a conversation.
-    TypingIndicator(Uuid),
+    TypingIndicator {
+        conversation_id: Uuid,
+        peer_id: Uuid,
+    },
     /// The connection state changed.
     ConnectionStateChanged(ConnectionState),
 }

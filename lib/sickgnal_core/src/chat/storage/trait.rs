@@ -1,217 +1,156 @@
 use std::sync::{Arc, Mutex};
 
 use super::model::*;
-use crate::chat::storage::{Error, Result};
-use chrono::{DateTime, Utc};
+use crate::{
+    chat::{
+        dto::Conversation,
+        storage::{ChatStorageError, Result},
+    },
+    e2e::keys::E2EStorageBackend,
+};
 use thiserror::Error;
 use uuid::Uuid;
+
+/// Marker trait for [`StorageBackend`] implementations that can be shared between threads
+/// and cloned while staying in sync (ex a handle to a storage implementation).
+pub trait SharedStorageBackend: StorageBackend + Send + Sync + Clone {}
 
 /// Abstract storage backend trait
 ///
 /// This trait provides a high-level interface for persisting application data.
 /// It handles encryption/decryption transparently for sensitive fields.
-pub trait StorageBackend {
-    /// Initialize the storage backend (create tables, etc.)
-    fn initialize(&mut self) -> Result<()>;
+pub trait StorageBackend: E2EStorageBackend {
+    /// Check if a conversation exists
+    fn conversation_exists(&self, conversation_id: &Uuid) -> Result<bool>;
 
-    // ========== Conversation Operations ==========
+    /// Check if a peer is part of a conversation
+    fn conversation_has_peer(&self, conv_id: &Uuid, peer_id: &Uuid) -> Result<bool>;
 
-    /// Create a new conversation
-    fn create_conversation(&mut self, conversation: &Conversation) -> Result<()>;
-
-    /// Get a conversation by ID
-    fn get_conversation(&self, id: Uuid) -> Result<Option<Conversation>>;
-
-    /// Get a conversation by peer user ID
-    ///
-    /// Returns all conversations with the given peer (there may be multiple
-    /// once group conversations are supported).
-    fn get_conversations_by_peer(&self, peer_user_id: Uuid) -> Result<Vec<Conversation>>;
-
-    /// List all conversations, ordered by last message time
-    fn list_conversations(&self) -> Result<Vec<Conversation>>;
-
-    /// Update conversation metadata
-    fn update_conversation(&mut self, conversation: &Conversation) -> Result<()>;
-
-    /// Delete a conversation and all its messages
-    fn delete_conversation(&mut self, id: Uuid) -> Result<()>;
-
-    /// Delete all messages for a conversation
-    fn delete_messages_for_conversation(&mut self, conversation_id: Uuid) -> Result<()>;
-
-    /// Update the last message time for a conversation
-    fn update_conversation_last_message(
+    /// Create a new conversation with a single peer
+    fn create_conversation(
         &mut self,
-        id: Uuid,
-        timestamp: DateTime<Utc>,
+        conversation: &ConversationInfo,
+        peer_id: &Uuid,
     ) -> Result<()>;
 
-    /// Update the unread count for a conversation
-    fn update_conversation_unread_count(&mut self, id: Uuid, count: i32) -> Result<()>;
+    // TODO: group conversations
+    /// Create a new conversation with multiple peers
+    fn create_group_conversation(
+        &mut self,
+        conversation: &ConversationInfo,
+        peers: impl Iterator<Item = Uuid>,
+    ) -> Result<()>;
 
-    /// Mark a conversation as opened (OpenConv has been sent or received)
-    fn mark_conversation_opened(&mut self, id: Uuid) -> Result<()>;
+    /// Get information on a conversation by ID
+    fn get_conversation_info(&self, id: &Uuid) -> Result<Option<ConversationInfo>>;
 
-    // ========== Message Operations ==========
+    /// Update conversation metadata
+    fn update_conversation_info(&mut self, info: &ConversationInfo) -> Result<()>;
 
-    /// Create a new message
-    fn create_message(&mut self, message: &Message) -> Result<()>;
+    /// Get a conversation by ID
+    fn get_conversation(&self, id: &Uuid) -> Result<Option<Conversation>>;
+
+    /// Save or update a message
+    fn save_message(&mut self, message: &Message) -> Result<()>;
 
     /// Get a message by ID
-    fn get_message(&self, id: Uuid) -> Result<Option<Message>>;
+    fn get_message(&self, conv_id: &Uuid, msg_id: &Uuid) -> Result<Option<Message>>;
 
-    /// Get a message by local ID (for messages not yet confirmed by server)
-    fn get_message_by_local_id(&self, local_id: Uuid) -> Result<Option<Message>>;
+    /// Delete a message in a conversation
+    fn delete_message(&mut self, conversation_id: &Uuid, message_id: &Uuid) -> Result<()>;
 
-    /// List messages for a conversation, ordered by timestamp
-    fn list_messages(
-        &self,
-        conversation_id: Uuid,
-        limit: Option<i32>,
-        offset: Option<i32>,
-    ) -> Result<Vec<Message>>;
-
-    /// Update message status
-    fn update_message_status(&mut self, id: Uuid, status: MessageStatus) -> Result<()>;
-
-    /// Update message (e.g., after edit)
-    fn update_message(&mut self, message: &Message) -> Result<()>;
-
-    /// Delete a message
-    fn delete_message(&mut self, id: Uuid) -> Result<()>;
-
-    // ========== Utility Operations ==========
-
-    /// Close the storage backend
-    fn close(&mut self) -> Result<()>;
+    /// Update the status of a message
+    fn update_message_status(
+        &mut self,
+        conversation_id: &Uuid,
+        message_id: &Uuid,
+        status: MessageStatus,
+    ) -> Result<()>;
 }
 
 #[derive(Debug, Error)]
 #[error("storage backend mutex poisoned")]
 pub struct PoisonedE2EBackendError;
 
+impl<T: StorageBackend + Send> SharedStorageBackend for Arc<Mutex<T>> {}
+
 impl<T: StorageBackend> StorageBackend for Arc<Mutex<T>> {
-    fn initialize(&mut self) -> Result<()> {
+    fn conversation_exists(&self, conversation_id: &Uuid) -> Result<bool> {
         self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .initialize()
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
+            .conversation_exists(conversation_id)
     }
 
-    fn create_conversation(&mut self, conversation: &Conversation) -> Result<()> {
+    fn conversation_has_peer(&self, conv_id: &Uuid, peer_id: &Uuid) -> Result<bool> {
         self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .create_conversation(conversation)
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
+            .conversation_has_peer(conv_id, peer_id)
     }
 
-    fn get_conversation(&self, id: Uuid) -> Result<Option<Conversation>> {
+    fn create_conversation(
+        &mut self,
+        conversation: &ConversationInfo,
+        peer_id: &Uuid,
+    ) -> Result<()> {
         self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
+            .create_conversation(conversation, peer_id)
+    }
+
+    fn create_group_conversation(
+        &mut self,
+        conversation: &ConversationInfo,
+        peers: impl Iterator<Item = Uuid>,
+    ) -> Result<()> {
+        self.lock()
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
+            .create_group_conversation(conversation, peers)
+    }
+
+    fn get_conversation_info(&self, id: &Uuid) -> Result<Option<ConversationInfo>> {
+        self.lock()
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
+            .get_conversation_info(id)
+    }
+
+    fn update_conversation_info(&mut self, info: &ConversationInfo) -> Result<()> {
+        self.lock()
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
+            .update_conversation_info(info)
+    }
+
+    fn get_conversation(&self, id: &Uuid) -> Result<Option<Conversation>> {
+        self.lock()
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
             .get_conversation(id)
     }
 
-    fn get_conversations_by_peer(&self, peer_user_id: Uuid) -> Result<Vec<Conversation>> {
+    fn save_message(&mut self, message: &Message) -> Result<()> {
         self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .get_conversations_by_peer(peer_user_id)
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
+            .save_message(message)
     }
 
-    fn list_conversations(&self) -> Result<Vec<Conversation>> {
+    fn get_message(&self, conv_id: &Uuid, msg_id: &Uuid) -> Result<Option<Message>> {
         self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .list_conversations()
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
+            .get_message(conv_id, msg_id)
     }
 
-    fn update_conversation(&mut self, conversation: &Conversation) -> Result<()> {
+    fn delete_message(&mut self, conversation_id: &Uuid, message_id: &Uuid) -> Result<()> {
         self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .update_conversation(conversation)
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
+            .delete_message(conversation_id, message_id)
     }
 
-    fn delete_conversation(&mut self, id: Uuid) -> Result<()> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .delete_conversation(id)
-    }
-
-    fn delete_messages_for_conversation(&mut self, conversation_id: Uuid) -> Result<()> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .delete_messages_for_conversation(conversation_id)
-    }
-
-    fn update_conversation_last_message(
+    fn update_message_status(
         &mut self,
-        id: Uuid,
-        timestamp: DateTime<Utc>,
+        conversation_id: &Uuid,
+        message_id: &Uuid,
+        status: MessageStatus,
     ) -> Result<()> {
         self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .update_conversation_last_message(id, timestamp)
-    }
-
-    fn update_conversation_unread_count(&mut self, id: Uuid, count: i32) -> Result<()> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .update_conversation_unread_count(id, count)
-    }
-
-    fn mark_conversation_opened(&mut self, id: Uuid) -> Result<()> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .mark_conversation_opened(id)
-    }
-
-    fn create_message(&mut self, message: &Message) -> Result<()> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .create_message(message)
-    }
-
-    fn get_message(&self, id: Uuid) -> Result<Option<Message>> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .get_message(id)
-    }
-
-    fn get_message_by_local_id(&self, local_id: Uuid) -> Result<Option<Message>> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .get_message_by_local_id(local_id)
-    }
-
-    fn list_messages(
-        &self,
-        conversation_id: Uuid,
-        limit: Option<i32>,
-        offset: Option<i32>,
-    ) -> Result<Vec<Message>> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .list_messages(conversation_id, limit, offset)
-    }
-
-    fn update_message_status(&mut self, id: Uuid, status: MessageStatus) -> Result<()> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .update_message_status(id, status)
-    }
-
-    fn update_message(&mut self, message: &Message) -> Result<()> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .update_message(message)
-    }
-
-    fn delete_message(&mut self, id: Uuid) -> Result<()> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .delete_message(id)
-    }
-
-    fn close(&mut self) -> Result<()> {
-        self.lock()
-            .map_err(|_| Error::new(PoisonedE2EBackendError))?
-            .close()
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
+            .update_message_status(conversation_id, message_id, status)
     }
 }

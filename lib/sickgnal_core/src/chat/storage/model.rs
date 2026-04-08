@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::chat::message::{Content, ContentMessage};
+use crate::chat::message::ContentMessage;
 
 /// Message status in the local database
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -19,70 +19,45 @@ pub enum MessageStatus {
     Failed,
 }
 
-/// Represents a conversation in the database
+/// Some information about a conversation
 #[derive(Debug, Clone)]
-pub struct Conversation {
+pub struct ConversationInfo {
     pub id: Uuid,
-    pub peer_user_id: Uuid,
-    pub peer_name: String,
-    pub last_message_at: Option<DateTime<Utc>>,
-    pub unread_count: i32,
-    /// Whether the conversation has been opened (OpenConv sent or received).
-    /// `false` means the next outgoing message must be wrapped in an OpenConv.
-    pub opened: bool,
+    /// A custom title for this conversation
+    pub custom_title: Option<String>,
 }
 
-/// Represents a message in the database
+/// A textual message in a conversation
 #[derive(Debug, Clone)]
 pub struct Message {
     pub id: Uuid,
     pub conversation_id: Uuid,
     pub sender_id: Uuid,
     pub content: String,
-    pub timestamp: DateTime<Utc>,
+    pub issued_at: DateTime<Utc>,
     pub status: MessageStatus,
+    /// Id of the message this message is responding to
     pub reply_to_id: Option<Uuid>,
-    pub local_id: Option<Uuid>,
 }
 
 impl Message {
-    /// Create a `Message` from a `ContentMessage` with explicit metadata.
+    /// Create a [`Message`] from a [`ContentMessage`]
     pub fn from_content_message(
-        content_msg: &ContentMessage,
-        conversation_id: Uuid,
         sender_id: Uuid,
-        timestamp: DateTime<Utc>,
+        conversation_id: Uuid,
+        issued_at: DateTime<Utc>,
+        content_msg: ContentMessage,
     ) -> Self {
-        let text_content = match &content_msg.content {
-            Content::Text(txt) => txt.clone(),
-        };
+        let text_content = content_msg.content.to_string();
 
         Self {
             id: content_msg.id,
             conversation_id,
             sender_id,
             content: text_content,
-            timestamp,
+            issued_at,
             status: MessageStatus::Sent,
             reply_to_id: content_msg.reply_to,
-            local_id: None,
         }
     }
-}
-
-/// Represents a session in the database
-#[derive(Debug, Clone)]
-pub struct Session {
-    pub peer_user_id: Uuid,
-    pub session_data_json: String,
-    pub updated_at: DateTime<Utc>,
-}
-
-/// Represents a key in the database
-#[derive(Debug, Clone)]
-pub struct Key {
-    pub key_id: String,
-    pub key_type: String, // "identity", "midterm", "ephemeral", "session"
-    pub key_data: Vec<u8>,
-    pub created_at: DateTime<Utc>,
 }

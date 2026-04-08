@@ -3,7 +3,7 @@ use uuid::Uuid;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Storage error: {0}")]
-    Storage(#[from] crate::chat::storage::Error),
+    Storage(#[from] crate::chat::storage::ChatStorageError),
 
     #[error("E2E protocol error: {0}")]
     E2E(#[from] crate::e2e::client::Error),
@@ -19,6 +19,13 @@ pub enum Error {
 
     #[error("No conversation found: {0}")]
     NoConversation(Uuid),
+
+    #[error("Unknown peer {0}")]
+    UnknownPeer(Uuid),
+
+    /// When there is an error sending an event message on the event channel
+    #[error("event channel closed")]
+    EventChannelClosed,
 
     #[error(
         "Sender {sender_id} is not authorized in conversation {conversation_id} \
