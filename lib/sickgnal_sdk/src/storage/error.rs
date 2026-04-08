@@ -8,6 +8,9 @@ pub enum Error {
     #[error("invalid encryption key")]
     InvalidEncryptionKey,
 
+    #[error("invalid salt length: {0}")]
+    InvalidSaltLength(usize),
+
     /// When we don't have an identity key stored
     #[error("no identity key stored")]
     MissingIdentityKey,
@@ -26,17 +29,15 @@ pub enum Error {
     #[error("error encoding / decoding : {0}")]
     BincodeError(#[from] bincode::Error),
 
-    #[error("Database error: {0}")]
-    Database(String),
+    #[error("Argon2 error: {0}")]
+    Argon2Error(argon2::Error),
 
-    #[error("Encryption error: {0}")]
-    Encryption(String),
+    /// We cannot find the requested conversation
+    #[error("conversation not found")]
+    ConversationNotFound,
 
-    #[error("Not found: {0}")]
-    NotFound(String),
-
-    #[error("Invalid data: {0}")]
-    InvalidData(String),
+    #[error("Invalid data")]
+    InvalidData(),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -63,6 +64,12 @@ impl From<Error> for KeyStorageError {
 impl From<KeyStorageError> for Error {
     fn from(value: KeyStorageError) -> Self {
         value.into()
+    }
+}
+
+impl From<argon2::Error> for Error {
+    fn from(value: argon2::Error) -> Self {
+        Error::Argon2Error(value)
     }
 }
 

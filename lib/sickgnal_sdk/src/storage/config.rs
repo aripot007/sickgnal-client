@@ -56,11 +56,7 @@ impl Config {
             let salt_bytes = std::fs::read(&salt_path).map_err(Error::from)?;
 
             if salt_bytes.len() != 16 {
-                return Err(Error::InvalidData(format!(
-                    "Invalid salt file: expected 16 bytes, got {}",
-                    salt_bytes.len()
-                ))
-                .into());
+                return Err(Error::InvalidSaltLength(salt_bytes.len()).into());
             }
 
             let mut salt = [0u8; 16];
@@ -109,7 +105,7 @@ impl Config {
             .t_cost(ARGON2_TIME_COST)
             .p_cost(ARGON2_PARALLELISM)
             .build()
-            .map_err(|e| Error::Encryption(format!("Failed to build Argon2 params: {}", e)))?;
+            .expect("argon2 params should be valid");
 
         let argon2 = Argon2::new(argon2::Algorithm::Argon2id, Version::V0x13, params);
 
@@ -117,7 +113,7 @@ impl Config {
         let mut key = [0u8; 32];
         argon2
             .hash_password_into(password.as_bytes(), salt, &mut key)
-            .map_err(|e| Error::Encryption(format!("Argon2 key derivation failed: {}", e)))?;
+            .map_err(Error::from)?;
 
         Ok(key)
     }

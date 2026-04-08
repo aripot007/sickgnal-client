@@ -152,7 +152,7 @@ where
 
         self.e2e_client.send(peer_id, rq).await?;
 
-        self.storage.create_conversation(&info, &peer_id)?;
+        self.storage.create_conversation(&info, peer_id)?;
 
         // Save the initial message if there was one
         if let Some(msg) = first_msg {
@@ -313,7 +313,7 @@ async fn handle_new_conversation<S: StorageBackend>(
         id: conversation_id,
         custom_title: None,
     };
-    storage.create_conversation(&conv, &sender_id)?;
+    storage.create_conversation(&conv, sender_id)?;
 
     // Get the full conversation info for the event
     let conv = storage

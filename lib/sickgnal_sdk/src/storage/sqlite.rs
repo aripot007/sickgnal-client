@@ -2,19 +2,23 @@ use super::{Error, Result};
 use crate::storage::Config;
 use crate::storage::schema;
 use crate::storage::store::account::AccountStore;
+use crate::storage::store::conversation::ConversationStore;
 use crate::storage::store::ephemeral_keys::EphemeralKeyStore;
 use crate::storage::store::peers::PeerStore;
 use crate::storage::store::session::SessionStore;
 use crate::storage::store::session_keys::SessionKeyStore;
 use chrono::{DateTime, Utc};
 use rusqlite::Connection;
+use sickgnal_core::chat::dto::Conversation;
+use sickgnal_core::chat::storage::ChatStorageError;
+use sickgnal_core::chat::storage::ConversationInfo;
 use sickgnal_core::chat::storage::Message;
 use sickgnal_core::chat::storage::MessageStatus;
 use sickgnal_core::chat::storage::Result as S_Result;
-use sickgnal_core::chat::storage::SharedStorageBackend;
 use sickgnal_core::chat::storage::StorageBackend;
 use sickgnal_core::e2e::client::Account;
 use sickgnal_core::e2e::keys::Result as K_Result;
+use sickgnal_core::e2e::peer::Peer;
 use sickgnal_core::e2e::{
     client::session::E2ESession,
     keys::{
@@ -74,13 +78,12 @@ impl Sqlite {
     /// Create the tables
     pub fn initialize(&mut self) -> S_Result<()> {
         for sql in schema::get_initialization_sql() {
-            self.conn
-                .execute_batch(sql)
-                .map_err(|e| Error::Database(e.to_string()))?;
+            self.conn.execute_batch(sql).map_err(Error::from)?;
         }
         Ok(())
     }
 
+    #[cfg(false)]
     /// Convert MessageStatus to string for database storage
     fn status_to_string(status: MessageStatus) -> &'static str {
         match status {
@@ -92,6 +95,7 @@ impl Sqlite {
         }
     }
 
+    #[cfg(false)]
     /// Convert string from database to MessageStatus
     fn string_to_status(s: &str) -> Result<MessageStatus> {
         match s {
@@ -104,16 +108,19 @@ impl Sqlite {
         }
     }
 
+    #[cfg(false)]
     /// Parse a UUID string from the database.
     fn parse_uuid(s: &str) -> Result<Uuid> {
         Uuid::parse_str(s).map_err(|e| Error::InvalidData(format!("Invalid UUID: {}", e)).into())
     }
 
+    #[cfg(false)]
     /// Parse an optional UUID string from the database.
     fn parse_opt_uuid(s: Option<String>) -> Result<Option<Uuid>> {
         s.map(|s| Self::parse_uuid(&s)).transpose()
     }
 
+    #[cfg(false)]
     /// Parse an RFC 3339 timestamp string from the database.
     fn parse_timestamp(s: &str) -> Result<DateTime<Utc>> {
         DateTime::parse_from_rfc3339(s)
@@ -121,11 +128,13 @@ impl Sqlite {
             .map_err(|e| Error::InvalidData(format!("Invalid timestamp: {}", e)).into())
     }
 
+    #[cfg(false)]
     /// Parse an optional RFC 3339 timestamp string from the database.
     fn parse_opt_timestamp(s: Option<String>) -> Result<Option<DateTime<Utc>>> {
         s.map(|s| Self::parse_timestamp(&s)).transpose()
     }
 
+    #[cfg(false)]
     /// Build a `Message` from raw database row values.
     fn row_to_message(
         row: (
@@ -531,56 +540,38 @@ impl StorageBackend for Sqlite {
 }
 
 impl StorageBackend for Sqlite {
-    fn conversation_exists(&self, conversation_id: &Uuid) -> S_Result<bool> {
-        todo!()
+    fn conversation_exists(&self, conv_id: &Uuid) -> S_Result<bool> {
+        ConversationStore::conversation_exists(&self.conn, conv_id).map_err(ChatStorageError::from)
     }
 
     fn conversation_has_peer(&self, conv_id: &Uuid, peer_id: &Uuid) -> S_Result<bool> {
-        todo!()
+        ConversationStore::conversation_has_peer(&self.conn, conv_id, peer_id)
+            .map_err(ChatStorageError::from)
     }
 
-    fn create_conversation(
+    fn create_group_conversation<'i>(
         &mut self,
-        conversation: &sickgnal_core::chat::storage::ConversationInfo,
-        peer_id: &Uuid,
+        conversation: &ConversationInfo,
+        peers: impl IntoIterator<Item = &'i Uuid>,
     ) -> S_Result<()> {
-        todo!()
+        ConversationStore::create_conversation(&mut self.conn, conversation, peers)?;
+        Ok(())
     }
 
-    fn create_group_conversation(
-        &mut self,
-        conversation: &sickgnal_core::chat::storage::ConversationInfo,
-        peers: impl Iterator<Item = Uuid>,
-    ) -> S_Result<()> {
-        todo!()
+    fn get_conversation_info(&self, conv_id: &Uuid) -> S_Result<Option<ConversationInfo>> {
+        ConversationStore::find_info(&self.conn, conv_id).map_err(ChatStorageError::from)
     }
 
-    fn get_conversation_info(
-        &self,
-        id: &Uuid,
-    ) -> S_Result<Option<sickgnal_core::chat::storage::ConversationInfo>> {
-        todo!()
+    fn update_conversation_info(&mut self, info: &ConversationInfo) -> S_Result<()> {
+        ConversationStore::update(&self.conn, info).map_err(ChatStorageError::from)
     }
 
-    fn update_conversation_info(
-        &mut self,
-        info: &sickgnal_core::chat::storage::ConversationInfo,
-    ) -> S_Result<()> {
-        todo!()
+    fn get_conversation(&self, conv_id: &Uuid) -> S_Result<Option<Conversation>> {
+        ConversationStore::find(&self.conn, conv_id).map_err(ChatStorageError::from)
     }
 
-    fn get_conversation(
-        &self,
-        id: &Uuid,
-    ) -> S_Result<Option<sickgnal_core::chat::dto::Conversation>> {
-        todo!()
-    }
-
-    fn get_conversation_peers(
-        &self,
-        id: &Uuid,
-    ) -> S_Result<Option<Vec<sickgnal_core::e2e::peer::Peer>>> {
-        todo!()
+    fn get_conversation_peers(&self, conv_id: &Uuid) -> S_Result<Option<Vec<Peer>>> {
+        ConversationStore::conversation_peers(&self.conn, conv_id).map_err(ChatStorageError::from)
     }
 
     fn save_message(&mut self, message: &Message) -> S_Result<()> {

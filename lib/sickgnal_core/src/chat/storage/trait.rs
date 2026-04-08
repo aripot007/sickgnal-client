@@ -21,7 +21,7 @@ pub trait SharedStorageBackend: StorageBackend + Send + Sync + Clone {}
 /// It handles encryption/decryption transparently for sensitive fields.
 pub trait StorageBackend: E2EStorageBackend {
     /// Check if a conversation exists
-    fn conversation_exists(&self, conversation_id: &Uuid) -> Result<bool>;
+    fn conversation_exists(&self, conv_id: &Uuid) -> Result<bool>;
 
     /// Check if a peer is part of a conversation
     fn conversation_has_peer(&self, conv_id: &Uuid, peer_id: &Uuid) -> Result<bool>;
@@ -30,30 +30,32 @@ pub trait StorageBackend: E2EStorageBackend {
     fn create_conversation(
         &mut self,
         conversation: &ConversationInfo,
-        peer_id: &Uuid,
-    ) -> Result<()>;
+        peer_id: Uuid,
+    ) -> Result<()> {
+        self.create_group_conversation(conversation, &[peer_id])
+    }
 
     // TODO: group conversations
     /// Create a new conversation with multiple peers
-    fn create_group_conversation(
+    fn create_group_conversation<'i>(
         &mut self,
         conversation: &ConversationInfo,
-        peers: impl Iterator<Item = Uuid>,
+        peers: impl IntoIterator<Item = &'i Uuid>,
     ) -> Result<()>;
 
     /// Get information on a conversation by ID
-    fn get_conversation_info(&self, id: &Uuid) -> Result<Option<ConversationInfo>>;
+    fn get_conversation_info(&self, conv_id: &Uuid) -> Result<Option<ConversationInfo>>;
 
     /// Update conversation metadata
     fn update_conversation_info(&mut self, info: &ConversationInfo) -> Result<()>;
 
     /// Get a conversation by ID
-    fn get_conversation(&self, id: &Uuid) -> Result<Option<Conversation>>;
+    fn get_conversation(&self, conv_id: &Uuid) -> Result<Option<Conversation>>;
 
     /// Get the peers in a conversation
     ///
     /// Returns `None` if the conversation does not exist
-    fn get_conversation_peers(&self, id: &Uuid) -> Result<Option<Vec<Peer>>>;
+    fn get_conversation_peers(&self, conv_id: &Uuid) -> Result<Option<Vec<Peer>>>;
 
     /// Save or update a message
     fn save_message(&mut self, message: &Message) -> Result<()>;
@@ -92,20 +94,10 @@ impl<T: StorageBackend> StorageBackend for Arc<Mutex<T>> {
             .conversation_has_peer(conv_id, peer_id)
     }
 
-    fn create_conversation(
+    fn create_group_conversation<'i>(
         &mut self,
         conversation: &ConversationInfo,
-        peer_id: &Uuid,
-    ) -> Result<()> {
-        self.lock()
-            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
-            .create_conversation(conversation, peer_id)
-    }
-
-    fn create_group_conversation(
-        &mut self,
-        conversation: &ConversationInfo,
-        peers: impl Iterator<Item = Uuid>,
+        peers: impl IntoIterator<Item = &'i Uuid>,
     ) -> Result<()> {
         self.lock()
             .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?

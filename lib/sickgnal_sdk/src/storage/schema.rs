@@ -1,8 +1,9 @@
 use const_format::{concatcp, formatcp};
+use sickgnal_core::{chat::dto::Conversation, e2e::peer::Peer};
 
 use crate::storage::store::{
-    account::AccountStore, ephemeral_keys::EphemeralKeyStore, peers::PeerStore,
-    session::SessionStore, session_keys::SessionKeyStore,
+    account::AccountStore, conversation::ConversationStore, ephemeral_keys::EphemeralKeyStore,
+    peers::PeerStore, session::SessionStore, session_keys::SessionKeyStore,
 };
 
 /// SQL schema for the SQLite database
@@ -13,17 +14,22 @@ use crate::storage::store::{
 
 /// SQL to create the tables for a list of [`Store`]s
 macro_rules! create_store_tables {
-    ($($store:ty),*) => {
+    (@target ) => {_};
+    (@target $target:ty) => {$target};
+    (
+        $($store:ty $(as Store<$target:ty>)?),*
+        $(,)?
+    ) => {
         concatcp!(
             $(
                 formatcp!(
                     "CREATE TABLE IF NOT EXISTS {} ({});",
-                    <$store as crate::storage::store::Store<_>>::TABLE,
-                    <$store as crate::storage::store::Store<_>>::SCHEMA
+                    <$store as crate::storage::store::Store<create_store_tables!(@target $($target)?)>>::TABLE,
+                    <$store as crate::storage::store::Store<create_store_tables!(@target $($target)?)>>::SCHEMA
                 ),
             )*
             $(
-                <$store as crate::storage::store::Store<_>>::POST_CREATE_SQL,
+                <$store as crate::storage::store::Store<create_store_tables!(@target $($target)?)>>::POST_CREATE_SQL,
                 ";",
             )*
         )
@@ -32,22 +38,6 @@ macro_rules! create_store_tables {
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
--- Conversations table: stores information about each conversation
-CREATE TABLE IF NOT EXISTS conversations (
-    id TEXT PRIMARY KEY NOT NULL,
-    name TEXT
-);
-
--- Conversation participants
-CREATE TABLE IF NOT EXISTS conversation_participants (
-    conversation_id TEXT NOT NULL,
-    peer_id TEXT NOT NULL,
-
-    PRIMARY KEY (conversation_id, peer_id),
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-    FOREIGN KEY (peer_id) REFERENCES peers(id)
-);
-
 -- Messages table: stores all messages for all conversations
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY NOT NULL,
@@ -95,7 +85,9 @@ pub fn get_initialization_sql() -> Vec<&'static str> {
             EphemeralKeyStore,
             SessionKeyStore,
             SessionStore,
-            PeerStore
+            PeerStore,
+            ConversationStore as Store<Conversation>,
+            ConversationStore as Store<Peer>,
         ),
         CREATE_INDEXES,
     ];

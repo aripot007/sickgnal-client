@@ -22,10 +22,6 @@ pub enum Error {
     /// Low-level I/O error (e.g. TCP connection)
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-
-    /// We cannot find the requested conversation
-    #[error("conversation not found")]
-    ConversationNotFound,
 }
 
 // Convert back our storage errors
