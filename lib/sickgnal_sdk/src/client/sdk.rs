@@ -50,14 +50,6 @@ pub struct Sdk {
 
 impl Sdk {
     /// Connect to the server, creating or loading an account.
-    ///
-    /// This performs the full lifecycle:
-    /// 1. Opens storage (encrypted SQLite)
-    /// 2. Connects to the server (TCP)
-    /// 3. Creates or loads the E2E account
-    /// 4. Syncs queued messages
-    /// 5. Starts background receive/send workers
-    /// 6. Merges sync events + live events into a single event stream
     pub async fn connect(
         username: String,
         password: &str,
@@ -103,15 +95,7 @@ impl Sdk {
         // Ok(self.storage.lock().unwrap().list_conversations()?)
     }
 
-    /// Start a new conversation with a user by username.
-    ///
-    /// Looks up the user profile on the server, checks if a conversation
-    /// already exists, and creates one if not.
-    ///
-    /// If `initial_message` is provided, the conversation is immediately opened
-    /// with an `OpenConv` protocol message containing that text. Otherwise, the
-    /// conversation is created locally and the first `send_message` call will
-    /// send the `OpenConv` automatically.
+    /// Start a new conversation with a peer by username.
     pub async fn start_conversation(
         &mut self,
         username: String,
@@ -305,38 +289,5 @@ impl Sdk {
             .get_profile_by_id(id)
             .await
             .map_err(Error::from)
-    }
-
-    // ─── Internal helpers ───────────────────────────────────────────────
-
-    /// Resolve the peer name on `ConversationCreated` events.
-    ///
-    /// The core layer sets `peer_name = sender_id.to_string()` (a UUID) because
-    /// it doesn't have access to the server profile API. This method replaces
-    /// the UUID placeholder with the actual username, so frontends don't need
-    /// to handle this themselves.
-    #[cfg(false)]
-    async fn resolve_peer_name_if_needed(
-        event: ChatEvent,
-        cmd_tx: &mpsc::Sender<SdkCommand>,
-    ) -> ChatEvent {
-        if let ChatEvent::ConversationCreated(mut conv) = event {
-            // Try to resolve the peer name from the server
-            let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-            let sent = cmd_tx
-                .send(SdkCommand::GetProfileById {
-                    id: conv.peer_user_id,
-                    reply: reply_tx,
-                })
-                .await;
-            if sent.is_ok() {
-                if let Ok(Ok(profile)) = reply_rx.await {
-                    conv.peer_name = profile.username;
-                }
-            }
-            ChatEvent::ConversationCreated(conv)
-        } else {
-            event
-        }
     }
 }

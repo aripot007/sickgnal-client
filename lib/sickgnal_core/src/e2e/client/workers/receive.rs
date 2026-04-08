@@ -143,8 +143,13 @@ where
     async fn process_message(&mut self, message: E2EMessage) -> Result<()> {
         match message {
             // Handle conversation opening
-            E2EMessage::ConversationOpen { sender_id, data } => {
-                self.process_open_session(sender_id, data).await
+            E2EMessage::ConversationOpen {
+                sender_id,
+                sender_name,
+                data,
+            } => {
+                self.process_open_session(sender_id, sender_name, data)
+                    .await
             }
 
             // Handle normal conversation messages
@@ -175,12 +180,17 @@ where
     /// Only returns unrecoverable errors and logs the rest.
     ///
     /// [`ConversationOpen`]: E2EMessage::ConversationOpen
-    async fn process_open_session(&mut self, sender_id: Uuid, data: KeyExchangeData) -> Result<()> {
-        let payload = self
-            .state
-            .lock()
-            .unwrap()
-            .handle_open_session(sender_id, &data)?;
+    async fn process_open_session(
+        &mut self,
+        sender_id: Uuid,
+        sender_name: String,
+        data: KeyExchangeData,
+    ) -> Result<()> {
+        let payload =
+            self.state
+                .lock()
+                .unwrap()
+                .handle_open_session(sender_id, sender_name, &data)?;
 
         // Get the initial chat message
         let mut m = match payload {

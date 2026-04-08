@@ -40,6 +40,10 @@ pub enum E2EMessage {
         #[serde(rename = "sndr_id")]
         sender_id: Uuid,
 
+        /// Name of the sender
+        #[serde(rename = "sndr_name")]
+        sender_name: String,
+
         #[serde(flatten)]
         data: KeyExchangeData,
     },

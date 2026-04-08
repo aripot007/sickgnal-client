@@ -12,7 +12,7 @@ impl Store<Peer> for PeerStore {
     const SCHEMA: &str = r#"
         id TEXT PRIMARY KEY NOT NULL,
         username TEXT,
-        fingerprint TEXT
+        fingerprint BLOB
     "#;
 
     const POST_CREATE_SQL: &str = r#"

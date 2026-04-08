@@ -208,8 +208,13 @@ where
 
         while let Some(msg) = queue.pop_front() {
             match msg {
-                E2EMessage::ConversationOpen { sender_id, data } => {
-                    self.process_open_conversation(sender_id, data).await
+                E2EMessage::ConversationOpen {
+                    sender_id,
+                    sender_name,
+                    data,
+                } => {
+                    self.process_open_conversation(sender_id, sender_name, data)
+                        .await
                 }
                 E2EMessage::ConversationMessage {
                     sender_id,
@@ -226,8 +231,16 @@ where
     /// Process a [`ConversationOpen`] message, performing key exchange and creating the session
     ///
     /// [`ConversationOpen`]: E2EMessage::ConversationOpen
-    async fn process_open_conversation(&mut self, sender_id: Uuid, data: KeyExchangeData) {
-        let res = self.client.state.handle_open_session(sender_id, &data);
+    async fn process_open_conversation(
+        &mut self,
+        sender_id: Uuid,
+        sender_name: String,
+        data: KeyExchangeData,
+    ) {
+        let res = self
+            .client
+            .state
+            .handle_open_session(sender_id, sender_name, &data);
 
         // Get the initial chat message
         let m = match res {

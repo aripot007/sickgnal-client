@@ -1,9 +1,12 @@
 //! Everything related to key management
 //!
 pub mod storage_backend;
+use std::hash::Hash;
+
 use base64::{DecodeSliceError, Engine, engine::general_purpose};
 use rand::{CryptoRng, RngCore};
 
+use sha2::{Digest, Sha256, digest::OutputSizeUser};
 pub use storage_backend::*;
 
 use serde::{Deserialize, Serialize};
@@ -63,6 +66,16 @@ impl IdentityKeyPair {
             x25519: x25519_dalek::PublicKey::from(&self.x25519_secret),
             ed25519: self.ed25519_key.verifying_key(),
         }
+    }
+}
+
+impl PublicIdentityKeys {
+    /// Compute the fingerprint of the public keys
+    pub fn fingerprint(&self) -> [u8; 32] {
+        let mut h = Sha256::new();
+        h.update(self.x25519.as_bytes());
+        h.update(self.ed25519.as_bytes());
+        h.finalize().into()
     }
 }
 

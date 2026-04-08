@@ -6,7 +6,7 @@ pub struct Peer {
     pub username: Option<String>,
 
     /// Optional public key fingerprint for verification
-    pub fingerprint: Option<String>,
+    pub fingerprint: Option<Vec<u8>>,
 }
 
 impl Peer {

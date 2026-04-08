@@ -26,6 +26,7 @@ use crate::{
             E2EMessage, E2EPacket, KeyExchangeData, PreKeyBundle,
             encrypted_payload::{self, EncryptedPayload, PayloadMessage},
         },
+        peer::Peer,
     },
 };
 
@@ -401,9 +402,11 @@ where
     pub(super) fn handle_open_session(
         &mut self,
         sender_id: Uuid,
+        sender_name: String,
         kex_data: &KeyExchangeData,
     ) -> Result<PayloadMessage> {
         // TODO: Handle pre-existing sessions with same and different public keys
+        let sender_fingerprint = kex_data.identity_key.fingerprint();
 
         // Get ephemeral key
         let mut prekey = None;
@@ -480,7 +483,13 @@ where
         let payload = PayloadMessage::try_from_bytes(&bytes)?;
 
         // Save the keys and session information
-        // TODO: Save the peer's public key
+        let peer = Peer {
+            id: sender_id,
+            username: Some(sender_name),
+            fingerprint: Some(Vec::from(sender_fingerprint)),
+        };
+
+        self.storage.save_peer(&peer)?;
 
         // Key ids are inverted since they're from the sender's POV
         self.storage
