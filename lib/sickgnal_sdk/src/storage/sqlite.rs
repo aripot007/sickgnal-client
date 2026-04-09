@@ -120,7 +120,7 @@ impl StorageBackend for Sqlite {
         Ok(())
     }
 
-    fn add_peer_to_conversation(&mut self, conv_id: &Uuid, peer_id: &Uuid) -> S_Result<()> {
+    fn add_peer_to_conversation(&mut self, conv_id: &Uuid, peer_id: &Uuid) -> S_Result<bool> {
         ConversationStore::add_peer_to_conversation(&self.conn, conv_id, peer_id)
             .map_err(ChatStorageError::from)
     }

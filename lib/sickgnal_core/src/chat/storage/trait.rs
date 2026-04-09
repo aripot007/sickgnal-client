@@ -44,7 +44,9 @@ pub trait StorageBackend: E2EStorageBackend {
     ) -> Result<()>;
 
     /// Add a peer to a conversation
-    fn add_peer_to_conversation(&mut self, conv_id: &Uuid, peer_id: &Uuid) -> Result<()>;
+    ///
+    /// Returns `true` if the peer was added, `false` if it was already present
+    fn add_peer_to_conversation(&mut self, conv_id: &Uuid, peer_id: &Uuid) -> Result<bool>;
 
     /// Get information on a conversation by ID
     fn get_conversation_info(&self, conv_id: &Uuid) -> Result<Option<ConversationInfo>>;
@@ -115,7 +117,7 @@ impl<T: StorageBackend> StorageBackend for Arc<Mutex<T>> {
             .create_group_conversation(conversation, peers)
     }
 
-    fn add_peer_to_conversation(&mut self, conv_id: &Uuid, peer_id: &Uuid) -> Result<()> {
+    fn add_peer_to_conversation(&mut self, conv_id: &Uuid, peer_id: &Uuid) -> Result<bool> {
         self.lock()
             .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
             .add_peer_to_conversation(conv_id, peer_id)

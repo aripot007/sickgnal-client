@@ -60,13 +60,16 @@ where
             event_tx,
         } = builder;
 
+        let account_id = e2e_client.account().id;
+
         let mut iter = e2e_client.sync();
 
         let mut last_error = None;
 
         while let Some(msg) = iter.next().await? {
             if let Err(err) =
-                handle_incomming_message(&mut storage, iter.e2e_client, &event_tx, msg).await
+                handle_incomming_message(&mut storage, iter.e2e_client, account_id, &event_tx, msg)
+                    .await
             {
                 error!("Error handling incoming message : {}", err);
                 last_error = Some(err);
@@ -80,7 +83,7 @@ where
         let (e2e_client, recv_rx, recv_task, send_task) = e2e_client.start_async_workers().await?;
 
         let state = Self {
-            account_id: e2e_client.account().id,
+            account_id,
             storage,
             e2e_client,
             event_tx,
@@ -94,7 +97,14 @@ where
 
     /// Handle an incoming message
     pub(super) async fn handle_incomming_message(&mut self, msg: ChatMessage) -> Result<()> {
-        handle_incomming_message(&mut self.storage, &mut self.e2e_client, &self.event_tx, msg).await
+        handle_incomming_message(
+            &mut self.storage,
+            &mut self.e2e_client,
+            self.account_id,
+            &self.event_tx,
+            msg,
+        )
+        .await
     }
 
     // region:    Public API
@@ -329,6 +339,7 @@ where
 async fn handle_incomming_message<S: StorageBackend>(
     storage: &mut S,
     e2e_client: &mut impl ChatMessageSender,
+    account_id: Uuid,
     event_tx: &mpsc::Sender<ChatEvent>,
     msg: ChatMessage,
 ) -> Result<()> {
@@ -344,6 +355,7 @@ async fn handle_incomming_message<S: StorageBackend>(
         return handle_new_conversation(
             storage,
             e2e_client,
+            account_id,
             event_tx,
             sender_id,
             issued_at,
@@ -379,6 +391,7 @@ async fn handle_incomming_message<S: StorageBackend>(
             handle_control_message(
                 storage,
                 e2e_client,
+                account_id,
                 event_tx,
                 sender_id,
                 issued_at,
@@ -395,6 +408,7 @@ async fn handle_incomming_message<S: StorageBackend>(
 async fn handle_new_conversation<S: StorageBackend>(
     storage: &mut S,
     e2e_client: &mut impl ChatMessageSender,
+    account_id: Uuid,
     event_tx: &mpsc::Sender<ChatEvent>,
     sender_id: Uuid,
     issued_at: DateTime<Utc>,
@@ -416,9 +430,15 @@ async fn handle_new_conversation<S: StorageBackend>(
         }
     };
 
+    // remove ourself from the other peers
+    let other_peers: Vec<Uuid> = other_peers
+        .into_iter()
+        .filter(|p| *p != account_id)
+        .collect();
+
     // Resolve unknown peers if necessary
-    for id in other_peers {
-        let res = e2e_client.get_profile_by_id(id).await;
+    for id in &other_peers {
+        let res = e2e_client.get_profile_by_id(*id).await;
         match res {
             Ok(_) => (),
             Err(crate::e2e::client::Error::UserNotFound) => warn!("could not resolve peer {}", id),
@@ -431,7 +451,7 @@ async fn handle_new_conversation<S: StorageBackend>(
         id: conversation_id,
         custom_title: None,
     };
-    storage.create_conversation(&conv, sender_id)?;
+    storage.create_group_conversation(&conv, other_peers.iter())?;
 
     // Get the full conversation info for the event
     let conv = storage
@@ -499,6 +519,7 @@ async fn handle_data_message<S: StorageBackend>(
 async fn handle_control_message<S: StorageBackend>(
     storage: &mut S,
     _e2e_client: &mut impl ChatMessageSender,
+    account_id: Uuid,
     event_tx: &mpsc::Sender<ChatEvent>,
     sender_id: Uuid,
     _issued_at: DateTime<Utc>,
@@ -513,15 +534,36 @@ async fn handle_control_message<S: StorageBackend>(
             );
         }
         ControlMessage::AddPeerToConv { id } => {
-            storage.add_peer_to_conversation(&conversation_id, &id)?;
-            emit(
-                event_tx,
-                ChatEvent::PeerAddedToConversation {
-                    conversation_id,
-                    peer_id: id,
-                },
-            )
-            .await?;
+            if id == account_id {
+                debug!("discarding AddPeerToConv message with our account id");
+                return Ok(());
+            }
+
+            if !storage.conversation_has_peer(&conversation_id, &sender_id)? {
+                warn!(
+                    "discarding unauthorized AddPeerToConv (peer={},conv={},peer_to_add={})",
+                    sender_id, conversation_id, id
+                );
+                return Ok(());
+            };
+
+            let added = storage.add_peer_to_conversation(&conversation_id, &id)?;
+
+            if added {
+                emit(
+                    event_tx,
+                    ChatEvent::PeerAddedToConversation {
+                        conversation_id,
+                        peer_id: id,
+                    },
+                )
+                .await?;
+            } else {
+                debug!(
+                    "discarded PeerAddedToConversation event because peer {} was already in conversation {}",
+                    id, conversation_id
+                );
+            }
         }
         ControlMessage::DeleteMsg { id } => {
             let msg = match storage.get_message(&conversation_id, &id)? {
@@ -534,7 +576,7 @@ async fn handle_control_message<S: StorageBackend>(
 
             if msg.sender_id != sender_id {
                 warn!(
-                    "discarding unauthorized DeleteMsg (peer={},conv={},msg={}",
+                    "discarding unauthorized DeleteMsg (peer={},conv={},msg={})",
                     sender_id, conversation_id, id
                 );
                 return Ok(());
@@ -561,7 +603,7 @@ async fn handle_control_message<S: StorageBackend>(
 
             if msg.sender_id != sender_id {
                 warn!(
-                    "discarding unauthorized EditMsg (peer={},conv={},msg={}",
+                    "discarding unauthorized EditMsg (peer={},conv={},msg={})",
                     sender_id, conversation_id, id
                 );
                 return Ok(());

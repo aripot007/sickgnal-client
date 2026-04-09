@@ -138,8 +138,8 @@ impl ConversationStore {
         conn: &rusqlite::Connection,
         conv_id: &Uuid,
         peer_id: &Uuid,
-    ) -> Result<()> {
-        conn.execute(
+    ) -> Result<bool> {
+        let inserted = conn.execute(
             r#"
             INSERT OR IGNORE INTO conversation_participants (
                 conversation_id, peer_id
@@ -147,7 +147,7 @@ impl ConversationStore {
             "#,
             params![conv_id.to_string(), peer_id.to_string()],
         )?;
-        Ok(())
+        Ok(inserted == 1)
     }
 
     pub fn find_info(
