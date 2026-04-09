@@ -8,6 +8,7 @@ export global Auth {
     callback sign-up(string, string, string);
     in-out property <bool> already-existing-username: false;
     in-out property <bool> different-password: false;
+    in-out property <string> tls-warning: "";
 }
 
 component SignIn inherits VerticalBox {
@@ -127,6 +128,14 @@ export component LogLayout inherits VerticalBox {
     height: 400px;
     width: 400px;
     alignment: center;
+
+    if (Auth.tls-warning != ""): Text {
+        text: Auth.tls-warning;
+        font-size: 13px;
+        font-weight: 600;
+        color: #cc8800;
+        horizontal-alignment: center;
+    }
 
     if (Auth.username != ""): SignIn { }
     if (Auth.username == ""): SignUp { }
