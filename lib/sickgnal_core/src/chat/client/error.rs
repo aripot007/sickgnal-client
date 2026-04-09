@@ -23,31 +23,16 @@ pub enum Error {
     #[error("conversation {0} not found")]
     ConversationNotFound(Uuid),
 
+    /// Message not found (conv_id, msg_id)
+    #[error("message {1} not found in conversation {0}")]
+    MessageNotFound(Uuid, Uuid),
+
     #[error("Unknown peer {0}")]
     UnknownPeer(Uuid),
 
     /// When there is an error sending an event message on the event channel
     #[error("event channel closed")]
     EventChannelClosed,
-
-    #[error(
-        "Sender {sender_id} is not authorized in conversation {conversation_id} \
-         (expected peer {expected_peer})"
-    )]
-    UnauthorizedSender {
-        sender_id: Uuid,
-        conversation_id: Uuid,
-        expected_peer: Uuid,
-    },
-
-    #[error(
-        "Unexpected message for unknown conversation {conversation_id} from {sender_id} \
-         (expected OpenConv)"
-    )]
-    UnexpectedMessageForUnknownConversation {
-        conversation_id: Uuid,
-        sender_id: Uuid,
-    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

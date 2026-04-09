@@ -204,26 +204,52 @@ where
             .await
     }
 
+    pub async fn delete_message(&mut self, conv_id: Uuid, message_id: Uuid) -> Result<()> {
+        self.dispatch_in_conversation(conv_id, ChatMessage::new_delete(conv_id, message_id))
+            .await?;
+
+        self.storage.delete_message(&conv_id, &message_id)?;
+
+        Ok(())
+    }
+
+    pub async fn mark_as_read(&mut self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
+        self.dispatch_in_conversation(
+            conversation_id,
+            ChatMessage::new_ack_read(conversation_id, message_id),
+        )
+        .await?;
+
+        self.storage
+            .update_message_status(&conversation_id, &message_id, MessageStatus::Read)?;
+
+        Ok(())
+    }
+
+    pub async fn edit_message(
+        &mut self,
+        conv_id: Uuid,
+        msg_id: Uuid,
+        new_content: Content,
+    ) -> Result<()> {
+        let mut msg = self
+            .storage
+            .get_message(&conv_id, &msg_id)?
+            .ok_or(Error::MessageNotFound(conv_id, msg_id))?;
+
+        msg.content = new_content.to_string();
+        self.storage.save_message(&msg)?;
+
+        self.dispatch_in_conversation(
+            conv_id,
+            ChatMessage::new_edit_content(conv_id, msg_id, new_content),
+        )
+        .await?;
+
+        Ok(())
+    }
+
     // endregion: Public API
-
-    // async fn update_msg_status(
-    //     &mut self,
-    //     conversation_id: Uuid,
-    //     message_id: Uuid,
-    //     status: MessageStatus,
-    // ) -> Result<()> {
-    //     self.storage
-    //         .update_message_status(&conversation_id, &message_id, status)?;
-
-    //     self.event_tx
-    //         .send(ChatEvent::MessageStatusUpdated {
-    //             conversation_id,
-    //             message_id,
-    //             status,
-    //         })
-    //         .await
-    //         .map_err(|_| Error::EventChannelClosed)
-    // }
 
     /// Dispatch a message in a conversation
     async fn dispatch_in_conversation(&mut self, conv_id: Uuid, msg: ChatMessage) -> Result<()> {

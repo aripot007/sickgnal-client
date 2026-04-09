@@ -157,10 +157,10 @@ impl ChatMessage {
     }
 
     /// Create a new control message to edit a text message
-    pub fn new_edit_text(
+    pub fn new_edit_content(
         conversation_id: Uuid,
         message_id: Uuid,
-        new_content: impl Into<String>,
+        new_content: impl Into<Content>,
     ) -> Self {
         ChatMessage {
             sender_id: Uuid::default(),
@@ -168,7 +168,7 @@ impl ChatMessage {
             conversation_id,
             kind: ChatMessageKind::Ctrl(ControlMessage::EditMsg {
                 id: message_id,
-                new_content: Content::Text(new_content.into()),
+                new_content: new_content.into(),
             }),
         }
     }

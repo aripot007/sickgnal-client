@@ -177,24 +177,30 @@ impl Sdk {
 
     /// Edit a message.
     pub async fn edit_message(
-        &self,
-        _conversation_id: Uuid,
-        _message_id: Uuid,
-        _new_text: String,
+        &mut self,
+        conversation_id: Uuid,
+        message_id: Uuid,
+        new_content: Content,
     ) -> Result<()> {
-        // TODO: implement edit logic (send control message + update storage)
+        self.chat_client
+            .edit_message(conversation_id, message_id, new_content)
+            .await?;
         Ok(())
     }
 
     /// Delete a message (sends a delete control message to the peer).
-    pub async fn delete_message(&self, _conversation_id: Uuid, _message_id: Uuid) -> Result<()> {
-        // TODO: implement delete logic (send control message + update storage)
+    pub async fn delete_message(&mut self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
+        self.chat_client
+            .delete_message(conversation_id, message_id)
+            .await?;
         Ok(())
     }
 
     /// Mark a message as read.
-    pub async fn mark_as_read(&self, _conversation_id: Uuid, _message_id: Uuid) -> Result<()> {
-        // TODO: implement read receipt logic (send ack + update storage)
+    pub async fn mark_as_read(&mut self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
+        self.chat_client
+            .mark_as_read(conversation_id, message_id)
+            .await?;
         Ok(())
     }
 

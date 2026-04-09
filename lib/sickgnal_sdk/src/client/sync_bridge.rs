@@ -117,21 +117,24 @@ impl SyncBridge {
     }
 
     pub fn edit_message(
-        &self,
+        &mut self,
         conversation_id: Uuid,
         message_id: Uuid,
         new_text: String,
     ) -> Result<()> {
-        self.rt
-            .block_on(self.sdk.edit_message(conversation_id, message_id, new_text))
+        self.rt.block_on(self.sdk.edit_message(
+            conversation_id,
+            message_id,
+            Content::Text(new_text),
+        ))
     }
 
-    pub fn delete_message(&self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
+    pub fn delete_message(&mut self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
         self.rt
             .block_on(self.sdk.delete_message(conversation_id, message_id))
     }
 
-    pub fn mark_as_read(&self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
+    pub fn mark_as_read(&mut self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
         self.rt
             .block_on(self.sdk.mark_as_read(conversation_id, message_id))
     }
