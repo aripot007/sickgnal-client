@@ -72,6 +72,12 @@ pub struct App {
     pub scroll_offset: u16,
     pub my_user_id: Option<Uuid>,
 
+    // Message selection / editing / deletion
+    pub selected_message: Option<usize>,
+    pub editing_message_id: Option<Uuid>,
+    pub original_message_text: String,
+    pub confirm_delete: Option<Uuid>,
+
     // SDK bridge
     pub sdk: Option<SyncBridge>,
     pub event_rx: Option<mpsc::Receiver<SdkEvent>>,
@@ -124,6 +130,11 @@ impl App {
             message_input: String::new(),
             scroll_offset: 0,
             my_user_id: None,
+
+            selected_message: None,
+            editing_message_id: None,
+            original_message_text: String::new(),
+            confirm_delete: None,
 
             sdk: None,
             event_rx: None,
@@ -606,6 +617,124 @@ impl App {
     // ─── Chat key handling ──────────────────────────────────────────────
 
     fn handle_chat_key(&mut self, key: KeyEvent) {
+        // ── Delete confirmation mode ──
+        if let Some(msg_id) = self.confirm_delete {
+            match key.code {
+                KeyCode::Char('y') => {
+                    if let (Some(conv_id), Some(sdk)) =
+                        (self.current_conversation, &mut self.sdk)
+                    {
+                        if let Err(e) = sdk.delete_message(conv_id, msg_id) {
+                            error!("Failed to delete message: {e}");
+                            self.status_message = Some(format!("Delete failed: {e}"));
+                        } else if let Some(msg) =
+                            self.messages.iter_mut().find(|m| m.id == msg_id)
+                        {
+                            msg.content = "[deleted]".to_string();
+                        }
+                    }
+                    self.confirm_delete = None;
+                    self.selected_message = None;
+                }
+                KeyCode::Char('n') | KeyCode::Esc => {
+                    self.confirm_delete = None;
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // ── Editing mode ──
+        if self.editing_message_id.is_some() {
+            match key.code {
+                KeyCode::Enter => {
+                    if let Some(msg_id) = self.editing_message_id.take() {
+                        let new_text = self.message_input.clone();
+                        if let (Some(conv_id), Some(sdk)) =
+                            (self.current_conversation, &self.sdk)
+                        {
+                            if let Err(e) = sdk.edit_message(conv_id, msg_id, new_text.clone()) {
+                                error!("Failed to edit message: {e}");
+                                self.status_message = Some(format!("Edit failed: {e}"));
+                            } else if let Some(msg) =
+                                self.messages.iter_mut().find(|m| m.id == msg_id)
+                            {
+                                msg.content = new_text;
+                            }
+                        }
+                        self.message_input.clear();
+                        self.original_message_text.clear();
+                    }
+                }
+                KeyCode::Esc => {
+                    self.editing_message_id = None;
+                    self.message_input.clear();
+                    self.original_message_text.clear();
+                }
+                KeyCode::Char(c) => {
+                    self.message_input.push(c);
+                }
+                KeyCode::Backspace => {
+                    self.message_input.pop();
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // ── Message selection mode ──
+        if let Some(sel) = self.selected_message {
+            match key.code {
+                KeyCode::Up => {
+                    if sel > 0 {
+                        self.selected_message = Some(sel - 1);
+                    }
+                }
+                KeyCode::Down => {
+                    if sel + 1 < self.messages.len() {
+                        self.selected_message = Some(sel + 1);
+                    } else {
+                        // Past the last message → exit selection mode
+                        self.selected_message = None;
+                    }
+                }
+                KeyCode::Esc => {
+                    self.selected_message = None;
+                }
+                KeyCode::Char('e') => {
+                    if let Some(msg) = self.messages.get(sel) {
+                        if Some(msg.sender_id) == self.my_user_id {
+                            self.editing_message_id = Some(msg.id);
+                            self.original_message_text = msg.content.clone();
+                            self.message_input = msg.content.clone();
+                            self.selected_message = None;
+                        } else {
+                            self.status_message =
+                                Some("Can only edit your own messages".into());
+                        }
+                    }
+                }
+                KeyCode::Char('d') => {
+                    if let Some(msg) = self.messages.get(sel) {
+                        if Some(msg.sender_id) == self.my_user_id {
+                            self.confirm_delete = Some(msg.id);
+                        } else {
+                            self.status_message =
+                                Some("Can only delete your own messages".into());
+                        }
+                    }
+                }
+                KeyCode::Char(c) => {
+                    // Any other char exits selection and starts typing
+                    self.selected_message = None;
+                    self.message_input.push(c);
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // ── Normal input mode ──
         match key.code {
             KeyCode::Esc => {
                 // Refresh conversations list before going back
@@ -620,6 +749,7 @@ impl App {
                 self.screen = Screen::Conversations;
                 self.current_conversation = None;
                 self.messages.clear();
+                self.selected_message = None;
             }
             KeyCode::Enter => {
                 if !self.message_input.is_empty() {
@@ -647,10 +777,13 @@ impl App {
                 self.message_input.pop();
             }
             KeyCode::Up => {
-                self.scroll_offset = self.scroll_offset.saturating_add(1);
+                // Enter message selection mode at the last message
+                if !self.messages.is_empty() {
+                    self.selected_message = Some(self.messages.len() - 1);
+                }
             }
             KeyCode::Down => {
-                self.scroll_offset = self.scroll_offset.saturating_sub(1);
+                // No-op in input mode (already at bottom)
             }
             _ => {}
         }

@@ -90,8 +90,9 @@ pub fn draw(f: &mut Frame, app: &App) {
         // Build message lines
         let mut items: Vec<ListItem> = Vec::new();
 
-        for msg in &app.messages {
+        for (idx, msg) in app.messages.iter().enumerate() {
             let is_mine = my_id.is_some_and(|id| id == msg.sender_id);
+            let is_selected = app.selected_message == Some(idx);
             let time = msg.issued_at.format("%H:%M").to_string();
 
             let status_str = if is_mine {
@@ -112,11 +113,29 @@ pub fn draw(f: &mut Frame, app: &App) {
                 _ => Color::DarkGray,
             };
 
+            // Selection marker
+            let marker = if is_selected { ">> " } else { "   " };
+            let marker_style = Style::default().fg(Color::Yellow);
+
+            // Highlight background for selected message
+            let bg = if is_selected {
+                Some(Color::DarkGray)
+            } else {
+                None
+            };
+
+            let apply_bg = |mut style: Style| -> Style {
+                if let Some(bg) = bg {
+                    style = style.bg(bg);
+                }
+                style
+            };
+
             if is_mine {
                 // Right-aligned: pad with spaces so content sits on the right
                 let content = format!("{}{} ", msg.content, status_str);
                 let time_part = format!(" {}", time);
-                let visible_len = content.len() + time_part.len();
+                let visible_len = marker.len() + content.len() + time_part.len();
                 let padding = if width > visible_len {
                     " ".repeat(width - visible_len)
                 } else {
@@ -124,29 +143,48 @@ pub fn draw(f: &mut Frame, app: &App) {
                 };
 
                 let line = Line::from(vec![
-                    Span::styled(padding, Style::default()),
-                    Span::styled(&msg.content, Style::default().fg(Color::Green)),
-                    Span::styled(status_str, Style::default().fg(status_color)),
-                    Span::styled(format!(" {}", time), Style::default().fg(Color::DarkGray)),
+                    Span::styled(marker, marker_style),
+                    Span::styled(padding, apply_bg(Style::default())),
+                    Span::styled(&msg.content, apply_bg(Style::default().fg(Color::Green))),
+                    Span::styled(status_str, apply_bg(Style::default().fg(status_color))),
+                    Span::styled(
+                        format!(" {}", time),
+                        apply_bg(Style::default().fg(Color::DarkGray)),
+                    ),
                 ]);
                 items.push(ListItem::new(line));
             } else {
                 // Left-aligned messages (from peer)
                 let line = Line::from(vec![
-                    Span::styled(&msg.content, Style::default().fg(Color::White)),
-                    Span::styled(format!("  {}", time), Style::default().fg(Color::DarkGray)),
+                    Span::styled(marker, marker_style),
+                    Span::styled(&msg.content, apply_bg(Style::default().fg(Color::White))),
+                    Span::styled(
+                        format!("  {}", time),
+                        apply_bg(Style::default().fg(Color::DarkGray)),
+                    ),
                 ]);
                 items.push(ListItem::new(line));
             }
         }
 
-        // Apply scroll: show from the bottom, scrolling up
+        // Apply scroll: in selection mode, center on selected message;
+        // otherwise show from the bottom with scroll offset.
         let visible_height = messages_area.height as usize;
         let total = items.len();
-        let offset = app.scroll_offset as usize;
 
-        let end = total.saturating_sub(offset);
-        let start = end.saturating_sub(visible_height);
+        let (start, end) = if let Some(sel) = app.selected_message {
+            // Center the selected message in the view
+            let half = visible_height / 2;
+            let center_start = sel.saturating_sub(half);
+            let center_end = (center_start + visible_height).min(total);
+            let center_start = center_end.saturating_sub(visible_height);
+            (center_start, center_end)
+        } else {
+            let offset = app.scroll_offset as usize;
+            let end = total.saturating_sub(offset);
+            let start = end.saturating_sub(visible_height);
+            (start, end)
+        };
 
         let visible_items: Vec<ListItem> =
             items.into_iter().skip(start).take(end - start).collect();
@@ -155,10 +193,41 @@ pub fn draw(f: &mut Frame, app: &App) {
         f.render_widget(list, messages_area);
     }
 
-    // Input area
+    // Input area — adapts to current mode
+    let (input_prefix, input_text, hint_text) = if app.confirm_delete.is_some() {
+        (
+            "Delete this message? ",
+            "(y/n)".to_string(),
+            " y: confirm | n: cancel ",
+        )
+    } else if app.editing_message_id.is_some() {
+        (
+            "[EDITING] > ",
+            app.message_input.clone(),
+            " Enter: save | Esc: cancel ",
+        )
+    } else if app.selected_message.is_some() {
+        (
+            "> ",
+            String::new(),
+            " e: edit | d: delete | Esc: cancel | ↑↓: navigate ",
+        )
+    } else {
+        ("> ", app.message_input.clone(), " Esc: back | Enter: send | ↑: select message ")
+    };
+
     let input = Paragraph::new(Line::from(vec![
-        Span::styled("> ", Style::default().fg(Color::Cyan)),
-        Span::styled(&app.message_input, Style::default().fg(Color::White)),
+        Span::styled(
+            input_prefix,
+            Style::default().fg(if app.editing_message_id.is_some() {
+                Color::Yellow
+            } else if app.confirm_delete.is_some() {
+                Color::Red
+            } else {
+                Color::Cyan
+            }),
+        ),
+        Span::styled(&input_text, Style::default().fg(Color::White)),
         Span::styled(
             "_",
             Style::default()
@@ -170,7 +239,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         Block::default()
             .borders(Borders::TOP)
             .border_style(Style::default().fg(Color::DarkGray))
-            .title(" Esc: back | Enter: send ")
+            .title(hint_text)
             .title_alignment(Alignment::Right)
             .title_style(Style::default().fg(Color::DarkGray)),
     );
