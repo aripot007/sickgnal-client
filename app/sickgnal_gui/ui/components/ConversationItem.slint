@@ -2,7 +2,7 @@ import { VerticalBox, HorizontalBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 export component ConversationItem inherits Rectangle {
-    in property <int> conversation_id;
+    in property <string> conversation_id;
     in property <string> name;
     in property <string> last_message;
     in property <string> last_message_time;

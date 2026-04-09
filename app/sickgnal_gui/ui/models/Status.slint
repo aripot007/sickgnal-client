@@ -1,0 +1,11 @@
+export global Status {
+    /// Whether an error is currently being shown
+    in-out property <bool> has_error: false;
+    /// The error message text
+    in-out property <string> error_message: "";
+    /// If true, the error is fatal — dismissing it exits the program
+    in-out property <bool> is_fatal: false;
+
+    /// Called when user dismisses the error
+    callback dismiss_error();
+}
