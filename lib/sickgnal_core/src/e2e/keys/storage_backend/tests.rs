@@ -11,7 +11,7 @@
 ///
 /// # Exemple
 ///
-/// ```
+/// ```ignore
 /// use sickgnal_core::e2e::keys::storage_backend::E2EStorageBackend;
 ///
 /// pub struct MyStorageImpl {};

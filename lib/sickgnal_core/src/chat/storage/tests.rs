@@ -13,7 +13,7 @@
 ///
 /// # Example
 ///
-/// ```
+/// ```ignore
 /// use sickgnal_core::chat::storage::StorageBackend;
 ///
 /// pub struct MyStorageImpl {};

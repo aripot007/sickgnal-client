@@ -466,8 +466,8 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
 
     let msgs = alice.get_messages(conv.id).expect("get_messages");
     assert!(
-        msgs.len() >= 2,
-        "Should have at least 2 messages, got {}",
+        msgs.len() >= 1,
+        "Should have at least 1 message (2 sent, 1 deleted), got {}",
         msgs.len()
     );
     println!("    OK - get_messages: {} messages", msgs.len());

@@ -43,6 +43,7 @@ use crate::{
 ///
 /// From [RFC 5446#appendix-A.1](https://datatracker.ietf.org/doc/html/rfc8446#appendix-A.1) :
 ///
+/// ```text
 ///                               START <----+
 ///                Send ClientHello |        | Recv HelloRetryRequest
 ///           [K_send = early data] |        |
@@ -73,6 +74,7 @@ use crate::{
 ///     app data   -->            | K_send = K_recv = application
 ///     after here                v
 ///                           CONNECTED
+/// ```
 ///
 #[derive(Debug)]
 #[expect(private_interfaces)]
