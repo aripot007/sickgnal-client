@@ -1,6 +1,6 @@
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Layout},
+    layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
@@ -8,6 +8,15 @@ use ratatui::{
 
 use crate::app::App;
 use sickgnal_core::chat::storage::MessageStatus;
+
+/// Compute a horizontally centred sub-rect that is 60 % of the terminal
+/// width but never narrower than `min` columns.
+fn centered_rect(area: Rect, min: u16) -> Rect {
+    let target = (area.width as u32 * 60 / 100) as u16;
+    let w = target.max(min).min(area.width);
+    let pad = (area.width.saturating_sub(w)) / 2;
+    Rect::new(area.x + pad, area.y, w, area.height)
+}
 
 pub fn draw(f: &mut Frame, app: &App) {
     let area = f.area();
@@ -18,10 +27,16 @@ pub fn draw(f: &mut Frame, app: &App) {
         .and_then(|cid| app.typing_indicators.get(&cid))
         .map(|(name, _)| format!("{} is typing...", name));
 
+    let has_reply_bar = app.reply_to_message.is_some()
+        && app.editing_message_id.is_none()
+        && app.confirm_delete.is_none()
+        && app.selected_message.is_none();
+
     let chunks = Layout::vertical([
         Constraint::Length(3), // Header with conversation name
         Constraint::Min(1),    // Messages area
         Constraint::Length(if typing_text.is_some() { 1 } else { 0 }), // Typing indicator
+        Constraint::Length(if has_reply_bar { 1 } else { 0 }), // Reply bar
         Constraint::Length(3), // Input area
     ])
     .split(area);
@@ -70,8 +85,8 @@ pub fn draw(f: &mut Frame, app: &App) {
     );
     f.render_widget(header, chunks[0]);
 
-    // Messages
-    let messages_area = chunks[1];
+    // ── Messages ──────────────────────────────────────────────────────
+    let messages_area = centered_rect(chunks[1], 40);
 
     if app.messages.is_empty() {
         let empty = Paragraph::new(Line::from(vec![Span::styled(
@@ -111,7 +126,7 @@ pub fn draw(f: &mut Frame, app: &App) {
             };
 
             // Selection marker
-            let marker = if is_selected { ">> " } else { "   " };
+            let marker = if is_selected { ">" } else { " " };
             let marker_style = Style::default().fg(Color::Yellow);
 
             // Highlight background for selected message
@@ -128,6 +143,57 @@ pub fn draw(f: &mut Frame, app: &App) {
                 style
             };
 
+            let mut lines: Vec<Line> = Vec::new();
+
+            // ── Reply quote (if this message replies to another) ──
+            if let Some(reply_id) = msg.reply_to_id {
+                let reply_preview = app
+                    .messages
+                    .iter()
+                    .find(|m| m.id == reply_id)
+                    .map(|m| {
+                        if m.content.len() > 40 {
+                            format!("{}...", &m.content[..40])
+                        } else {
+                            m.content.clone()
+                        }
+                    })
+                    .unwrap_or_else(|| "...".into());
+
+                if is_mine {
+                    // Right-aligned quote
+                    let quote_text = format!("  {} ", reply_preview);
+                    let quote_len = marker.len() + quote_text.len();
+                    let padding = if width > quote_len {
+                        " ".repeat(width - quote_len)
+                    } else {
+                        String::new()
+                    };
+                    lines.push(Line::from(vec![
+                        Span::styled(marker, marker_style),
+                        Span::styled(padding, Style::default()),
+                        Span::styled(
+                            format!("│ {reply_preview}"),
+                            Style::default()
+                                .fg(Color::DarkGray)
+                                .add_modifier(Modifier::ITALIC),
+                        ),
+                    ]));
+                } else {
+                    // Left-aligned quote
+                    lines.push(Line::from(vec![
+                        Span::styled(marker, marker_style),
+                        Span::styled(
+                            format!("│ {reply_preview}"),
+                            Style::default()
+                                .fg(Color::DarkGray)
+                                .add_modifier(Modifier::ITALIC),
+                        ),
+                    ]));
+                }
+            }
+
+            // ── Message content ──
             if is_mine {
                 // Right-aligned: pad with spaces so content sits on the right
                 let content = format!("{}{} ", msg.content, status_str);
@@ -139,7 +205,7 @@ pub fn draw(f: &mut Frame, app: &App) {
                     String::new()
                 };
 
-                let line = Line::from(vec![
+                lines.push(Line::from(vec![
                     Span::styled(marker, marker_style),
                     Span::styled(padding, apply_bg(Style::default())),
                     Span::styled(&msg.content, apply_bg(Style::default().fg(Color::Green))),
@@ -148,20 +214,20 @@ pub fn draw(f: &mut Frame, app: &App) {
                         format!(" {}", time),
                         apply_bg(Style::default().fg(Color::DarkGray)),
                     ),
-                ]);
-                items.push(ListItem::new(line));
+                ]));
             } else {
                 // Left-aligned messages (from peer)
-                let line = Line::from(vec![
+                lines.push(Line::from(vec![
                     Span::styled(marker, marker_style),
                     Span::styled(&msg.content, apply_bg(Style::default().fg(Color::White))),
                     Span::styled(
                         format!("  {}", time),
                         apply_bg(Style::default().fg(Color::DarkGray)),
                     ),
-                ]);
-                items.push(ListItem::new(line));
+                ]));
             }
+
+            items.push(ListItem::new(lines));
         }
 
         // Apply scroll: in selection mode, center on selected message;
@@ -201,44 +267,68 @@ pub fn draw(f: &mut Frame, app: &App) {
         f.render_widget(typing, chunks[2]);
     }
 
-    // Input area — adapts to current mode
-    let (input_prefix, input_text, hint_text) = if app.confirm_delete.is_some() {
+    // ── Reply bar (shown above input when replying) ──
+    if has_reply_bar {
+        if let Some((_, ref preview)) = app.reply_to_message {
+            let reply_bar = Paragraph::new(Line::from(vec![
+                Span::styled(
+                    "  Replying to: ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    preview.as_str(),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::ITALIC),
+                ),
+                Span::styled("  (Esc to cancel)", Style::default().fg(Color::DarkGray)),
+            ]));
+            f.render_widget(reply_bar, chunks[3]);
+        }
+    }
+
+    // ── Input area — adapts to current mode ──
+    let (input_prefix, input_text, hint_text, prefix_color) = if app.confirm_delete.is_some() {
         (
             "Delete this message? ",
             "(y/n)".to_string(),
             " y: confirm | n: cancel ",
+            Color::Red,
         )
     } else if app.editing_message_id.is_some() {
         (
             "[EDITING] > ",
             app.message_input.clone(),
             " Enter: save | Esc: cancel ",
+            Color::Yellow,
         )
     } else if app.selected_message.is_some() {
         (
             "> ",
             String::new(),
-            " e: edit | d: delete | Esc: cancel | ↑↓: navigate ",
+            " r: reply | e: edit | d: delete | Esc: cancel | ↑↓: nav ",
+            Color::Cyan,
+        )
+    } else if app.reply_to_message.is_some() {
+        (
+            "[REPLY] > ",
+            app.message_input.clone(),
+            " Enter: send reply | Esc: cancel reply ",
+            Color::Cyan,
         )
     } else {
         (
             "> ",
             app.message_input.clone(),
             " Esc: back | Enter: send | ↑: select message ",
+            Color::Cyan,
         )
     };
 
     let input = Paragraph::new(Line::from(vec![
-        Span::styled(
-            input_prefix,
-            Style::default().fg(if app.editing_message_id.is_some() {
-                Color::Yellow
-            } else if app.confirm_delete.is_some() {
-                Color::Red
-            } else {
-                Color::Cyan
-            }),
-        ),
+        Span::styled(input_prefix, Style::default().fg(prefix_color)),
         Span::styled(&input_text, Style::default().fg(Color::White)),
         Span::styled(
             "_",
@@ -255,5 +345,5 @@ pub fn draw(f: &mut Frame, app: &App) {
             .title_alignment(Alignment::Right)
             .title_style(Style::default().fg(Color::DarkGray)),
     );
-    f.render_widget(input, chunks[3]);
+    f.render_widget(input, chunks[4]);
 }

@@ -33,6 +33,7 @@ pub struct Profile {
 ///     sickgnal.db
 ///     ...
 /// ```
+#[derive(Clone)]
 pub struct ProfileManager {
     base_dir: PathBuf,
 }

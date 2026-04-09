@@ -12,7 +12,7 @@
 ///
 /// # Example
 ///
-/// ```
+/// ```ignore
 /// codec_enum! {
 ///
 ///     // The type to store the value

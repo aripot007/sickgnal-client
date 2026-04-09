@@ -1,0 +1,19 @@
+export struct ProfileData {
+    name: string,
+    username: string,
+}
+
+export global ProfileSelect {
+    in-out property <[ProfileData]> profiles: [];
+    in-out property <bool> show_profile_select: false;
+    in-out property <int> selected_profile: -1;
+    in-out property <string> profile_password: "";
+    in-out property <string> profile_error: "";
+    in-out property <bool> password_mode: false;
+    in-out property <bool> is_loading: false;
+
+    callback select_profile(/* index */ int);
+    callback submit_password(/* password */ string);
+    callback cancel_password();
+    callback create_new_profile();
+}

@@ -1,0 +1,169 @@
+import { VerticalBox, HorizontalBox, LineEdit } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { ProfileSelect, ProfileData } from "../models/Profile.slint";
+import { Button } from "../components/Button.slint";
+
+component ProfileCard inherits Rectangle {
+    in property <string> username;
+    in property <bool> is_selected;
+    in property <bool> is_new_card: false;
+
+    callback clicked();
+
+    width: 120px;
+    height: 140px;
+    border-radius: 12px;
+    border-width: 2px;
+    border-color: root.is_selected
+        ? (root.is_new_card ? Theme.success : Theme.primary)
+        : Theme.border;
+    background: touch.has-hover ? Theme.surface-hover : Theme.surface;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        spacing: 10px;
+        padding: 12px;
+
+        // Avatar circle
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 48px;
+                height: 48px;
+                border-radius: 24px;
+                background: root.is_new_card ? Theme.success : Theme.primary;
+
+                Text {
+                    text: root.is_new_card ? "+" : root.username;
+                    font-size: root.is_new_card ? 24px : 20px;
+                    font-weight: 700;
+                    color: Theme.on-primary;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        Text {
+            text: root.is_new_card ? "New Account" : root.username;
+            font-size: 13px;
+            font-weight: 500;
+            color: root.is_selected
+                ? (root.is_new_card ? Theme.success : Theme.primary)
+                : Theme.text-main;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
+export component ProfileSelectLayout inherits VerticalBox {
+    alignment: center;
+    spacing: 0;
+
+    VerticalBox {
+        alignment: center;
+        spacing: 24px;
+        padding: 40px;
+        max-width: 600px;
+
+        // Title
+        Text {
+            text: "Who's using sickgnal?";
+            font-size: Theme.font-size-title;
+            font-weight: 700;
+            color: Theme.text-main;
+            horizontal-alignment: center;
+        }
+
+        // Profile cards
+        HorizontalLayout {
+            alignment: center;
+            spacing: 16px;
+
+            for profile[index] in ProfileSelect.profiles: ProfileCard {
+                username: profile.username;
+                is_selected: ProfileSelect.selected_profile == index;
+                clicked => {
+                    ProfileSelect.select_profile(index);
+                }
+            }
+
+            // New account card
+            ProfileCard {
+                username: "";
+                is_selected: false;
+                is_new_card: true;
+                clicked => {
+                    ProfileSelect.create_new_profile();
+                }
+            }
+        }
+
+        // Password input (shown when a profile is selected)
+        if ProfileSelect.password_mode: VerticalLayout {
+            spacing: 12px;
+            alignment: center;
+
+            Text {
+                text: "Enter password for " + ProfileSelect.profiles[ProfileSelect.selected_profile].username;
+                font-size: 14px;
+                color: Theme.text-muted;
+                horizontal-alignment: center;
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 10px;
+
+                passwd-input := LineEdit {
+                    placeholder-text: "Password";
+                    input-type: password;
+                    width: 250px;
+                    enabled: !ProfileSelect.is_loading;
+                    accepted => {
+                        ProfileSelect.submit_password(self.text);
+                    }
+                }
+
+                Button {
+                    text: ProfileSelect.is_loading ? "..." : "Sign In";
+                    btn_width: 80px;
+                    enabled: passwd-input.text != "" && !ProfileSelect.is_loading;
+                    clicked => {
+                        ProfileSelect.submit_password(passwd-input.text);
+                    }
+                }
+
+                Button {
+                    text: "Cancel";
+                    btn_width: 70px;
+                    enabled: !ProfileSelect.is_loading;
+                    clicked => {
+                        ProfileSelect.cancel_password();
+                    }
+                }
+            }
+
+            if ProfileSelect.profile_error != "": Text {
+                text: ProfileSelect.profile_error;
+                color: #cc3333;
+                font-size: 13px;
+                horizontal-alignment: center;
+            }
+        }
+
+        // Help text (shown when no profile is selected)
+        if !ProfileSelect.password_mode && !ProfileSelect.is_loading: Text {
+            text: "Select a profile to sign in, or create a new account.";
+            font-size: 13px;
+            color: Theme.text-muted;
+            horizontal-alignment: center;
+        }
+    }
+}

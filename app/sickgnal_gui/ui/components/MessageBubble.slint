@@ -5,6 +5,7 @@ component BubbleBase inherits HorizontalLayout {
     in property <string> text;
     in property <string> time;
     in property <string> status;
+    in property <string> reply_to_text;
     in property <LayoutAlignment> bubble-alignment;
     in property <length> pad-left;
     in property <length> pad-right;
@@ -26,6 +27,34 @@ component BubbleBase inherits HorizontalLayout {
         VerticalLayout {
             padding: 10px;
             spacing: 4px;
+
+            // Quoted reply block
+            if root.reply_to_text != "": Rectangle {
+                background: Theme.background-dark;
+                border-radius: 6px;
+                border-color: Theme.primary;
+
+                HorizontalLayout {
+                    padding: 6px;
+                    padding-left: 8px;
+                    spacing: 6px;
+
+                    Rectangle {
+                        width: 3px;
+                        background: Theme.primary;
+                        border-radius: 1px;
+                    }
+
+                    Text {
+                        text: root.reply_to_text;
+                        color: root.text-color;
+                        opacity: 0.7;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                        overflow: elide;
+                    }
+                }
+            }
 
             Text {
                 text: root.text;
@@ -80,9 +109,11 @@ export component MessageBubble inherits Rectangle {
     in property <string> time;
     in property <string> status;
     in property <bool> is-me;
+    in property <string> reply_to_text;
 
     callback edit_requested(/* msg_id */ string);
     callback delete_requested(/* msg_id */ string);
+    callback reply_requested(/* msg_id */ string, /* preview */ string);
 
     hover := TouchArea {
         mouse-cursor: default;
@@ -98,6 +129,26 @@ export component MessageBubble inherits Rectangle {
                 alignment: center;
                 spacing: 2px;
                 padding-right: 4px;
+
+                // Reply button
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 12px;
+                    background: reply-touch-r.has-hover ? Theme.surface-hover : transparent;
+
+                    reply-touch-r := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.reply_requested(root.id, root.text); }
+                    }
+                    Text {
+                        text: "↩";
+                        font-size: 12px;
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
 
                 Rectangle {
                     width: 24px;
@@ -142,12 +193,39 @@ export component MessageBubble inherits Rectangle {
                 text: root.text;
                 time: root.time;
                 status: root.status;
+                reply_to_text: root.reply_to_text;
             }
         }
-        if (!root.is-me): LMessageBubble {
-            text: root.text;
-            time: root.time;
-            status: root.status;
+        if (!root.is-me): HorizontalLayout {
+            alignment: start;
+            spacing: 4px;
+
+            LMessageBubble {
+                text: root.text;
+                time: root.time;
+                status: root.status;
+                reply_to_text: root.reply_to_text;
+            }
+
+            // Reply button for peer messages (on hover)
+            if (hover.has-hover): Rectangle {
+                width: 24px;
+                height: 24px;
+                border-radius: 12px;
+                background: reply-touch-l.has-hover ? Theme.surface-hover : transparent;
+
+                reply-touch-l := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.reply_requested(root.id, root.text); }
+                }
+                Text {
+                    text: "↩";
+                    font-size: 12px;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
         }
     }
 }
