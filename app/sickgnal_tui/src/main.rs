@@ -3,7 +3,7 @@ mod screens;
 mod ui;
 
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use app::App;
@@ -21,10 +21,33 @@ struct Args {
     /// Directory for account storage
     #[arg(long, default_value = "./storage")]
     data_dir: PathBuf,
+
+    /// Enable tracing and log to the specified file
+    #[arg(long)]
+    log: Option<PathBuf>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+
+    // Setup tracing if --log is provided
+    let _guard = if let Some(log_path) = &args.log {
+        let dir = log_path.parent().unwrap_or(Path::new("."));
+        let filename = log_path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        let file_appender = tracing_appender::rolling::never(dir, filename);
+        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+        tracing_subscriber::fmt()
+            .with_writer(non_blocking)
+            .with_ansi(false)
+            .init();
+        Some(guard)
+    } else {
+        None
+    };
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
