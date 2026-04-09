@@ -1,18 +1,74 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::thread;
 use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use sickgnal_core::chat::client::ChatEvent as SdkEvent;
 use sickgnal_core::chat::storage::Message;
 use sickgnal_sdk::TlsConfig;
-use sickgnal_sdk::client::SyncBridge;
+use sickgnal_sdk::client::{self, SyncBridge};
 use sickgnal_sdk::dto::ConversationEntry;
 use tokio::sync::mpsc;
-use tracing::error;
+use tracing::{error, warn};
 use uuid::Uuid;
 
 use sickgnal_sdk::account::{Profile, ProfileManager};
+
+// ─── Spinner ───────────────────────────────────────────────────────────────
+
+/// Braille spinner frames for loading animation.
+pub const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+// ─── User-friendly error mapping ───────────────────────────────────────────
+
+/// Convert an SDK error into a clean, user-facing message.
+///
+/// The raw error is always logged via `tracing::error!` before this is called.
+pub fn friendly_error(context: &str, err: &client::Error) -> String {
+    use sickgnal_core::chat::client::Error as ChatErr;
+
+    match err {
+        // ── Connection / IO errors ──
+        client::Error::Io(_) => "Could not reach the server".into(),
+
+        // ── E2E-level errors ──
+        client::Error::E2E(e2e) => friendly_e2e_error(context, e2e),
+
+        // ── Chat-client-level errors ──
+        client::Error::Client(chat) => match chat {
+            ChatErr::NotConnected => "Not connected to server".into(),
+            ChatErr::ConversationNotFound(_) => "Conversation not found".into(),
+            ChatErr::MessageNotFound(_, _) => "Message not found".into(),
+            ChatErr::UnknownPeer(_) => "Unknown peer".into(),
+            ChatErr::E2E(e2e) => friendly_e2e_error(context, e2e),
+            _ => format!("{context} failed"),
+        },
+
+        // ── Local auth errors ──
+        client::Error::InvalidPassword => "Incorrect password".into(),
+        client::Error::NoAccount => "No account found".into(),
+
+        // ── Storage / other ──
+        client::Error::Storage(_) => "A storage error occurred".into(),
+        _ => format!("{context} failed"),
+    }
+}
+
+/// Helper to map E2E-layer errors to user-friendly messages.
+fn friendly_e2e_error(context: &str, e2e: &sickgnal_core::e2e::client::Error) -> String {
+    use sickgnal_core::e2e::client::Error as E2EErr;
+
+    match e2e {
+        E2EErr::UserNotFound => "User not found".into(),
+        E2EErr::NoPrekeyAvailable => "User has not finished setting up their account".into(),
+        E2EErr::MessageStreamError(_) => "Lost connection to the server".into(),
+        E2EErr::WorkerSendError | E2EErr::ReceiveWorkerStopped => {
+            "Connection to the server was lost".into()
+        }
+        _ => format!("{context} failed"),
+    }
+}
 
 // ─── Screens ───────────────────────────────────────────────────────────────
 
@@ -99,6 +155,11 @@ pub struct App {
 
     // Storage dir
     pub data_dir: PathBuf,
+
+    // Async auth: background thread handle + spinner state
+    pub auth_handle: Option<thread::JoinHandle<Result<(SyncBridge, mpsc::Receiver<SdkEvent>), client::Error>>>,
+    pub auth_spinner_tick: usize,
+    pub auth_was_signup: bool,
 }
 
 impl App {
@@ -164,6 +225,10 @@ impl App {
             event_rx: None,
 
             data_dir: PathBuf::new(),
+
+            auth_handle: None,
+            auth_spinner_tick: 0,
+            auth_was_signup: false,
         }
     }
 
@@ -184,39 +249,6 @@ impl App {
         self.show_toast(msg, false);
     }
 
-    /// Select a profile and transition to the auth screen.
-    fn select_profile(&mut self, profile_name: String) {
-        let dir = match self.profile_manager.profile_dir(&profile_name) {
-            Ok(d) => d,
-            Err(e) => {
-                self.profile_error = Some(format!("Error: {e}"));
-                return;
-            }
-        };
-        self.data_dir = dir;
-
-        // Check if the profile has an account file
-        let account_file = sickgnal_sdk::account::AccountFile::new(self.data_dir.clone()).ok();
-        let has_account = account_file.as_ref().is_some_and(|af| af.exists());
-
-        if has_account {
-            self.auth_mode = AuthMode::SignIn;
-            self.username = account_file
-                .and_then(|af| af.username().ok())
-                .unwrap_or_default();
-            self.auth_field = AuthField::Password;
-        } else {
-            self.auth_mode = AuthMode::SignUp;
-            self.username = String::new();
-            self.auth_field = AuthField::Username;
-        }
-
-        self.password.clear();
-        self.confirm_password.clear();
-        self.auth_error = None;
-        self.screen = Screen::Auth;
-    }
-
     pub fn handle_key(&mut self, key: KeyEvent) {
         match self.screen {
             Screen::ProfileSelect => self.handle_profile_key(key),
@@ -230,6 +262,11 @@ impl App {
     // ─── Profile selection key handling ─────────────────────────────
 
     fn handle_profile_key(&mut self, key: KeyEvent) {
+        // Block input while auth is loading
+        if self.auth_loading {
+            return;
+        }
+
         // Password entry mode: user selected a profile, now typing password
         if self.profile_password_mode {
             match key.code {
@@ -334,7 +371,9 @@ impl App {
             KeyCode::Char('d') => {
                 if self.selected_profile < self.profiles.len() {
                     let name = self.profiles[self.selected_profile].name.clone();
-                    let _ = self.profile_manager.delete_profile(&name);
+                    if let Err(e) = self.profile_manager.delete_profile(&name) {
+                        warn!("Failed to delete profile '{}': {e}", name);
+                    }
                     self.profiles = self.profile_manager.list_profiles().unwrap_or_default();
                     if self.selected_profile >= self.profiles.len() + 1 {
                         self.selected_profile = self.profiles.len(); // clamp to "+" card
@@ -428,6 +467,7 @@ impl App {
 
         self.auth_loading = true;
         self.auth_error = None;
+        self.auth_spinner_tick = 0;
 
         // If data_dir is not set (new profile from "+" card), create one from username
         if self.data_dir.as_os_str().is_empty() {
@@ -481,17 +521,46 @@ impl App {
             }
         }
 
-        // Connect to server via SDK
+        // Spawn the connection in a background thread so the UI stays responsive
+        let username = self.username.clone();
+        let password = self.password.clone();
+        let dir = self.data_dir.clone();
         let existing = self.auth_mode == AuthMode::SignIn;
-        match SyncBridge::connect(
-            self.username.clone(),
-            &self.password,
-            self.data_dir.clone(),
-            existing,
-            "127.0.0.1:8080",
-            &TlsConfig::None,
-        ) {
-            Ok((bridge, event_rx)) => {
+        self.auth_was_signup = self.auth_mode == AuthMode::SignUp;
+
+        let handle = thread::spawn(move || {
+            SyncBridge::connect(
+                username,
+                &password,
+                dir,
+                existing,
+                "127.0.0.1:8080",
+                &TlsConfig::None,
+            )
+        });
+
+        self.auth_handle = Some(handle);
+    }
+
+    /// Called from the main loop to check if the background auth thread finished.
+    pub fn poll_auth_completion(&mut self) {
+        // Advance spinner tick for animation
+        if self.auth_loading {
+            self.auth_spinner_tick = self.auth_spinner_tick.wrapping_add(1);
+        }
+
+        let is_finished = self
+            .auth_handle
+            .as_ref()
+            .is_some_and(|h| h.is_finished());
+
+        if !is_finished {
+            return;
+        }
+
+        let handle = self.auth_handle.take().unwrap();
+        match handle.join() {
+            Ok(Ok((bridge, event_rx))) => {
                 self.my_user_id = Some(bridge.user_id());
                 self.event_rx = Some(event_rx);
 
@@ -511,14 +580,23 @@ impl App {
                 // Refresh profiles list so profile selection is up to date
                 self.profiles = self.profile_manager.list_profiles().unwrap_or_default();
             }
-            Err(e) => {
-                // If sign-up failed, clean up the local account file so user can retry
-                if self.auth_mode == AuthMode::SignUp {
-                    let _ = account_file.delete();
-                }
-
-                let msg = format!("Connection failed: {e}");
+            Ok(Err(e)) => {
+                error!("Auth connection failed: {e}");
+                let msg = friendly_error("Connection", &e);
                 self.auth_error = Some(msg);
+
+                // If sign-up failed, clean up the local account file so user can retry
+                if self.auth_was_signup {
+                    if let Ok(af) =
+                        sickgnal_sdk::account::AccountFile::new(self.data_dir.clone())
+                    {
+                        let _ = af.delete();
+                    }
+                }
+                self.auth_loading = false;
+            }
+            Err(_) => {
+                self.auth_error = Some("Connection attempt crashed unexpectedly".into());
                 self.auth_loading = false;
             }
         }
@@ -562,7 +640,7 @@ impl App {
                             Ok(msgs) => self.messages = msgs,
                             Err(e) => {
                                 error!("Failed to load messages: {e}");
-                                self.show_error_toast(format!("Failed to load messages: {e}"));
+                                self.show_error_toast(friendly_error("Loading messages", &e));
                             }
                         }
                     }
@@ -570,7 +648,9 @@ impl App {
                     // Mark last message as read to clear unread count
                     if let Some(last_msg) = self.messages.last() {
                         if let Some(sdk) = &mut self.sdk {
-                            let _ = sdk.mark_as_read(conv_id, last_msg.id);
+                            if let Err(e) = sdk.mark_as_read(conv_id, last_msg.id) {
+                                warn!("Failed to mark message as read: {e}");
+                            }
                         }
                     }
                     // Clear unread count in the entry
@@ -590,7 +670,7 @@ impl App {
                     if let Some(ref mut sdk) = self.sdk {
                         if let Err(e) = sdk.delete_conversation(conv_id) {
                             error!("Failed to delete conversation: {e}");
-                            self.show_error_toast(format!("Delete failed: {e}"));
+                            self.show_error_toast(friendly_error("Deleting conversation", &e));
                         }
                     }
                     self.conversations.remove(self.selected_conversation);
@@ -629,7 +709,8 @@ impl App {
                         match sdk.get_profile_by_username(self.new_conversation_username.clone()) {
                             Ok(p) => p,
                             Err(e) => {
-                                self.show_error_toast(format!("User not found: {e}"));
+                                error!("User lookup failed: {e}");
+                                self.show_error_toast(friendly_error("Finding user", &e));
                                 return;
                             }
                         };
@@ -655,7 +736,8 @@ impl App {
                             self.screen = Screen::Chat;
                         }
                         Err(e) => {
-                            self.show_error_toast(format!("Error: {e}"));
+                            error!("Failed to start conversation: {e}");
+                            self.show_error_toast(friendly_error("Starting conversation", &e));
                         }
                     }
                 }
@@ -674,7 +756,7 @@ impl App {
                     if let (Some(conv_id), Some(sdk)) = (self.current_conversation, &mut self.sdk) {
                         if let Err(e) = sdk.delete_message(conv_id, msg_id) {
                             error!("Failed to delete message: {e}");
-                            self.show_error_toast(format!("Delete failed: {e}"));
+                            self.show_error_toast(friendly_error("Deleting message", &e));
                         } else if let Some(msg) = self.messages.iter_mut().find(|m| m.id == msg_id)
                         {
                             msg.content = "[deleted]".to_string();
@@ -702,7 +784,7 @@ impl App {
                         {
                             if let Err(e) = sdk.edit_message(conv_id, msg_id, new_text.clone()) {
                                 error!("Failed to edit message: {e}");
-                                self.show_error_toast(format!("Edit failed: {e}"));
+                                self.show_error_toast(friendly_error("Editing message", &e));
                             } else if let Some(msg) =
                                 self.messages.iter_mut().find(|m| m.id == msg_id)
                             {
@@ -787,7 +869,7 @@ impl App {
                     match sdk.list_conversations() {
                         Ok(convos) => self.conversations = convos,
                         Err(e) => {
-                            error!("Failed to refresh conversations: {e}");
+                            warn!("Failed to refresh conversations: {e}");
                         }
                     }
                 }
@@ -809,7 +891,7 @@ impl App {
                             }
                             Err(e) => {
                                 error!("Failed to send message: {e}");
-                                self.show_error_toast(format!("Send failed: {e}"));
+                                self.show_error_toast(friendly_error("Sending message", &e));
                             }
                         }
                     }
@@ -853,7 +935,9 @@ impl App {
 
         if should_send {
             if let (Some(conv_id), Some(sdk)) = (self.current_conversation, &mut self.sdk) {
-                let _ = sdk.send_typing_indicator(conv_id);
+                if let Err(e) = sdk.send_typing_indicator(conv_id) {
+                    warn!("Failed to send typing indicator: {e}");
+                }
             }
             self.last_typing_sent = Some(now);
         }
@@ -924,7 +1008,9 @@ impl App {
 
                     // Mark as read immediately since the conversation is open
                     if let Some(sdk) = &mut self.sdk {
-                        let _ = sdk.mark_as_read(conversation_id, msg_id);
+                        if let Err(e) = sdk.mark_as_read(conversation_id, msg_id) {
+                            warn!("Failed to mark message as read: {e}");
+                        }
                     }
                 }
 

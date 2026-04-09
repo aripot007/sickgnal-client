@@ -102,6 +102,9 @@ fn run_app(
         // Process any pending SDK events
         app.poll_sdk_events();
 
+        // Check if async auth connection completed
+        app.poll_auth_completion();
+
         if app.should_quit {
             return Ok(());
         }
