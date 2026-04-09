@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use chrono::{DateTime, Utc};
 use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
@@ -39,11 +41,18 @@ impl<S> ChatClientHandle<S>
 where
     S: SharedStorageBackend + 'static,
 {
-    /// Create a client state by synchronizing with the server
+    /// Create a client state by synchronizing with the server.
+    ///
+    /// Returns the client handle and three opaque background tasks that must
+    /// be spawned by the caller on a tokio runtime.
     pub(crate) async fn sync_builder<M: E2EMessageStream>(
         builder: ClientBuilder<S, M>,
-        rt: tokio::runtime::Handle,
-    ) -> Result<Self> {
+    ) -> Result<(
+        Self,
+        impl Future<Output = ()> + Send + 'static,
+        impl Future<Output = ()> + Send + 'static,
+        impl Future<Output = ()> + Send + 'static,
+    )> {
         let ClientBuilder {
             mut storage,
             mut e2e_client,
@@ -74,14 +83,10 @@ where
             event_tx,
         };
 
-        // start the e2e workers
-        rt.spawn(recv_task);
-        rt.spawn(send_task);
+        // Build the chat receive loop as an opaque future
+        let chat_recv_task = worker::receive_loop(state.clone(), recv_rx);
 
-        // start the chat client workers
-        rt.spawn(worker::receive_loop(state, recv_rx));
-
-        todo!()
+        Ok((state, recv_task, send_task, chat_recv_task))
     }
 
     /// Handle an incoming message

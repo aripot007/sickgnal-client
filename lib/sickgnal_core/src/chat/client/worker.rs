@@ -7,7 +7,7 @@ use crate::chat::{
 
 /// The worker to receive and handle [`ChatMessage`], and
 /// dispatch the correct events to the client
-pub async fn receive_loop<S>(
+pub(crate) async fn receive_loop<S>(
     mut state: ChatClientHandle<S>,
     mut msg_rx: mpsc::Receiver<ChatMessage>,
 ) where
