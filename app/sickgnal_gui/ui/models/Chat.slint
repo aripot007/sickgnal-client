@@ -46,4 +46,11 @@ export global Chat {
 
     // Typing indicator
     callback typing();
+
+    // Reply state
+    in-out property <bool> is_replying: false;
+    in-out property <string> reply_to_message_id: "";
+    in-out property <string> reply_to_preview: "";
+    callback start_reply(/* msg_id */ string, /* preview_text */ string);
+    callback cancel_reply();
 }

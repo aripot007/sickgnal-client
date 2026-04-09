@@ -29,13 +29,13 @@ export component ConversationLayout inherits VerticalBox {
         }
     }
 
-    // Remet à zéro lors d'un changement de conversation
+    // Reset on conversation switch
     changed active-id => {
         root.show-typing = false;
         typing-timer.running = false;
     }
 
-    // Réagit au changement de is-typing sur la conversation courante
+    // React to typing indicator changes
     changed raw-typing => {
         if (root.raw-typing) {
             root.show-typing = true;
@@ -101,7 +101,7 @@ export component ConversationLayout inherits VerticalBox {
                 VerticalBox {
                     alignment: center;
                     Text {
-                        text: "Sélectionnez une conversation";
+                        text: "Select a conversation";
                         font-size: 16px;
                         color: Theme.text-muted;
                         horizontal-alignment: center;
@@ -114,11 +114,15 @@ export component ConversationLayout inherits VerticalBox {
                 time: msg.time;
                 status: msg.status;
                 is-me: msg.is_me;
+                reply_to_text: msg.reply_to_text;
                 edit_requested(msg_id) => {
                     Chat.start_edit(msg_id, msg.text);
                 }
                 delete_requested(msg_id) => {
                     Chat.delete_message(msg_id);
+                }
+                reply_requested(msg_id, preview) => {
+                    Chat.start_reply(msg_id, preview);
                 }
             }
         }
@@ -129,10 +133,69 @@ export component ConversationLayout inherits VerticalBox {
         spacing: 6px;
         padding: 2px;
         Text {
-            text: Chat.current.name + " est en train d'écrire...";
+            text: Chat.current.name + " is typing...";
             font-size: 13px;
             color: Theme.text-muted;
             vertical-alignment: center;
+        }
+    }
+
+    // Reply bar (shown above input when replying)
+    if Chat.is_replying && !Chat.show_conversation_settings: Rectangle {
+        height: 40px;
+        background: Theme.surface;
+        border-color: Theme.background-dark;
+
+        HorizontalLayout {
+            padding: 8px;
+            padding-left: 15px;
+            spacing: 8px;
+
+            Rectangle {
+                width: 3px;
+                background: Theme.primary;
+                border-radius: 1px;
+            }
+
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: "Replying to:";
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: Theme.primary;
+                }
+                Text {
+                    text: Chat.reply_to_preview;
+                    font-size: 12px;
+                    color: Theme.text-muted;
+                    overflow: elide;
+                }
+            }
+
+            Rectangle { }
+
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                border-radius: 14px;
+                background: cancel-reply-touch.has-hover ? Theme.surface-hover : transparent;
+
+                cancel-reply-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        Chat.cancel_reply();
+                    }
+                }
+
+                Text {
+                    text: "✕";
+                    font-size: 14px;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
         }
     }
 
@@ -144,7 +207,7 @@ export component ConversationLayout inherits VerticalBox {
             padding: 15px;
             spacing: 10px;
             input := LineEdit {
-                placeholder-text: Chat.is_editing ? "Edit message..." : "Écrire un message...";
+                placeholder-text: Chat.is_editing ? "Edit message..." : Chat.is_replying ? "Type your reply..." : "Write a message...";
                 text: Chat.editing_text;
                 enabled: Chat.active_chat_id >= 0;
                 edited => {
@@ -162,7 +225,7 @@ export component ConversationLayout inherits VerticalBox {
             }
 
             Button {
-                text: Chat.is_editing ? "Save" : "Envoyer";
+                text: Chat.is_editing ? "Save" : "Send";
                 enabled: Chat.active_chat_id >= 0 && input.text != "";
                 btn_width: 70px;
                 clicked => {

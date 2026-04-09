@@ -11,7 +11,7 @@ use sickgnal_core::chat::client::ChatEvent;
 use sickgnal_core::chat::message::Content;
 use sickgnal_core::chat::storage::{Message, MessageStatus};
 use sickgnal_sdk::TlsConfig;
-use sickgnal_sdk::account::AccountFile;
+use sickgnal_sdk::account::{AccountFile, ProfileManager};
 use sickgnal_sdk::client::Sdk;
 use sickgnal_sdk::dto::ConversationEntry;
 slint::include_modules!();
@@ -28,86 +28,284 @@ fn main() {
     tracing_subscriber::fmt::init();
 
     let args = Args::parse();
-    let dir = args.data_dir;
+    let base_dir = args.data_dir;
 
     let rt = Arc::new(tokio::runtime::Runtime::new().expect("Failed to create tokio runtime"));
 
     let ui = AppWindow::new().expect("Failed to load UI");
-    let account_file = Arc::new(AccountFile::new(dir.clone()).expect("Dossier non créé"));
 
-    if let Ok(username) = account_file.username() {
-        ui.global::<Auth>().set_username(username.into());
-    }
+    // ── Profile management ────────────────────────────────────────────
+    let profile_manager = ProfileManager::new(base_dir.clone()).expect("create profile manager");
+    let profiles = profile_manager.list_profiles().unwrap_or_default();
 
-    // --- CALLBACK SIGN UP ---
-    {
-        let ui_weak = ui.as_weak();
-        let af = Arc::clone(&account_file);
-        let rt = Arc::clone(&rt);
-        let dir = dir.clone();
-        ui.global::<Auth>()
-            .on_sign_up(move |user, pass, conf_pass| {
-                let Some(ui) = ui_weak.upgrade() else {
-                    return;
-                };
+    if profiles.is_empty() {
+        // No profiles — go directly to sign-up (legacy single-dir mode)
+        ui.global::<ProfileSelect>().set_show_profile_select(false);
 
-                if pass != conf_pass {
-                    ui.global::<Auth>().set_different_password(true);
-                    return;
-                }
+        // Try to read existing account from base_dir (backward compat)
+        let account_file = AccountFile::new(base_dir.clone()).ok();
+        if let Some(ref af) = account_file {
+            if let Ok(username) = af.username() {
+                ui.global::<Auth>().set_username(username.into());
+            }
+        }
 
-                if let Err(e) = af.create(user.as_str(), pass.as_str()) {
-                    error!("Failed to create account file: {e}");
-                    show_fatal_error(&ui, &format!("Failed to create account: {e}"));
-                    return;
-                }
+        // --- CALLBACK SIGN UP (no profile mode) ---
+        {
+            let ui_weak = ui.as_weak();
+            let rt = Arc::clone(&rt);
+            let pm = profile_manager.clone();
+            ui.global::<Auth>()
+                .on_sign_up(move |user, pass, conf_pass| {
+                    let Some(ui) = ui_weak.upgrade() else {
+                        return;
+                    };
 
-                spawn_sdk(
-                    ui_weak.clone(),
-                    rt.clone(),
-                    user.to_string(),
-                    pass.to_string(),
-                    dir.clone(),
-                    false,
-                );
+                    if pass != conf_pass {
+                        ui.global::<Auth>().set_different_password(true);
+                        return;
+                    }
 
-                ui.global::<Auth>().set_is_logged_in(true);
-                ui.window().set_maximized(true);
-            });
-    }
+                    // Create profile directory for the new user
+                    let profile_dir = match pm.profile_dir(user.as_str()) {
+                        Ok(d) => d,
+                        Err(e) => {
+                            show_fatal_error(&ui, &format!("Storage error: {e}"));
+                            return;
+                        }
+                    };
 
-    // --- CALLBACK SIGN IN ---
-    {
-        let ui_weak = ui.as_weak();
-        let af = Arc::clone(&account_file);
-        let rt = Arc::clone(&rt);
-        let dir = dir.clone();
-        ui.global::<Auth>().on_sign_in(move |pass| {
-            let Some(ui) = ui_weak.upgrade() else {
-                return;
-            };
-            let username = ui.global::<Auth>().get_username().to_string();
+                    let af = match AccountFile::new(profile_dir.clone()) {
+                        Ok(af) => af,
+                        Err(e) => {
+                            show_fatal_error(&ui, &format!("Storage error: {e}"));
+                            return;
+                        }
+                    };
 
-            match af.verify(username.as_str(), pass.as_str()) {
-                Ok(true) => {
+                    if let Err(e) = af.create(user.as_str(), pass.as_str()) {
+                        error!("Failed to create account file: {e}");
+                        show_fatal_error(&ui, &format!("Failed to create account: {e}"));
+                        return;
+                    }
+
                     spawn_sdk(
                         ui_weak.clone(),
                         rt.clone(),
-                        username,
+                        user.to_string(),
                         pass.to_string(),
-                        dir.clone(),
-                        true,
+                        profile_dir,
+                        false,
                     );
+
                     ui.global::<Auth>().set_is_logged_in(true);
                     ui.window().set_maximized(true);
+                });
+        }
+
+        // --- CALLBACK SIGN IN (no profile mode / legacy single account) ---
+        {
+            let ui_weak = ui.as_weak();
+            let rt = Arc::clone(&rt);
+            let dir = base_dir.clone();
+            ui.global::<Auth>().on_sign_in(move |pass| {
+                let Some(ui) = ui_weak.upgrade() else {
+                    return;
+                };
+                let username = ui.global::<Auth>().get_username().to_string();
+
+                let af = match AccountFile::new(dir.clone()) {
+                    Ok(af) => af,
+                    Err(e) => {
+                        show_fatal_error(&ui, &format!("Storage error: {e}"));
+                        return;
+                    }
+                };
+
+                match af.verify(username.as_str(), pass.as_str()) {
+                    Ok(true) => {
+                        spawn_sdk(
+                            ui_weak.clone(),
+                            rt.clone(),
+                            username,
+                            pass.to_string(),
+                            dir.clone(),
+                            true,
+                        );
+                        ui.global::<Auth>().set_is_logged_in(true);
+                        ui.window().set_maximized(true);
+                    }
+                    Ok(false) => ui.global::<Auth>().set_incorrect_password(true),
+                    Err(e) => {
+                        error!("Verification error: {e}");
+                        show_fatal_error(&ui, &format!("Verification error: {e}"));
+                    }
                 }
-                Ok(false) => ui.global::<Auth>().set_incorrect_password(true),
-                Err(e) => {
-                    error!("Verification error: {e}");
-                    show_fatal_error(&ui, &format!("Verification error: {e}"));
-                }
-            }
-        });
+            });
+        }
+    } else {
+        // Profiles exist — show profile selection
+        ui.global::<ProfileSelect>().set_show_profile_select(true);
+
+        let slint_profiles: Vec<ProfileData> = profiles
+            .iter()
+            .map(|p| ProfileData {
+                name: p.name.clone().into(),
+                username: p.username.clone().into(),
+            })
+            .collect();
+        ui.global::<ProfileSelect>()
+            .set_profiles(ModelRc::new(VecModel::from(slint_profiles)));
+
+        // --- select_profile: show password mode ---
+        {
+            let ui_weak = ui.as_weak();
+            ui.global::<ProfileSelect>()
+                .on_select_profile(move |index| {
+                    let Some(ui) = ui_weak.upgrade() else { return };
+                    ui.global::<ProfileSelect>().set_selected_profile(index);
+                    ui.global::<ProfileSelect>().set_password_mode(true);
+                    ui.global::<ProfileSelect>().set_profile_error("".into());
+                });
+        }
+
+        // --- cancel_password ---
+        {
+            let ui_weak = ui.as_weak();
+            ui.global::<ProfileSelect>().on_cancel_password(move || {
+                let Some(ui) = ui_weak.upgrade() else { return };
+                ui.global::<ProfileSelect>().set_password_mode(false);
+                ui.global::<ProfileSelect>().set_selected_profile(-1);
+                ui.global::<ProfileSelect>().set_profile_error("".into());
+            });
+        }
+
+        // --- submit_password: verify and connect ---
+        {
+            let ui_weak = ui.as_weak();
+            let rt = Arc::clone(&rt);
+            let pm = profile_manager.clone();
+            let profiles = profiles.clone();
+            ui.global::<ProfileSelect>()
+                .on_submit_password(move |pass| {
+                    let Some(ui) = ui_weak.upgrade() else { return };
+                    let idx = ui.global::<ProfileSelect>().get_selected_profile();
+                    if idx < 0 || idx as usize >= profiles.len() {
+                        return;
+                    }
+
+                    let profile = &profiles[idx as usize];
+                    let profile_dir = match pm.profile_dir(&profile.name) {
+                        Ok(d) => d,
+                        Err(e) => {
+                            ui.global::<ProfileSelect>()
+                                .set_profile_error(format!("{e}").into());
+                            return;
+                        }
+                    };
+
+                    let af = match AccountFile::new(profile_dir.clone()) {
+                        Ok(af) => af,
+                        Err(e) => {
+                            ui.global::<ProfileSelect>()
+                                .set_profile_error(format!("{e}").into());
+                            return;
+                        }
+                    };
+
+                    match af.verify(&profile.username, pass.as_str()) {
+                        Ok(true) => {
+                            ui.global::<ProfileSelect>().set_is_loading(true);
+                            ui.global::<ProfileSelect>().set_profile_error("".into());
+
+                            spawn_sdk(
+                                ui_weak.clone(),
+                                rt.clone(),
+                                profile.username.clone(),
+                                pass.to_string(),
+                                profile_dir,
+                                true,
+                            );
+
+                            ui.global::<Auth>().set_is_logged_in(true);
+                            ui.global::<ProfileSelect>().set_show_profile_select(false);
+                            ui.global::<ProfileSelect>().set_is_loading(false);
+                            ui.window().set_maximized(true);
+                        }
+                        Ok(false) => {
+                            ui.global::<ProfileSelect>()
+                                .set_profile_error("Incorrect password".into());
+                        }
+                        Err(e) => {
+                            error!("Verification error: {e}");
+                            ui.global::<ProfileSelect>()
+                                .set_profile_error(format!("Error: {e}").into());
+                        }
+                    }
+                });
+        }
+
+        // --- create_new_profile: switch to sign-up flow ---
+        {
+            let ui_weak = ui.as_weak();
+            let pm = profile_manager.clone();
+            let rt_clone = Arc::clone(&rt);
+            ui.global::<ProfileSelect>().on_create_new_profile(move || {
+                let Some(ui) = ui_weak.upgrade() else { return };
+                ui.global::<ProfileSelect>().set_show_profile_select(false);
+                ui.global::<Auth>().set_username("".into());
+
+                // Setup sign-up callback for the new profile context
+                let ui_weak2 = ui.as_weak();
+                let rt = rt_clone.clone();
+                let pm = pm.clone();
+                ui.global::<Auth>()
+                    .on_sign_up(move |user, pass, conf_pass| {
+                        let Some(ui) = ui_weak2.upgrade() else {
+                            return;
+                        };
+
+                        if pass != conf_pass {
+                            ui.global::<Auth>().set_different_password(true);
+                            return;
+                        }
+
+                        let profile_dir = match pm.profile_dir(user.as_str()) {
+                            Ok(d) => d,
+                            Err(e) => {
+                                show_fatal_error(&ui, &format!("Storage error: {e}"));
+                                return;
+                            }
+                        };
+
+                        let af = match AccountFile::new(profile_dir.clone()) {
+                            Ok(af) => af,
+                            Err(e) => {
+                                show_fatal_error(&ui, &format!("Storage error: {e}"));
+                                return;
+                            }
+                        };
+
+                        if let Err(e) = af.create(user.as_str(), pass.as_str()) {
+                            error!("Failed to create account file: {e}");
+                            show_fatal_error(&ui, &format!("Failed to create account: {e}"));
+                            return;
+                        }
+
+                        spawn_sdk(
+                            ui_weak2.clone(),
+                            rt.clone(),
+                            user.to_string(),
+                            pass.to_string(),
+                            profile_dir,
+                            false,
+                        );
+
+                        ui.global::<Auth>().set_is_logged_in(true);
+                        ui.window().set_maximized(true);
+                    });
+            });
+        }
     }
 
     // --- CALLBACK DISMISS ERROR ---
@@ -247,7 +445,7 @@ fn setup_chat_callbacks(
             };
             drop(ids);
 
-            let msgs = match sdk.get_messages(conv_uuid) {
+            let mut msgs = match sdk.get_messages(conv_uuid) {
                 Ok(m) => m,
                 Err(e) => {
                     error!("Failed to load messages: {e}");
@@ -256,8 +454,13 @@ fn setup_chat_callbacks(
                 }
             };
 
-            let slint_msgs: Vec<MessageData> =
-                msgs.iter().map(|m| message_to_slint(m, my_id)).collect();
+            // SQL returns DESC order; reverse to chronological (oldest first)
+            msgs.reverse();
+
+            let slint_msgs: Vec<MessageData> = msgs
+                .iter()
+                .map(|m| message_to_slint_with_context(m, my_id, &msgs))
+                .collect();
 
             // Update messages on the active conversation
             let chats = ui.global::<Chat>().get_chats();
@@ -293,17 +496,39 @@ fn setup_chat_callbacks(
             };
             drop(ids);
 
+            // Check for reply state
+            let reply_to = if ui.global::<Chat>().get_is_replying() {
+                let reply_id_str = ui.global::<Chat>().get_reply_to_message_id();
+                let reply_preview = ui.global::<Chat>().get_reply_to_preview().to_string();
+                // Clear reply state
+                ui.global::<Chat>().set_is_replying(false);
+                ui.global::<Chat>().set_reply_to_message_id("".into());
+                ui.global::<Chat>().set_reply_to_preview("".into());
+                Uuid::parse_str(reply_id_str.as_str())
+                    .ok()
+                    .map(|id| (id, reply_preview))
+            } else {
+                None
+            };
+
+            let reply_uuid = reply_to.as_ref().map(|(id, _)| *id);
+            let reply_preview_text = reply_to.map(|(_, t)| t).unwrap_or_default();
+
             let mut sdk = sdk.clone();
             let ui_weak = ui_weak.clone();
             let text = text.to_string();
             rt.spawn(async move {
-                match sdk.send_message(conv_uuid, text, None).await {
+                match sdk.send_message(conv_uuid, text, reply_uuid).await {
                     Ok(msg) => {
+                        let reply_preview = reply_preview_text;
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                             let active = ui.global::<Chat>().get_active_chat_id();
                             let chats = ui.global::<Chat>().get_chats();
                             if let Some(mut conv) = chats.row_data(active as usize) {
-                                let slint_msg = message_to_slint(&msg, msg.sender_id);
+                                let mut slint_msg = message_to_slint(&msg, msg.sender_id);
+                                if !reply_preview.is_empty() {
+                                    slint_msg.reply_to_text = reply_preview.into();
+                                }
                                 append_message_to_conv(&mut conv, slint_msg);
                                 conv.last_message = msg.content.clone().into();
                                 conv.last_message_time =
@@ -473,6 +698,38 @@ fn setup_chat_callbacks(
         });
     }
 
+    // start_reply — set reply state from Slint
+    {
+        let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_start_reply(move |msg_id, preview| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            // Cancel any editing in progress
+            ui.global::<Chat>().set_is_editing(false);
+            ui.global::<Chat>().set_editing_message_id("".into());
+            ui.global::<Chat>().set_editing_text("".into());
+            // Set reply state
+            ui.global::<Chat>().set_is_replying(true);
+            ui.global::<Chat>().set_reply_to_message_id(msg_id);
+            let preview_str = if preview.len() > 60 {
+                format!("{}...", &preview.as_str()[..60])
+            } else {
+                preview.to_string()
+            };
+            ui.global::<Chat>().set_reply_to_preview(preview_str.into());
+        });
+    }
+
+    // cancel_reply
+    {
+        let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_cancel_reply(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            ui.global::<Chat>().set_is_replying(false);
+            ui.global::<Chat>().set_reply_to_message_id("".into());
+            ui.global::<Chat>().set_reply_to_preview("".into());
+        });
+    }
+
     // edit_message — call SDK to edit, then update Slint model
     {
         let sdk = sdk.clone();
@@ -592,7 +849,7 @@ fn setup_chat_callbacks(
 
             // Find the conversation entry to get peers
             let chats = ui.global::<Chat>().get_chats();
-            if let Some(conv) = chats.row_data(active as usize) {
+            if let Some(_conv) = chats.row_data(active as usize) {
                 // We need to get peer info. The Slint Conversation doesn't store peers,
                 // so we look them up from the SDK's get_conversation.
                 let peers_data: Vec<PeerData> =
@@ -850,7 +1107,33 @@ fn message_to_slint(msg: &Message, my_id: Uuid) -> MessageData {
         time: msg.issued_at.format("%H:%M").to_string().into(),
         status: status_to_str(msg.status),
         is_me: msg.sender_id == my_id,
+        reply_to_id: msg
+            .reply_to_id
+            .map(|id| id.to_string())
+            .unwrap_or_default()
+            .into(),
+        reply_to_text: Default::default(), // filled in by caller when context is available
+        sender_name: Default::default(),
     }
+}
+
+/// Convert a core `Message` to a Slint `MessageData`, resolving reply text
+/// from the full message list.
+fn message_to_slint_with_context(msg: &Message, my_id: Uuid, all_msgs: &[Message]) -> MessageData {
+    let mut data = message_to_slint(msg, my_id);
+
+    if let Some(reply_id) = msg.reply_to_id {
+        if let Some(replied) = all_msgs.iter().find(|m| m.id == reply_id) {
+            let preview = if replied.content.len() > 60 {
+                format!("{}...", &replied.content[..60])
+            } else {
+                replied.content.clone()
+            };
+            data.reply_to_text = preview.into();
+        }
+    }
+
+    data
 }
 
 /// Convert a `ConversationEntry` to a Slint `Conversation`.
@@ -889,11 +1172,16 @@ fn status_to_str(status: MessageStatus) -> slint::SharedString {
 /// Append a message to a Slint Conversation's message list.
 fn append_message_to_conv(conv: &mut Conversation, msg: MessageData) {
     let messages = conv.messages.clone();
-    let mut vec: Vec<MessageData> = (0..messages.row_count())
-        .filter_map(|i| messages.row_data(i))
-        .collect();
-    vec.push(msg);
-    conv.messages = ModelRc::new(VecModel::from(vec));
+    if let Some(model) = messages.as_any().downcast_ref::<VecModel<MessageData>>() {
+        model.push(msg);
+    } else {
+        // Fallback: rebuild if model type doesn't match (e.g. default empty model)
+        let mut vec: Vec<MessageData> = (0..messages.row_count())
+            .filter_map(|i| messages.row_data(i))
+            .collect();
+        vec.push(msg);
+        conv.messages = ModelRc::new(VecModel::from(vec));
+    }
 }
 
 /// Update the status of a specific message in a conversation.
@@ -901,18 +1189,15 @@ fn update_message_status(conv: &mut Conversation, message_id: Uuid, status: slin
     let messages = conv.messages.clone();
     let id_str: slint::SharedString = message_id.to_string().into();
 
-    let mut vec: Vec<MessageData> = (0..messages.row_count())
-        .filter_map(|i| messages.row_data(i))
-        .collect();
-
-    for msg in &mut vec {
-        if msg.id == id_str {
-            msg.status = status;
-            break;
+    for i in 0..messages.row_count() {
+        if let Some(mut msg) = messages.row_data(i) {
+            if msg.id == id_str {
+                msg.status = status;
+                messages.set_row_data(i, msg);
+                return;
+            }
         }
     }
-
-    conv.messages = ModelRc::new(VecModel::from(vec));
 }
 
 /// Update the text of a specific message in a conversation.
@@ -920,16 +1205,13 @@ fn update_message_text(conv: &mut Conversation, message_id: Uuid, new_text: &str
     let messages = conv.messages.clone();
     let id_str: slint::SharedString = message_id.to_string().into();
 
-    let mut vec: Vec<MessageData> = (0..messages.row_count())
-        .filter_map(|i| messages.row_data(i))
-        .collect();
-
-    for msg in &mut vec {
-        if msg.id == id_str {
-            msg.text = new_text.into();
-            break;
+    for i in 0..messages.row_count() {
+        if let Some(mut msg) = messages.row_data(i) {
+            if msg.id == id_str {
+                msg.text = new_text.into();
+                messages.set_row_data(i, msg);
+                return;
+            }
         }
     }
-
-    conv.messages = ModelRc::new(VecModel::from(vec));
 }

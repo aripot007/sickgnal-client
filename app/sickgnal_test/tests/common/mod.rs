@@ -10,9 +10,9 @@ use sickgnal_core::chat::client::ChatEvent as SdkEvent;
 use sickgnal_core::chat::dto::Conversation;
 use sickgnal_core::chat::message::Content;
 use sickgnal_core::chat::storage::{Message, MessageStatus};
+use sickgnal_sdk::TlsConfig;
 use sickgnal_sdk::account::AccountFile;
 use sickgnal_sdk::client::SyncBridge;
-use sickgnal_sdk::TlsConfig;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 

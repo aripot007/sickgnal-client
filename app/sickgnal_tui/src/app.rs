@@ -136,6 +136,9 @@ pub struct App {
     pub original_message_text: String,
     pub confirm_delete: Option<Uuid>,
 
+    // Reply state
+    pub reply_to_message: Option<(Uuid, String)>, // (message_id, preview text)
+
     // Conversation info state
     pub info_selected_peer: usize,
     pub info_show_fingerprint: bool,
@@ -211,6 +214,8 @@ impl App {
             editing_message_id: None,
             original_message_text: String::new(),
             confirm_delete: None,
+
+            reply_to_message: None,
 
             info_selected_peer: 0,
             info_show_fingerprint: false,
@@ -581,18 +586,37 @@ impl App {
             Ok(Err(e)) => {
                 error!("Auth connection failed: {e}");
                 let msg = friendly_error("Connection", &e);
-                self.auth_error = Some(msg);
 
                 // If sign-up failed, clean up the local account file so user can retry
                 if self.auth_was_signup {
                     if let Ok(af) = sickgnal_sdk::account::AccountFile::new(self.data_dir.clone()) {
                         let _ = af.delete();
                     }
+                    self.auth_error = Some(msg.clone());
+                } else {
+                    // Came from profile selection (sign-in) — go back to profile screen
+                    if !self.profiles.is_empty() {
+                        self.profile_error = Some(msg.clone());
+                        self.screen = Screen::ProfileSelect;
+                    } else {
+                        self.auth_error = Some(msg.clone());
+                    }
                 }
+
+                self.show_error_toast(msg);
                 self.auth_loading = false;
             }
             Err(_) => {
-                self.auth_error = Some("Connection attempt crashed unexpectedly".into());
+                let msg = "Connection attempt crashed unexpectedly".to_string();
+
+                if !self.auth_was_signup && !self.profiles.is_empty() {
+                    self.profile_error = Some(msg.clone());
+                    self.screen = Screen::ProfileSelect;
+                } else {
+                    self.auth_error = Some(msg.clone());
+                }
+
+                self.show_error_toast(msg);
                 self.auth_loading = false;
             }
         }
@@ -644,10 +668,13 @@ impl App {
                     // Clear unread count in the entry
                     self.conversations[self.selected_conversation].unread_messages_count = 0;
 
-                    // Load messages
+                    // Load messages (SQL returns DESC; reverse to chronological order)
                     if let Some(ref sdk) = self.sdk {
                         match sdk.get_messages(conv_id) {
-                            Ok(msgs) => self.messages = msgs,
+                            Ok(mut msgs) => {
+                                msgs.reverse();
+                                self.messages = msgs;
+                            }
                             Err(e) => {
                                 error!("Failed to load messages: {e}");
                                 self.show_error_toast(friendly_error("Loading messages", &e));
@@ -850,6 +877,18 @@ impl App {
                         }
                     }
                 }
+                KeyCode::Char('r') => {
+                    // Reply to the selected message (own or peer)
+                    if let Some(msg) = self.messages.get(sel) {
+                        let preview = if msg.content.len() > 50 {
+                            format!("{}...", &msg.content[..50])
+                        } else {
+                            msg.content.clone()
+                        };
+                        self.reply_to_message = Some((msg.id, preview));
+                        self.selected_message = None;
+                    }
+                }
                 KeyCode::Char(c) => {
                     // Any other char exits selection and starts typing
                     self.selected_message = None;
@@ -863,6 +902,12 @@ impl App {
         // ── Normal input mode ──
         match key.code {
             KeyCode::Esc => {
+                // If replying, cancel reply first
+                if self.reply_to_message.is_some() {
+                    self.reply_to_message = None;
+                    return;
+                }
+
                 // Refresh conversations list before going back
                 if let Some(ref sdk) = self.sdk {
                     match sdk.list_conversations() {
@@ -882,7 +927,12 @@ impl App {
                     let conv_id = self.current_conversation;
                     let text = self.message_input.clone();
                     if let (Some(conv_id), Some(sdk)) = (conv_id, &mut self.sdk) {
-                        match sdk.send_message(conv_id, text) {
+                        let result = if let Some((reply_to_id, _)) = self.reply_to_message.take() {
+                            sdk.send_reply(conv_id, text, reply_to_id)
+                        } else {
+                            sdk.send_message(conv_id, text)
+                        };
+                        match result {
                             Ok(msg) => {
                                 self.messages.push(msg);
                                 self.message_input.clear();
