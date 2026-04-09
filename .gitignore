@@ -1,3 +1,6 @@
 /target
 storage/
 tui_storage
+*.db
+*.db-shm
+*.db-wal

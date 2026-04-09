@@ -1,5 +1,7 @@
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use chrono::DateTime;
 use rusqlite::{OptionalExtension, params};
+use serde::Deserialize;
 use sickgnal_core::{
     chat::{
         dto::Conversation,
@@ -17,6 +19,26 @@ use crate::{
         store::{Store, message::parse_status},
     },
 };
+
+/// Intermediate struct for deserializing peers from the JSON produced by
+/// list_conversations. The fingerprint is stored as base64 TEXT in the
+/// database, so it comes through as a plain string in the JSON.
+#[derive(Deserialize)]
+struct PeerJson {
+    id: Uuid,
+    username: Option<String>,
+    fingerprint: Option<String>,
+}
+
+impl From<PeerJson> for Peer {
+    fn from(pj: PeerJson) -> Self {
+        Peer {
+            id: pj.id,
+            username: pj.username,
+            fingerprint: pj.fingerprint.and_then(|s| BASE64.decode(s).ok()),
+        }
+    }
+}
 
 pub struct ConversationStore;
 
@@ -84,7 +106,7 @@ impl ConversationStore {
         let mut stmt = conn.prepare_cached(
             r#"
                 SELECT 1 FROM conversations
-                WHERE conversation_id = ?1
+                WHERE id = ?1
                 LIMIT 1
             "#,
         )?;
@@ -164,10 +186,12 @@ impl ConversationStore {
         let mut peers = Vec::new();
 
         while let Some(row) = rows.next()? {
+            let fp_b64: Option<String> = row.get(2)?;
+            let fingerprint = fp_b64.and_then(|s| BASE64.decode(s).ok());
             peers.push(Peer {
                 id: Uuid::try_from(row.get::<_, String>(0)?)?,
                 username: row.get(1)?,
-                fingerprint: row.get(2)?,
+                fingerprint,
             });
         }
 
@@ -208,7 +232,8 @@ impl ConversationStore {
                 custom_title: r.get(1)?,
             };
 
-            let peers: Vec<Peer> = serde_json::from_str(&r.get::<_, String>(2)?)?;
+            let peer_jsons: Vec<PeerJson> = serde_json::from_str(&r.get::<_, String>(2)?)?;
+            let peers: Vec<Peer> = peer_jsons.into_iter().map(Peer::from).collect();
 
             let conversation = Conversation::from_info(info, peers);
 
@@ -222,7 +247,7 @@ impl ConversationStore {
                     .map_err(Error::from)?
                     .to_utc();
 
-                let reply_to_id = match r.get::<_, Option<String>>(8)? {
+                let reply_to_id = match r.get::<_, Option<String>>(9)? {
                     Some(s) => Some(Uuid::try_from(s)?),
                     None => None,
                 };

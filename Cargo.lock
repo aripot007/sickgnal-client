@@ -5049,6 +5049,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "async-trait",
+ "base64",
  "bincode 1.3.3",
  "chrono",
  "const_format",

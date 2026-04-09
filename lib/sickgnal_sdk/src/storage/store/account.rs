@@ -101,7 +101,8 @@ impl AccountStore {
         let data = bincode::serialize(keypair)?;
 
         let nb_updated = conn.execute(
-            "REPLACE INTO account_keys (identity_key) VALUES (?1)",
+            "INSERT INTO account_keys (_id, identity_key) VALUES (0, ?1)
+             ON CONFLICT(_id) DO UPDATE SET identity_key = excluded.identity_key",
             [data],
         )?;
 
@@ -113,7 +114,11 @@ impl AccountStore {
     }
 
     pub fn clear_identity_keypair(conn: &rusqlite::Connection) -> Result<()> {
-        conn.execute("REPLACE INTO account_keys (identity_key) VALUES (NULL)", ())?;
+        conn.execute(
+            "INSERT INTO account_keys (_id, identity_key) VALUES (0, NULL)
+             ON CONFLICT(_id) DO UPDATE SET identity_key = NULL",
+            (),
+        )?;
         Ok(())
     }
 
@@ -137,7 +142,8 @@ impl AccountStore {
         let data = bincode::serialize(key)?;
 
         let nb_updated = conn.execute(
-            "REPLACE INTO account_keys (midterm_key) VALUES (?1)",
+            "INSERT INTO account_keys (_id, midterm_key) VALUES (0, ?1)
+             ON CONFLICT(_id) DO UPDATE SET midterm_key = excluded.midterm_key",
             [data],
         )?;
 

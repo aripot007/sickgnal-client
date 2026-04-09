@@ -500,11 +500,7 @@ fn setup_chat_callbacks(
                 let new_text = new_text.to_string();
                 rt.spawn(async move {
                     match sdk
-                        .edit_message(
-                            conv_uuid,
-                            msg_uuid,
-                            Content::Text(new_text.clone()),
-                        )
+                        .edit_message(conv_uuid, msg_uuid, Content::Text(new_text.clone()))
                         .await
                     {
                         Ok(()) => {

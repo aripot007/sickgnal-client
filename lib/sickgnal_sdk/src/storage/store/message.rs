@@ -22,9 +22,8 @@ impl Store<Message> for MessageStore {
         status TEXT NOT NULL CHECK (status IN ('sending', 'sent', 'delivered', 'read', 'failed')),               -- 'sending', 'sent', 'delivered', 'read', 'failed'
         reply_to_id TEXT,                   -- ID of message being replied to (may reference remote messages)
         
-        PRIMARY KEY (id, conversation_id)
-        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-        FOREIGN KEY (sender_id) REFERENCES peers(id)
+        PRIMARY KEY (id, conversation_id),
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
     "#;
 
     const POST_CREATE_SQL: &str = r#"
@@ -77,7 +76,7 @@ impl MessageStore {
                     content,
                     timestamp,
                     status,
-                    reply_to_id,
+                    reply_to_id
                 )
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
             "#,
@@ -109,7 +108,7 @@ impl MessageStore {
                     content,
                     timestamp,
                     status,
-                    reply_to_id,
+                    reply_to_id
                 FROM messages
                 WHERE id = ?1 AND conversation_id = ?2
             "#,
@@ -145,7 +144,7 @@ impl MessageStore {
                 conv_id.to_string()
             ],
         )?;
-        todo!()
+        Ok(())
     }
 
     pub fn delete_by_id(conn: &rusqlite::Connection, conv_id: &Uuid, msg_id: &Uuid) -> Result<()> {
@@ -173,7 +172,7 @@ impl MessageStore {
                     content,
                     timestamp,
                     status,
-                    reply_to_id,
+                    reply_to_id
                 FROM messages
                 WHERE conversation_id = ?1
                 ORDER BY timestamp DESC
