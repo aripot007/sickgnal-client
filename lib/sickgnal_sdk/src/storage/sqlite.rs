@@ -324,6 +324,7 @@ impl E2EStorageBackend for Sqlite {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sickgnal_core::test_chat_storage_backend;
     use sickgnal_core::test_e2e_storage_backend;
 
     fn create_test_config() -> Config {
@@ -377,8 +378,315 @@ mod tests {
         let mut sqlite = Sqlite { conn };
         sqlite.initialize().unwrap();
 
+        let account = Account {
+            username: "PLACEHOLDER_USERNAME".into(),
+            id: Uuid::nil(),
+            token: "PLACEHOLDER_TOKEN".into(),
+        };
+        sqlite.set_account(&account).unwrap();
+
         Arc::new(Mutex::new(sqlite))
     }
 
     test_e2e_storage_backend! {setup(), OsRng}
+    test_chat_storage_backend! {setup()}
+
+    /// Create a plain Sqlite instance (not wrapped) with an account set up
+    fn setup_sqlite() -> Sqlite {
+        let conn = Connection::open_in_memory().unwrap();
+        let mut sqlite = Sqlite { conn };
+        sqlite.initialize().unwrap();
+
+        let account = Account {
+            username: "test_user".into(),
+            id: Uuid::new_v4(),
+            token: "test_token".into(),
+        };
+        sqlite.set_account(&account).unwrap();
+
+        sqlite
+    }
+
+    #[test]
+    fn test_list_conversations_last_message() {
+        use chrono::{Duration, Utc};
+        use sickgnal_core::chat::storage::{ConversationInfo, Message, MessageStatus};
+        use sickgnal_core::e2e::peer::Peer;
+
+        let mut db = setup_sqlite();
+
+        let peer_a = Peer {
+            id: Uuid::new_v4(),
+            username: Some("Alice".into()),
+            fingerprint: None,
+        };
+        let peer_b = Peer {
+            id: Uuid::new_v4(),
+            username: Some("Bob".into()),
+            fingerprint: None,
+        };
+        db.save_peer(&peer_a).unwrap();
+        db.save_peer(&peer_b).unwrap();
+
+        // Conversation 1 with Alice
+        let conv1_id = Uuid::new_v4();
+        StorageBackend::create_conversation(
+            &mut db,
+            &ConversationInfo {
+                id: conv1_id,
+                custom_title: None,
+            },
+            peer_a.id,
+        )
+        .unwrap();
+
+        // Conversation 2 with Bob
+        let conv2_id = Uuid::new_v4();
+        StorageBackend::create_conversation(
+            &mut db,
+            &ConversationInfo {
+                id: conv2_id,
+                custom_title: None,
+            },
+            peer_b.id,
+        )
+        .unwrap();
+
+        let now = Utc::now();
+
+        // Conv1: older message
+        let msg1 = Message {
+            id: Uuid::new_v4(),
+            conversation_id: conv1_id,
+            sender_id: peer_a.id,
+            content: "Old message".into(),
+            issued_at: now - Duration::hours(2),
+            status: MessageStatus::Delivered,
+            reply_to_id: None,
+        };
+        // Conv1: newer message (this should be last_message)
+        let msg2 = Message {
+            id: Uuid::new_v4(),
+            conversation_id: conv1_id,
+            sender_id: peer_a.id,
+            content: "New message".into(),
+            issued_at: now - Duration::hours(1),
+            status: MessageStatus::Delivered,
+            reply_to_id: None,
+        };
+        // Conv2: single message, most recent overall
+        let msg3 = Message {
+            id: Uuid::new_v4(),
+            conversation_id: conv2_id,
+            sender_id: peer_b.id,
+            content: "Latest message".into(),
+            issued_at: now,
+            status: MessageStatus::Delivered,
+            reply_to_id: None,
+        };
+
+        db.save_message(&msg1).unwrap();
+        db.save_message(&msg2).unwrap();
+        db.save_message(&msg3).unwrap();
+
+        let entries = db.list_conversations().unwrap();
+        assert_eq!(entries.len(), 2);
+
+        // Entries should be ordered by latest message timestamp DESC
+        // Conv2 (msg3, most recent) should come first
+        assert_eq!(entries[0].conversation.id, conv2_id);
+        assert_eq!(entries[1].conversation.id, conv1_id);
+
+        // Conv2 last_message should be msg3
+        let last_msg_conv2 = entries[0]
+            .last_message
+            .as_ref()
+            .expect("should have last message");
+        assert_eq!(last_msg_conv2.id, msg3.id);
+        assert_eq!(last_msg_conv2.content, "Latest message");
+
+        // Conv1 last_message should be msg2 (the newer one)
+        let last_msg_conv1 = entries[1]
+            .last_message
+            .as_ref()
+            .expect("should have last message");
+        assert_eq!(last_msg_conv1.id, msg2.id);
+        assert_eq!(last_msg_conv1.content, "New message");
+    }
+
+    #[test]
+    fn test_list_conversations_unread_count() {
+        use chrono::Utc;
+        use sickgnal_core::chat::storage::{ConversationInfo, Message, MessageStatus};
+        use sickgnal_core::e2e::peer::Peer;
+
+        let mut db = setup_sqlite();
+
+        let my_id = db.load_account().unwrap().expect("account should exist").id;
+
+        // Save self as peer
+        db.save_peer(&Peer {
+            id: my_id,
+            username: Some("me".into()),
+            fingerprint: None,
+        })
+        .unwrap();
+
+        let peer = Peer {
+            id: Uuid::new_v4(),
+            username: Some("Alice".into()),
+            fingerprint: None,
+        };
+        db.save_peer(&peer).unwrap();
+
+        let conv_id = Uuid::new_v4();
+        StorageBackend::create_conversation(
+            &mut db,
+            &ConversationInfo {
+                id: conv_id,
+                custom_title: None,
+            },
+            peer.id,
+        )
+        .unwrap();
+
+        let now = Utc::now();
+
+        // 2 delivered messages from the peer (these count as unread)
+        for i in 0..2 {
+            db.save_message(&Message {
+                id: Uuid::new_v4(),
+                conversation_id: conv_id,
+                sender_id: peer.id,
+                content: format!("peer msg {}", i),
+                issued_at: now,
+                status: MessageStatus::Delivered,
+                reply_to_id: None,
+            })
+            .unwrap();
+        }
+
+        // 1 delivered message from ourselves (should NOT count as unread)
+        db.save_message(&Message {
+            id: Uuid::new_v4(),
+            conversation_id: conv_id,
+            sender_id: my_id,
+            content: "my msg".into(),
+            issued_at: now,
+            status: MessageStatus::Delivered,
+            reply_to_id: None,
+        })
+        .unwrap();
+
+        // 1 already-read message from peer (should NOT count as unread)
+        db.save_message(&Message {
+            id: Uuid::new_v4(),
+            conversation_id: conv_id,
+            sender_id: peer.id,
+            content: "already read msg".into(),
+            issued_at: now,
+            status: MessageStatus::Read,
+            reply_to_id: None,
+        })
+        .unwrap();
+
+        let entries = db.list_conversations().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            entries[0].unread_messages_count, 2,
+            "only peer's delivered messages should count as unread"
+        );
+
+        // Mark conversation as read
+        StorageBackend::mark_conversation_as_read(&mut db, &conv_id).unwrap();
+
+        let entries_after = db.list_conversations().unwrap();
+        assert_eq!(
+            entries_after[0].unread_messages_count, 0,
+            "unread count should be 0 after marking as read"
+        );
+    }
+
+    #[test]
+    fn test_list_conversations_peers() {
+        use sickgnal_core::chat::storage::ConversationInfo;
+        use sickgnal_core::e2e::peer::Peer;
+
+        let mut db = setup_sqlite();
+
+        let peer_a = Peer {
+            id: Uuid::new_v4(),
+            username: Some("Alice".into()),
+            fingerprint: None,
+        };
+        let peer_b = Peer {
+            id: Uuid::new_v4(),
+            username: Some("Bob".into()),
+            fingerprint: None,
+        };
+        let peer_c = Peer {
+            id: Uuid::new_v4(),
+            username: Some("Carol".into()),
+            fingerprint: None,
+        };
+        db.save_peer(&peer_a).unwrap();
+        db.save_peer(&peer_b).unwrap();
+        db.save_peer(&peer_c).unwrap();
+
+        // 1:1 conversation with Alice
+        let conv1_id = Uuid::new_v4();
+        StorageBackend::create_conversation(
+            &mut db,
+            &ConversationInfo {
+                id: conv1_id,
+                custom_title: None,
+            },
+            peer_a.id,
+        )
+        .unwrap();
+
+        // Group conversation with Bob and Carol
+        let conv2_id = Uuid::new_v4();
+        StorageBackend::create_group_conversation(
+            &mut db,
+            &ConversationInfo {
+                id: conv2_id,
+                custom_title: Some("Group".into()),
+            },
+            &[peer_b.id, peer_c.id],
+        )
+        .unwrap();
+
+        let entries = db.list_conversations().unwrap();
+        assert_eq!(entries.len(), 2);
+
+        // Find entries by id (order depends on last_message which is None here)
+        let entry1 = entries
+            .iter()
+            .find(|e| e.conversation.id == conv1_id)
+            .expect("conv1 should be listed");
+        let entry2 = entries
+            .iter()
+            .find(|e| e.conversation.id == conv2_id)
+            .expect("conv2 should be listed");
+
+        // 1:1 conversation should have 1 peer
+        assert_eq!(entry1.conversation.peers.len(), 1);
+        assert_eq!(entry1.conversation.peers[0].id, peer_a.id);
+        assert_eq!(entry1.conversation.peers[0].username, Some("Alice".into()));
+
+        // Group conversation should have 2 peers
+        assert_eq!(entry2.conversation.peers.len(), 2);
+        let peer_ids: Vec<Uuid> = entry2.conversation.peers.iter().map(|p| p.id).collect();
+        assert!(peer_ids.contains(&peer_b.id), "group should contain Bob");
+        assert!(peer_ids.contains(&peer_c.id), "group should contain Carol");
+
+        // Verify no last_message for conversations without messages
+        assert!(entry1.last_message.is_none());
+        assert!(entry2.last_message.is_none());
+
+        // Verify unread count is 0 for conversations without messages
+        assert_eq!(entry1.unread_messages_count, 0);
+        assert_eq!(entry2.unread_messages_count, 0);
+    }
 }

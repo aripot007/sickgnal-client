@@ -179,13 +179,10 @@ impl MessageStore {
 
         let mut stmt = conn.prepare_cached(
             r#"
-                WITH MyAccount AS (
-                    SELECT user_id FROM account LIMIT 1
-                ),
                 SELECT id FROM messages
                 WHERE conversation_id = ?1
                     AND status = 'delivered'
-                    AND sender_id != (SELECT user_id FROM MyAccount)
+                    AND sender_id != (SELECT user_id FROM account LIMIT 1)
             "#,
         )?;
 
@@ -200,19 +197,15 @@ impl MessageStore {
     }
 
     pub fn mark_conversation_as_read(conn: &rusqlite::Connection, conv_id: &Uuid) -> Result<()> {
-        let mut stmt = conn.prepare_cached(
+        conn.execute(
             r#"
-                WITH MyAccount AS (
-                    SELECT user_id FROM account LIMIT 1
-                ),
                 UPDATE messages SET status = 'read'
                 WHERE conversation_id = ?1
                     AND status = 'delivered'
-                    AND sender_id != (SELECT user_id FROM MyAccount)
+                    AND sender_id != (SELECT user_id FROM account LIMIT 1)
             "#,
+            params![conv_id.to_string()],
         )?;
-
-        stmt.execute(params![conv_id.to_string()])?;
 
         Ok(())
     }

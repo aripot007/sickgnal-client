@@ -1,5 +1,6 @@
 mod error;
 mod model;
+mod tests;
 mod r#trait;
 
 pub use error::*;

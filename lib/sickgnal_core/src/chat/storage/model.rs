@@ -20,7 +20,7 @@ pub enum MessageStatus {
 }
 
 /// Some information about a conversation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ConversationInfo {
     pub id: Uuid,
     /// A custom title for this conversation
@@ -28,7 +28,7 @@ pub struct ConversationInfo {
 }
 
 /// A textual message in a conversation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Message {
     pub id: Uuid,
     pub conversation_id: Uuid,
