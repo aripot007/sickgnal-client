@@ -83,7 +83,7 @@ impl Sqlite {
     }
 
     pub(crate) fn list_conversations(&self) -> Result<Vec<ConversationEntry>> {
-        ConversationStore::list_conversations(&self.conn)
+        ConversationStore::list_conversations(&self.conn, None, None)
     }
 
     pub(crate) fn delete_conversation(&self, id: &Uuid) -> Result<()> {

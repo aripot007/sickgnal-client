@@ -182,10 +182,24 @@ impl ConversationStore {
         Ok(Some(Conversation::from_info(info, peers)))
     }
 
-    pub fn list_conversations(conn: &rusqlite::Connection) -> Result<Vec<ConversationEntry>> {
+    pub fn list_conversations(
+        conn: &rusqlite::Connection,
+        page: Option<usize>,
+        limit: Option<usize>,
+    ) -> Result<Vec<ConversationEntry>> {
         let mut stmt = conn.prepare_cached(LIST_CONVERSATIONS_STMT)?;
 
-        let mut rows = stmt.query([])?;
+        let offset = match (limit, page) {
+            (None, _) | (_, None) => 0,
+            (Some(limit), Some(page)) => (page * limit) as isize,
+        };
+
+        let limit = match limit {
+            Some(n) => n as isize,
+            None => -1,
+        };
+
+        let mut rows = stmt.query(params![limit, offset])?;
         let mut conversations = Vec::new();
 
         while let Some(r) = rows.next()? {
