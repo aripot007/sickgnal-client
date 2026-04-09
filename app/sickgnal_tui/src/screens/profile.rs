@@ -46,8 +46,9 @@ pub fn draw(f: &mut Frame, app: &App) {
             Paragraph::new(Line::from(Span::styled(
                 warning,
                 Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
+                    .fg(Color::Black)
+                    .bg(Color::Red)
+                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
             )))
             .alignment(Alignment::Center),
             chunks[2],
