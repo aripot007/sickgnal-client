@@ -66,13 +66,21 @@ pub trait StorageBackend: E2EStorageBackend {
     /// Delete a message in a conversation
     fn delete_message(&mut self, conv_id: &Uuid, msg_id: &Uuid) -> Result<()>;
 
-    /// Update the status of a message
+    /// Get the ids of the unread messages that are not ours
+    ///
+    /// Returns `None` if the conversation does not exist
+    fn get_received_unread_messages(&mut self, conv_id: &Uuid) -> Result<Option<Vec<Uuid>>>;
+
+    /// Update the status of some messages
     fn update_message_status(
         &mut self,
         conversation_id: &Uuid,
-        message_id: &Uuid,
+        message_ids: impl IntoIterator<Item = Uuid>,
         status: MessageStatus,
     ) -> Result<()>;
+
+    /// Mark unread messages in a conversation as read
+    fn mark_conversation_as_read(&mut self, conv_id: &Uuid) -> Result<()>;
 }
 
 #[derive(Debug, Error)]
@@ -146,14 +154,26 @@ impl<T: StorageBackend> StorageBackend for Arc<Mutex<T>> {
             .delete_message(conversation_id, message_id)
     }
 
+    fn get_received_unread_messages(&mut self, conv_id: &Uuid) -> Result<Option<Vec<Uuid>>> {
+        self.lock()
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
+            .get_received_unread_messages(conv_id)
+    }
+
+    fn mark_conversation_as_read(&mut self, conv_id: &Uuid) -> Result<()> {
+        self.lock()
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
+            .mark_conversation_as_read(conv_id)
+    }
+
     fn update_message_status(
         &mut self,
         conversation_id: &Uuid,
-        message_id: &Uuid,
+        message_ids: impl IntoIterator<Item = Uuid>,
         status: MessageStatus,
     ) -> Result<()> {
         self.lock()
             .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
-            .update_message_status(conversation_id, message_id, status)
+            .update_message_status(conversation_id, message_ids, status)
     }
 }

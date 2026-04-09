@@ -6,6 +6,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use async_trait::async_trait;
 use ed25519_dalek::Signer;
 use rand::{
     SeedableRng,
@@ -20,6 +21,7 @@ use crate::{
     chat::message::ChatMessage,
     e2e::{
         client::{
+            ChatMessageSender,
             client_handle::ClientHandle,
             error::{Error, Result},
             state::E2EClientState,
@@ -145,23 +147,6 @@ where
     #[inline]
     pub fn account(&self) -> &Account {
         &self.state.account
-    }
-
-    /// Send a [`ChatMessage`] to another user
-    pub async fn send(&mut self, to: Uuid, message: ChatMessage) -> Result<()> {
-        let rq = match self.state.prepare_message(to, message.clone()) {
-            Ok(rq) => rq,
-
-            // No session with the user yet, create a session
-            Err(Error::NoSession(_)) => return self.open_new_session(to, message).await,
-
-            Err(e) => return Err(e),
-        };
-
-        match self.send_authenticated_e2e(rq).await? {
-            E2EMessage::Ok => Ok(()),
-            m => Err(Error::UnexpectedE2EMessage(m)),
-        }
     }
 
     /// Starts the asynchronous mode
@@ -511,4 +496,28 @@ where
     }
 
     // endregion: Private API
+}
+
+#[async_trait]
+impl<Storage, MsgStream> ChatMessageSender for E2EClient<Storage, MsgStream>
+where
+    Storage: E2EStorageBackend + Send + 'static,
+    MsgStream: E2EMessageStream + Send,
+{
+    /// Send a [`ChatMessage`] to another user
+    async fn send(&mut self, to: Uuid, message: ChatMessage) -> Result<()> {
+        let rq = match self.state.prepare_message(to, message.clone()) {
+            Ok(rq) => rq,
+
+            // No session with the user yet, create a session
+            Err(Error::NoSession(_)) => return self.open_new_session(to, message).await,
+
+            Err(e) => return Err(e),
+        };
+
+        match self.send_authenticated_e2e(rq).await? {
+            E2EMessage::Ok => Ok(()),
+            m => Err(Error::UnexpectedE2EMessage(m)),
+        }
+    }
 }

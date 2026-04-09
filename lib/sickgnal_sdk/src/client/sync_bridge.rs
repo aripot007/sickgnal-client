@@ -79,8 +79,9 @@ impl SyncBridge {
         self.sdk.get_conversation(conversation_id)
     }
 
-    pub fn mark_conversation_as_read(&self, conversation_id: Uuid) -> Result<()> {
-        self.sdk.mark_conversation_as_read(conversation_id)
+    pub fn mark_conversation_as_read(&mut self, conversation_id: Uuid) -> Result<()> {
+        self.rt
+            .block_on(self.sdk.mark_conversation_as_read(conversation_id))
     }
 
     // ─── Messages ───────────────────────────────────────────────────────

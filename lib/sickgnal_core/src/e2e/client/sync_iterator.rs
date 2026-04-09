@@ -37,7 +37,7 @@ where
     batch_size: u64,
 
     /// The client to synchronize
-    client: &'c mut E2EClient<Storage, MsgStream>,
+    pub(crate) e2e_client: &'c mut E2EClient<Storage, MsgStream>,
 
     /// What step in the syncrhonization process the iterator is at
     step: SynchronizationStep,
@@ -83,7 +83,7 @@ where
     pub(super) fn new(client: &'c mut E2EClient<Storage, MsgStream>) -> Self {
         Self {
             batch_size: 100,
-            client,
+            e2e_client: client,
             step: SynchronizationStep::InitialMessages,
             messages: Vec::new(),
             undecipherable_messages: HashMap::new(),
@@ -106,7 +106,7 @@ where
     /// ```
     pub async fn next(&mut self) -> Result<Option<ChatMessage>, Error> {
         // Start by syncrhonizing the prekeys
-        self.client.sync_prekeys(PREKEY_AMOUNT, false).await?;
+        self.e2e_client.sync_prekeys(PREKEY_AMOUNT, false).await?;
 
         loop {
             // Return already decrypted messages if available
@@ -142,7 +142,7 @@ where
 
         // Cleanup old session keys
         for user_id in self.session_keys.keys() {
-            if let Err(err) = self.client.state.clean_session_keys(user_id) {
+            if let Err(err) = self.e2e_client.state.clean_session_keys(user_id) {
                 println!("Could not clean keys for user {} : {}", user_id, err);
             }
         }
@@ -158,7 +158,7 @@ where
             limit: self.batch_size,
         };
 
-        let resp = self.client.send_authenticated_e2e(rq).await?;
+        let resp = self.e2e_client.send_authenticated_e2e(rq).await?;
 
         let messages = match resp {
             E2EMessage::MessagesList { messages } => messages,
@@ -184,7 +184,7 @@ where
             limit: self.batch_size,
         };
 
-        let resp = self.client.send_authenticated_e2e(rq).await?;
+        let resp = self.e2e_client.send_authenticated_e2e(rq).await?;
 
         let messages = match resp {
             E2EMessage::MessagesList { messages } => messages,
@@ -238,7 +238,7 @@ where
         data: KeyExchangeData,
     ) {
         let res = self
-            .client
+            .e2e_client
             .state
             .handle_open_session(sender_id, sender_name, &data);
 
@@ -286,7 +286,7 @@ where
             session_keys = &keys.keys;
 
         // Session not encountered yet
-        } else if let Some(sess) = self.client.state.sessions().get(&sender_id) {
+        } else if let Some(sess) = self.e2e_client.state.sessions().get(&sender_id) {
             let keys = HashMap::from([(sess.receiving_key_id, sess.receiving_key)]);
             self.session_keys.insert(
                 sender_id,
@@ -403,11 +403,11 @@ where
         session_keys.keys.insert(next_key_id, next_key);
 
         // Update client session
-        if let Some(mut sess) = self.client.state.sessions().get(&sender_id).cloned() {
+        if let Some(mut sess) = self.e2e_client.state.sessions().get(&sender_id).cloned() {
             sess.receiving_key_id = next_key_id;
             sess.receiving_key = next_key;
 
-            if let Err(err) = self.client.state.update_session(sess) {
+            if let Err(err) = self.e2e_client.state.update_session(sess) {
                 // TODO: Better logging
                 println!("Error saving new session state : {}", err);
             }

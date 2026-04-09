@@ -86,14 +86,14 @@ pub enum ControlMessage {
 
     /// Message reçu
     AckReception {
-        /// Id du message reçu
-        id: Uuid,
+        /// Ids des message reçu
+        ids: Vec<Uuid>,
     },
 
     /// Message lu
     AckRead {
-        /// Id du message lu
-        id: Uuid,
+        /// Id des messages lus
+        ids: Vec<Uuid>,
     },
 
     IsTyping,
@@ -199,17 +199,21 @@ impl ChatMessage {
             sender_id: Uuid::default(),
             issued_at: Utc::now(),
             conversation_id,
-            kind: ChatMessageKind::Ctrl(ControlMessage::AckReception { id: message_id }),
+            kind: ChatMessageKind::Ctrl(ControlMessage::AckReception {
+                ids: vec![message_id],
+            }),
         }
     }
 
     /// Create a new acknowledgement of read (read receipt)
-    pub fn new_ack_read(conversation_id: Uuid, message_id: Uuid) -> Self {
+    pub fn new_ack_read(conversation_id: Uuid, message_ids: impl Into<Vec<Uuid>>) -> Self {
         ChatMessage {
             sender_id: Uuid::default(),
             issued_at: Utc::now(),
             conversation_id,
-            kind: ChatMessageKind::Ctrl(ControlMessage::AckRead { id: message_id }),
+            kind: ChatMessageKind::Ctrl(ControlMessage::AckRead {
+                ids: message_ids.into(),
+            }),
         }
     }
 }

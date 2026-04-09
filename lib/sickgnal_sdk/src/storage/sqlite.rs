@@ -100,57 +100,6 @@ impl Sqlite {
     }
 }
 
-#[cfg(false)]
-impl StorageBackend for Sqlite {
-    // ========== Message Operations ==========
-
-    fn list_messages(
-        &self,
-        conversation_id: Uuid,
-        limit: Option<i32>,
-        offset: Option<i32>,
-    ) -> Result<Vec<Message>> {
-        let conn = self.conn.lock().unwrap();
-
-        // Use LIMIT -1 (no limit) and OFFSET 0 (no offset) as defaults
-        // so we can always use the same static query.
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, conversation_id, sender_id, content, timestamp, status, reply_to_id, local_id
-                 FROM messages WHERE conversation_id = ?1 ORDER BY timestamp ASC LIMIT ?2 OFFSET ?3",
-            )
-            .map_err(|e| Error::Database(e.to_string()))?;
-
-        let rows = stmt
-            .query_map(
-                params![
-                    conversation_id.to_string(),
-                    limit.unwrap_or(-1),
-                    offset.unwrap_or(0),
-                ],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                        row.get::<_, Vec<u8>>(3)?,
-                        row.get::<_, String>(4)?,
-                        row.get::<_, String>(5)?,
-                        row.get::<_, Option<String>>(6)?,
-                        row.get::<_, Option<String>>(7)?,
-                    ))
-                },
-            )
-            .map_err(|e| Error::Database(e.to_string()))?;
-
-        rows.map(|row| {
-            let row = row.map_err(|e| Error::Database(e.to_string()))?;
-            Self::row_to_message(row)
-        })
-        .collect()
-    }
-}
-
 impl StorageBackend for Sqlite {
     fn conversation_exists(&self, conv_id: &Uuid) -> S_Result<bool> {
         ConversationStore::conversation_exists(&self.conn, conv_id).map_err(ChatStorageError::from)
@@ -201,11 +150,20 @@ impl StorageBackend for Sqlite {
     fn update_message_status(
         &mut self,
         conv_id: &Uuid,
-        msg_id: &Uuid,
+        msg_ids: impl IntoIterator<Item = Uuid>,
         status: MessageStatus,
     ) -> S_Result<()> {
-        MessageStore::update_status(&self.conn, conv_id, msg_id, &status)
+        MessageStore::update_status(&mut self.conn, conv_id, msg_ids, &status)
             .map_err(ChatStorageError::from)
+    }
+
+    fn get_received_unread_messages(&mut self, conv_id: &Uuid) -> S_Result<Option<Vec<Uuid>>> {
+        MessageStore::get_received_unread_messages(&self.conn, conv_id)
+            .map_err(ChatStorageError::from)
+    }
+
+    fn mark_conversation_as_read(&mut self, conv_id: &Uuid) -> S_Result<()> {
+        MessageStore::mark_conversation_as_read(&self.conn, conv_id).map_err(ChatStorageError::from)
     }
 }
 

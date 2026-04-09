@@ -6,7 +6,11 @@ use rusqlite::{
 use sickgnal_core::chat::storage::{Message, MessageStatus};
 use uuid::Uuid;
 
-use crate::storage::{Error, error::Result, store::Store};
+use crate::storage::{
+    Error,
+    error::Result,
+    store::{Store, conversation::ConversationStore},
+};
 
 pub struct MessageStore;
 
@@ -77,7 +81,7 @@ impl MessageStore {
                     content,
                     timestamp,
                     status,
-                    reply_to_id,
+                    reply_to_id
                 )
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
             "#,
@@ -129,23 +133,32 @@ impl MessageStore {
     }
 
     pub fn update_status(
-        conn: &rusqlite::Connection,
+        conn: &mut rusqlite::Connection,
         conv_id: &Uuid,
-        msg_id: &Uuid,
+        msg_id: impl IntoIterator<Item = Uuid>,
         status: &MessageStatus,
     ) -> Result<()> {
-        conn.execute(
+        let tx = conn.transaction()?;
+
+        let mut stmt = tx.prepare(
             r#"
                 UPDATE messages SET status = ?1
                 WHERE id = ?2 AND conversation_id = ?3
             "#,
-            params![
-                encode_status(status),
-                msg_id.to_string(),
-                conv_id.to_string()
-            ],
         )?;
-        todo!()
+
+        for id in msg_id {
+            stmt.execute(params![
+                encode_status(status),
+                id.to_string(),
+                conv_id.to_string()
+            ])?;
+        }
+        drop(stmt);
+
+        tx.commit()?;
+
+        Ok(())
     }
 
     pub fn delete_by_id(conn: &rusqlite::Connection, conv_id: &Uuid, msg_id: &Uuid) -> Result<()> {
@@ -153,6 +166,54 @@ impl MessageStore {
             "DELETE FROM messages WHERE id = ?1 AND conversation_id = ?2",
             params![msg_id.to_string(), conv_id.to_string()],
         )?;
+        Ok(())
+    }
+
+    pub fn get_received_unread_messages(
+        conn: &rusqlite::Connection,
+        conv_id: &Uuid,
+    ) -> Result<Option<Vec<Uuid>>> {
+        if !ConversationStore::conversation_exists(conn, conv_id)? {
+            return Ok(None);
+        }
+
+        let mut stmt = conn.prepare_cached(
+            r#"
+                WITH MyAccount AS (
+                    SELECT user_id FROM account LIMIT 1
+                ),
+                SELECT id FROM messages
+                WHERE conversation_id = ?1
+                    AND status = 'delivered'
+                    AND sender_id != (SELECT user_id FROM MyAccount)
+            "#,
+        )?;
+
+        let mut rows = stmt.query(params![conv_id.to_string()])?;
+        let mut ids = Vec::new();
+
+        while let Some(r) = rows.next()? {
+            ids.push(Uuid::try_from(r.get::<_, String>(0)?)?);
+        }
+
+        Ok(Some(ids))
+    }
+
+    pub fn mark_conversation_as_read(conn: &rusqlite::Connection, conv_id: &Uuid) -> Result<()> {
+        let mut stmt = conn.prepare_cached(
+            r#"
+                WITH MyAccount AS (
+                    SELECT user_id FROM account LIMIT 1
+                ),
+                UPDATE messages SET status = 'read'
+                WHERE conversation_id = ?1
+                    AND status = 'delivered'
+                    AND sender_id != (SELECT user_id FROM MyAccount)
+            "#,
+        )?;
+
+        stmt.execute(params![conv_id.to_string()])?;
+
         Ok(())
     }
 
@@ -173,7 +234,7 @@ impl MessageStore {
                     content,
                     timestamp,
                     status,
-                    reply_to_id,
+                    reply_to_id
                 FROM messages
                 WHERE conversation_id = ?1
                 ORDER BY timestamp DESC

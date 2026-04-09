@@ -13,8 +13,10 @@ use crate::{
         storage::{ConversationInfo, Message, MessageStatus, SharedStorageBackend, StorageBackend},
     },
     e2e::{
-        client::client_handle::ClientHandle, message::UserProfile,
-        message_stream::E2EMessageStream, peer::Peer,
+        client::{ChatMessageSender, client_handle::ClientHandle},
+        message::UserProfile,
+        message_stream::E2EMessageStream,
+        peer::Peer,
     },
 };
 
@@ -64,7 +66,9 @@ where
         let mut last_error = None;
 
         while let Some(msg) = iter.next().await? {
-            if let Err(err) = handle_incomming_message(&mut storage, &event_tx, msg).await {
+            if let Err(err) =
+                handle_incomming_message(&mut storage, iter.e2e_client, &event_tx, msg).await
+            {
                 error!("Error handling incoming message : {}", err);
                 last_error = Some(err);
             }
@@ -91,7 +95,7 @@ where
 
     /// Handle an incoming message
     pub(super) async fn handle_incomming_message(&mut self, msg: ChatMessage) -> Result<()> {
-        handle_incomming_message(&mut self.storage, &self.event_tx, msg).await
+        handle_incomming_message(&mut self.storage, &mut self.e2e_client, &self.event_tx, msg).await
     }
 
     // region:    Public API
@@ -192,7 +196,7 @@ where
             .await?;
 
         self.storage
-            .update_message_status(&conversation_id, &msg_dto.id, MessageStatus::Sent)?;
+            .update_message_status(&conversation_id, [msg_dto.id], MessageStatus::Sent)?;
 
         msg_dto.status = MessageStatus::Sent;
 
@@ -216,12 +220,33 @@ where
     pub async fn mark_as_read(&mut self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
         self.dispatch_in_conversation(
             conversation_id,
-            ChatMessage::new_ack_read(conversation_id, message_id),
+            ChatMessage::new_ack_read(conversation_id, &[message_id]),
         )
         .await?;
 
         self.storage
-            .update_message_status(&conversation_id, &message_id, MessageStatus::Read)?;
+            .update_message_status(&conversation_id, [message_id], MessageStatus::Read)?;
+
+        Ok(())
+    }
+
+    pub async fn mark_conversation_as_read(&mut self, conversation_id: Uuid) -> Result<()> {
+        let unread_msg_ids = self
+            .storage
+            .get_received_unread_messages(&conversation_id)?
+            .ok_or(Error::ConversationNotFound(conversation_id))?;
+
+        self.dispatch_in_conversation(
+            conversation_id,
+            ChatMessage::new_ack_read(conversation_id, unread_msg_ids.clone()),
+        )
+        .await?;
+
+        self.storage.update_message_status(
+            &conversation_id,
+            unread_msg_ids,
+            MessageStatus::Read,
+        )?;
 
         Ok(())
     }
@@ -272,6 +297,7 @@ where
 /// Handle an incoming message
 async fn handle_incomming_message<S: StorageBackend>(
     storage: &mut S,
+    e2e_client: &mut impl ChatMessageSender,
     event_tx: &mpsc::Sender<ChatEvent>,
     msg: ChatMessage,
 ) -> Result<()> {
@@ -286,6 +312,7 @@ async fn handle_incomming_message<S: StorageBackend>(
         // We are probably opening a new conversation
         return handle_new_conversation(
             storage,
+            e2e_client,
             event_tx,
             sender_id,
             issued_at,
@@ -308,6 +335,7 @@ async fn handle_incomming_message<S: StorageBackend>(
         ChatMessageKind::Data(content) => {
             handle_data_message(
                 storage,
+                e2e_client,
                 event_tx,
                 sender_id,
                 issued_at,
@@ -319,6 +347,7 @@ async fn handle_incomming_message<S: StorageBackend>(
         ChatMessageKind::Ctrl(ctrl) => {
             handle_control_message(
                 storage,
+                e2e_client,
                 event_tx,
                 sender_id,
                 issued_at,
@@ -334,6 +363,7 @@ async fn handle_incomming_message<S: StorageBackend>(
 /// create a new [`Conversation`].
 async fn handle_new_conversation<S: StorageBackend>(
     storage: &mut S,
+    e2e_client: &mut impl ChatMessageSender,
     event_tx: &mpsc::Sender<ChatEvent>,
     sender_id: Uuid,
     issued_at: DateTime<Utc>,
@@ -370,6 +400,7 @@ async fn handle_new_conversation<S: StorageBackend>(
     if let Some(content) = initial_msg {
         handle_data_message(
             storage,
+            e2e_client,
             event_tx,
             sender_id,
             issued_at,
@@ -385,6 +416,7 @@ async fn handle_new_conversation<S: StorageBackend>(
 /// Handle a data message in a known conversation
 async fn handle_data_message<S: StorageBackend>(
     storage: &mut S,
+    e2e_client: &mut impl ChatMessageSender,
     event_tx: &mpsc::Sender<ChatEvent>,
     sender_id: Uuid,
     issued_at: DateTime<Utc>,
@@ -392,6 +424,8 @@ async fn handle_data_message<S: StorageBackend>(
     content: ContentMessage,
 ) -> Result<()> {
     let mut msg = Message::from_content_message(sender_id, conversation_id, issued_at, content);
+
+    let msg_id = msg.id;
 
     // This is a message we just received
     msg.status = MessageStatus::Delivered;
@@ -407,7 +441,12 @@ async fn handle_data_message<S: StorageBackend>(
     )
     .await?;
 
-    // TODO: send message status update to peer
+    e2e_client
+        .send(
+            sender_id,
+            ChatMessage::new_ack_reception(conversation_id, msg_id),
+        )
+        .await?;
 
     Ok(())
 }
@@ -415,6 +454,7 @@ async fn handle_data_message<S: StorageBackend>(
 /// Handle a control message in a known conversation
 async fn handle_control_message<S: StorageBackend>(
     storage: &mut S,
+    _e2e_client: &mut impl ChatMessageSender,
     event_tx: &mpsc::Sender<ChatEvent>,
     sender_id: Uuid,
     _issued_at: DateTime<Utc>,
@@ -485,29 +525,42 @@ async fn handle_control_message<S: StorageBackend>(
             )
             .await?;
         }
-        ControlMessage::AckReception { id } => {
-            storage.update_message_status(&conversation_id, &id, MessageStatus::Delivered)?;
-            emit(
-                event_tx,
-                ChatEvent::MessageStatusUpdated {
-                    conversation_id,
-                    message_id: id,
-                    status: MessageStatus::Delivered,
-                },
-            )
-            .await?;
+        ControlMessage::AckReception { ids } => {
+            storage.update_message_status(
+                &conversation_id,
+                ids.iter().cloned(),
+                MessageStatus::Delivered,
+            )?;
+            for id in ids {
+                emit(
+                    event_tx,
+                    ChatEvent::MessageStatusUpdated {
+                        conversation_id,
+                        message_id: id,
+                        status: MessageStatus::Delivered,
+                    },
+                )
+                .await?;
+            }
         }
-        ControlMessage::AckRead { id } => {
-            storage.update_message_status(&conversation_id, &id, MessageStatus::Read)?;
-            emit(
-                event_tx,
-                ChatEvent::MessageStatusUpdated {
-                    conversation_id,
-                    message_id: id,
-                    status: MessageStatus::Read,
-                },
-            )
-            .await?;
+        ControlMessage::AckRead { ids } => {
+            storage.update_message_status(
+                &conversation_id,
+                ids.iter().cloned(),
+                MessageStatus::Read,
+            )?;
+
+            for id in ids {
+                emit(
+                    event_tx,
+                    ChatEvent::MessageStatusUpdated {
+                        conversation_id,
+                        message_id: id,
+                        status: MessageStatus::Read,
+                    },
+                )
+                .await?;
+            }
         }
         ControlMessage::IsTyping => {
             emit(

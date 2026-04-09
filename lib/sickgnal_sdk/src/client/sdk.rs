@@ -124,8 +124,10 @@ impl Sdk {
     }
 
     /// Mark all messages in a conversation as read.
-    pub fn mark_conversation_as_read(&self, _conversation_id: Uuid) -> Result<()> {
-        // TODO: implement using storage
+    pub async fn mark_conversation_as_read(&mut self, conversation_id: Uuid) -> Result<()> {
+        self.chat_client
+            .mark_conversation_as_read(conversation_id)
+            .await?;
         Ok(())
     }
 
