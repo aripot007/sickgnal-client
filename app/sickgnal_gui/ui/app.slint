@@ -10,6 +10,8 @@ import { Theme } from "theme.slint";
 import { LogLayout, Auth } from "layout/Log.slint";
 import { ErrorBanner } from "components/ErrorBanner.slint";
 import { Status } from "models/Status.slint";
+import { NewConversationDialog } from "components/NewConversationDialog.slint";
+import { Chat } from "models/Chat.slint";
 
 // Export models for Rust access
 export { Chat } from "models/Chat.slint";
@@ -36,4 +38,7 @@ export component AppWindow inherits Window {
 
         if (Auth.is-logged-in): MainLayout { }
     }
+
+    // Overlay dialogs (rendered on top of everything)
+    if (Chat.show_new_conversation_dialog): NewConversationDialog { }
 }

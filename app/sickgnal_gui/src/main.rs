@@ -358,11 +358,91 @@ fn setup_chat_callbacks(
         });
     }
 
-    // create_new_conversation
+    // create_new_conversation — opens the dialog
     {
+        let ui_weak = ui_weak.clone();
         ui.global::<Chat>().on_create_new_conversation(move || {
-            info!("Create new conversation requested");
-            // TODO: implement a dialog/input for peer username
+            let Some(ui) = ui_weak.upgrade() else { return };
+            ui.global::<Chat>().set_show_new_conversation_dialog(true);
+            ui.global::<Chat>().set_new_conversation_error("".into());
+        });
+    }
+
+    // cancel_new_conversation — closes the dialog
+    {
+        let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_cancel_new_conversation(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            ui.global::<Chat>().set_show_new_conversation_dialog(false);
+            ui.global::<Chat>().set_new_conversation_error("".into());
+        });
+    }
+
+    // confirm_new_conversation — resolve username, create conversation, close dialog
+    {
+        let sdk = sdk.clone();
+        let conv_ids = conv_ids.clone();
+        let ui_weak = ui_weak.clone();
+        let rt = rt.clone();
+        ui.global::<Chat>().on_confirm_new_conversation(move |username| {
+            let mut sdk = sdk.clone();
+            let conv_ids = conv_ids.clone();
+            let ui_weak = ui_weak.clone();
+            let username = username.to_string();
+            rt.spawn(async move {
+                // Resolve username to UUID
+                let profile = match sdk.get_profile_by_username(username).await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui.global::<Chat>()
+                                .set_new_conversation_error(format!("User not found: {e}").into());
+                        });
+                        return;
+                    }
+                };
+
+                // Create conversation
+                let conv = match sdk.start_conversation(profile.id, None).await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui.global::<Chat>()
+                                .set_new_conversation_error(format!("Error: {e}").into());
+                        });
+                        return;
+                    }
+                };
+
+                let conv_uuid = conv.id;
+                let entry = ConversationEntry {
+                    conversation: conv,
+                    unread_messages_count: 0,
+                    last_message: None,
+                };
+
+                // Update UI on the Slint event loop
+                let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                    let slint_conv = entry_to_slint(&entry, my_id);
+
+                    // Add to conv_ids mapping
+                    conv_ids.lock().unwrap().push(conv_uuid);
+
+                    // Add to Slint model
+                    let chats = ui.global::<Chat>().get_chats();
+                    let new_index = chats.row_count();
+                    if let Some(model) = chats.as_any().downcast_ref::<VecModel<Conversation>>() {
+                        model.push(slint_conv);
+                    }
+
+                    // Switch to the new conversation
+                    ui.global::<Chat>().set_active_chat_id(new_index as i32);
+
+                    // Close dialog
+                    ui.global::<Chat>().set_show_new_conversation_dialog(false);
+                    ui.global::<Chat>().set_new_conversation_error("".into());
+                });
+            });
         });
     }
 

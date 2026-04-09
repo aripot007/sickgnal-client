@@ -23,6 +23,13 @@ export global Chat {
     callback delete_conversation(int);
     callback send_message(string);
     callback create_new_conversation();
+    callback confirm_new_conversation(/* username */ string);
+    callback cancel_new_conversation();
+
+    // New conversation dialog state
+    in-out property <bool> show_new_conversation_dialog: false;
+    in-out property <string> new_conversation_error: "";
+
     callback edit_message(/* msg_id */ string, /* new_text */ string);
     callback delete_message(/* msg_id */ string);
     callback start_edit(/* msg_id */ string, /* current_text */ string);
