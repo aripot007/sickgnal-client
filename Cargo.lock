@@ -4990,6 +4990,7 @@ dependencies = [
  "chrono",
  "curve25519-dalek",
  "ed25519-dalek",
+ "hex",
  "hkdf",
  "lru 0.16.3",
  "rand 0.8.5",

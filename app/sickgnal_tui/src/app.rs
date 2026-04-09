@@ -829,7 +829,7 @@ impl App {
             .unwrap_or(true);
 
         if should_send {
-            if let (Some(conv_id), Some(sdk)) = (self.current_conversation, &self.sdk) {
+            if let (Some(conv_id), Some(sdk)) = (self.current_conversation, &mut self.sdk) {
                 let _ = sdk.send_typing_indicator(conv_id);
             }
             self.last_typing_sent = Some(now);
