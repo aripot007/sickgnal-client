@@ -431,10 +431,15 @@ async fn handle_new_conversation<S: StorageBackend>(
     };
 
     // remove ourself from the other peers
-    let other_peers: Vec<Uuid> = other_peers
+    let mut other_peers: Vec<Uuid> = other_peers
         .into_iter()
         .filter(|p| *p != account_id)
         .collect();
+
+    // add the sender if he's not in the peers
+    if !other_peers.contains(&sender_id) {
+        other_peers.push(sender_id);
+    }
 
     // Resolve unknown peers if necessary
     for id in &other_peers {
