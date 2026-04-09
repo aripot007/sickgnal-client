@@ -192,6 +192,10 @@ impl E2EStorageBackend for Sqlite {
         PeerStore::find_by_username(&self.conn, username).map_err(KeyStorageError::from)
     }
 
+    fn get_unknown_peers(&self) -> K_Result<Vec<Peer>> {
+        PeerStore::get_unknown_peers(&self.conn).map_err(KeyStorageError::from)
+    }
+
     fn save_peer(&self, peer: &sickgnal_core::e2e::peer::Peer) -> K_Result<()> {
         PeerStore::persist(&self.conn, peer).map_err(KeyStorageError::from)
     }

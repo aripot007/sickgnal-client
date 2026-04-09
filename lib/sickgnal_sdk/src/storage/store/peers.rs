@@ -92,6 +92,26 @@ impl PeerStore {
         }
     }
 
+    pub fn get_unknown_peers(conn: &rusqlite::Connection) -> Result<Vec<Peer>> {
+        let mut stmt =
+            conn.prepare("SELECT id, username, fingerprint FROM peers WHERE username IS NULL")?;
+
+        let mut rows = stmt.query(())?;
+        let mut peers = Vec::new();
+
+        while let Some(r) = rows.next()? {
+            let fp_b64: Option<String> = r.get(2)?;
+            let fingerprint = fp_b64.and_then(|s| BASE64.decode(s).ok());
+            peers.push(Peer {
+                id: Uuid::try_from(r.get::<_, String>(0)?)?,
+                username: r.get(1)?,
+                fingerprint,
+            });
+        }
+
+        Ok(peers)
+    }
+
     pub fn delete_by_id(conn: &rusqlite::Connection, id: &Uuid) -> Result<()> {
         let mut stmt = conn.prepare_cached("DELETE FROM peers WHERE id = ?1")?;
         stmt.execute([id.to_string()])?;

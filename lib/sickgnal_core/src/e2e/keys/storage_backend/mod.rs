@@ -34,6 +34,9 @@ pub trait E2EStorageBackend {
     /// Find a known peer by username
     fn find_peer_by_username(&self, username: &str) -> Result<Option<Peer>>;
 
+    /// Get the peers for which we don't know the username
+    fn get_unknown_peers(&self) -> Result<Vec<Peer>>;
+
     /// Save or update information about a peer
     fn save_peer(&self, peer: &Peer) -> Result<()>;
 
@@ -359,6 +362,12 @@ impl<T: E2EStorageBackend> E2EStorageBackend for Arc<Mutex<T>> {
         self.lock()
             .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
             .find_peer_by_username(username)
+    }
+
+    fn get_unknown_peers(&self) -> Result<Vec<Peer>> {
+        self.lock()
+            .map_err(|_| KeyStorageError::new(PoisonedE2EBackendError))?
+            .get_unknown_peers()
     }
 
     fn save_peer(&self, id: &Peer) -> Result<()> {

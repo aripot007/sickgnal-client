@@ -128,6 +128,29 @@ where
             };
         }
 
+        // Resolve unknown peers
+        let peers = self.e2e_client.state.storage.get_unknown_peers()?;
+
+        for mut peer in peers {
+            let rq = E2EMessage::UserProfileById {
+                token: String::new(),
+                id: peer.id,
+            };
+
+            let profile = match self.e2e_client.send_authenticated_e2e(rq).await {
+                Ok(E2EMessage::UserProfile(p)) => p,
+                Ok(resp) => return Err(Error::UnexpectedE2EMessage(resp)),
+                Err(Error::UserNotFound) => {
+                    warn!("Could not resolve peer {}: user not found", peer.id);
+                    continue;
+                }
+                Err(err) => return Err(err),
+            };
+
+            peer.username = Some(profile.username);
+            self.e2e_client.state.storage.save_peer(&peer)?;
+        }
+
         // TODO: Better handling of undecrypted messages ?
         // Log messages that could not be decrypted for now
         for (user_id, keys) in self.undecipherable_messages.iter() {

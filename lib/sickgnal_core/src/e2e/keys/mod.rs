@@ -1,12 +1,11 @@
 //! Everything related to key management
 //!
 pub mod storage_backend;
-use std::hash::Hash;
 
 use base64::{DecodeSliceError, Engine, engine::general_purpose};
 use rand::{CryptoRng, RngCore};
 
-use sha2::{Digest, Sha256, digest::OutputSizeUser};
+use sha2::{Digest, Sha256};
 pub use storage_backend::*;
 
 use serde::{Deserialize, Serialize};
