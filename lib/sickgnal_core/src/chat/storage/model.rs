@@ -50,7 +50,7 @@ impl Message {
     ///
     /// Returns an error if the `ChatMessage` cannot be converted.
     #[inline]
-    pub(crate) fn from_message(msg: ChatMessage) -> std::result::Result<Self, ()> {
+    pub(crate) fn from_message(msg: &ChatMessage) -> std::result::Result<Self, ()> {
         Self::from_message_with_status(msg, MessageStatus::Sending)
     }
 
@@ -63,12 +63,13 @@ impl Message {
     ///
     /// Returns an error if the `ChatMessage` cannot be converted.
     pub(crate) fn from_message_with_status(
-        msg: ChatMessage,
+        msg: &ChatMessage,
         status: MessageStatus,
     ) -> std::result::Result<Self, ()> {
-        let content_msg = match msg.kind {
+        let content_msg = match &msg.kind {
             ChatMessageKind::Ctrl(ControlMessage::OpenConv {
                 initial_message: Some(content),
+                ..
             })
             | ChatMessageKind::Data(content) => content,
             ChatMessageKind::Ctrl(_) => return Err(()),
@@ -95,7 +96,7 @@ impl Message {
     /// Panics if the `ChatMessage` cannot be converted. Use [`Message::from_message`] to
     /// return an error instead.
     #[inline]
-    pub(crate) fn from_message_unchecked(msg: ChatMessage) -> Self {
+    pub(crate) fn from_message_unchecked(msg: &ChatMessage) -> Self {
         Self::from_message(msg).expect("cannot convert message")
     }
 

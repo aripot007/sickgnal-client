@@ -13,10 +13,14 @@ pub use client::*;
 pub use error::Error;
 use uuid::Uuid;
 
-use crate::chat::message::ChatMessage;
+use crate::{chat::message::ChatMessage, e2e::message::UserProfile};
 
 #[async_trait]
 pub(crate) trait ChatMessageSender {
     /// Send a [`ChatMessage`] to another user
     async fn send(&mut self, to: Uuid, message: ChatMessage) -> Result<()>;
+
+    /// Get a [`UserProfile`] from a peer id, and save the peer
+    /// if it was unknown
+    async fn get_profile_by_id(&mut self, peer_id: Uuid) -> Result<UserProfile>;
 }

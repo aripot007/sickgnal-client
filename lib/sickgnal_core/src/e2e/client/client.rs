@@ -29,7 +29,7 @@ use crate::{
             workers,
         },
         keys::{EphemeralSecretKey, X25519Secret},
-        message::{E2EMessage, EphemeralKey, ErrorCode, SignedPreKey},
+        message::{E2EMessage, EphemeralKey, ErrorCode, SignedPreKey, UserProfile},
         message_stream::E2EMessageStream,
         peer::Peer,
     },
@@ -529,5 +529,35 @@ where
             E2EMessage::Ok => Ok(()),
             m => Err(Error::UnexpectedE2EMessage(m)),
         }
+    }
+
+    async fn get_profile_by_id(&mut self, id: Uuid) -> Result<UserProfile> {
+        // Try to get the profile from the db first
+        if let Some(peer) = self.state.storage.peer(&id)? {
+            if let Some(username) = peer.username {
+                return Ok(UserProfile { id, username });
+            }
+        }
+
+        let rq = E2EMessage::UserProfileById {
+            token: String::new(),
+            id,
+        };
+
+        let profile = match self.send_authenticated_e2e(rq).await? {
+            E2EMessage::UserProfile(profile) => profile,
+            m => return Err(Error::UnexpectedE2EMessage(m)),
+        };
+
+        // Save the peer in the database
+        let peer = Peer {
+            id,
+            username: Some(profile.username.clone()),
+            fingerprint: None,
+        };
+
+        self.state.storage.save_peer(&peer)?;
+
+        Ok(profile)
     }
 }

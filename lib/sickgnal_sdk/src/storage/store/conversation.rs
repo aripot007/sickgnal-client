@@ -134,6 +134,22 @@ impl ConversationStore {
         Ok(exists)
     }
 
+    pub fn add_peer_to_conversation(
+        conn: &rusqlite::Connection,
+        conv_id: &Uuid,
+        peer_id: &Uuid,
+    ) -> Result<()> {
+        conn.execute(
+            r#"
+            INSERT OR IGNORE INTO conversation_participants (
+                conversation_id, peer_id
+            ) VALUES (?1, ?2)
+            "#,
+            params![conv_id.to_string(), peer_id.to_string()],
+        )?;
+        Ok(())
+    }
+
     pub fn find_info(
         conn: &rusqlite::Connection,
         conv_id: &Uuid,

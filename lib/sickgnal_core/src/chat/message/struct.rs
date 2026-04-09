@@ -71,7 +71,16 @@ pub enum ControlMessage {
     OpenConv {
         #[serde(rename = "msg")]
         initial_message: Option<ContentMessage>,
+
+        #[serde(rename = "peers")]
+        other_peers: Vec<Uuid>,
     },
+
+    /// Ajout d'un participant dans une conversation
+    AddPeerToConv {
+        id: Uuid,
+    },
+
     /// Suppression d'un message
     DeleteMsg {
         /// Id du message à supprimer
@@ -132,7 +141,35 @@ impl ChatMessage {
             sender_id: Uuid::default(),
             issued_at: Utc::now(),
             conversation_id,
-            kind: ChatMessageKind::Ctrl(ControlMessage::OpenConv { initial_message }),
+            kind: ChatMessageKind::Ctrl(ControlMessage::OpenConv {
+                initial_message,
+                other_peers: Vec::new(),
+            }),
+        }
+    }
+
+    pub(crate) fn new_open_group_conv(
+        conversation_id: Uuid,
+        initial_message: Option<ContentMessage>,
+        peers: Vec<Uuid>,
+    ) -> Self {
+        ChatMessage {
+            sender_id: Uuid::default(),
+            issued_at: Utc::now(),
+            conversation_id,
+            kind: ChatMessageKind::Ctrl(ControlMessage::OpenConv {
+                initial_message,
+                other_peers: peers,
+            }),
+        }
+    }
+
+    pub(crate) fn new_add_peer_to_conv(conversation_id: Uuid, peer_id: Uuid) -> Self {
+        ChatMessage {
+            sender_id: Uuid::default(),
+            issued_at: Utc::now(),
+            conversation_id,
+            kind: ChatMessageKind::Ctrl(ControlMessage::AddPeerToConv { id: peer_id }),
         }
     }
 

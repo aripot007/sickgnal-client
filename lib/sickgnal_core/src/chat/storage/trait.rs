@@ -43,6 +43,9 @@ pub trait StorageBackend: E2EStorageBackend {
         peers: impl IntoIterator<Item = &'i Uuid>,
     ) -> Result<()>;
 
+    /// Add a peer to a conversation
+    fn add_peer_to_conversation(&mut self, conv_id: &Uuid, peer_id: &Uuid) -> Result<()>;
+
     /// Get information on a conversation by ID
     fn get_conversation_info(&self, conv_id: &Uuid) -> Result<Option<ConversationInfo>>;
 
@@ -110,6 +113,12 @@ impl<T: StorageBackend> StorageBackend for Arc<Mutex<T>> {
         self.lock()
             .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
             .create_group_conversation(conversation, peers)
+    }
+
+    fn add_peer_to_conversation(&mut self, conv_id: &Uuid, peer_id: &Uuid) -> Result<()> {
+        self.lock()
+            .map_err(|_| ChatStorageError::new(PoisonedE2EBackendError))?
+            .add_peer_to_conversation(conv_id, peer_id)
     }
 
     fn get_conversation_info(&self, id: &Uuid) -> Result<Option<ConversationInfo>> {
