@@ -7,10 +7,10 @@ use uuid::Uuid;
 
 use sickgnal_core::chat::client::ChatEvent;
 use sickgnal_core::chat::storage::{Message, MessageStatus};
+use sickgnal_sdk::TlsConfig;
 use sickgnal_sdk::account::AccountFile;
 use sickgnal_sdk::client::Sdk;
 use sickgnal_sdk::dto::ConversationEntry;
-use sickgnal_sdk::TlsConfig;
 slint::include_modules!();
 
 fn main() {
@@ -177,8 +177,7 @@ fn spawn_sdk(
                 let slint_convos: Vec<Conversation> =
                     convos.iter().map(|e| entry_to_slint(e, my_id)).collect();
                 let model = VecModel::from(slint_convos);
-                ui.global::<Chat>()
-                    .set_chats(ModelRc::new(model));
+                ui.global::<Chat>().set_chats(ModelRc::new(model));
             });
         }
 
@@ -217,7 +216,6 @@ fn setup_chat_callbacks(
     rt: Arc<tokio::runtime::Runtime>,
     conv_ids: Arc<Mutex<Vec<Uuid>>>,
 ) {
-
     // switch_conversation
     {
         let sdk = sdk.clone();
@@ -336,8 +334,7 @@ fn setup_chat_callbacks(
             if count == 0 {
                 ui.global::<Chat>().set_active_chat_id(-1);
             } else if active >= index {
-                ui.global::<Chat>()
-                    .set_active_chat_id((active - 1).max(0));
+                ui.global::<Chat>().set_active_chat_id((active - 1).max(0));
             }
         });
     }
@@ -374,8 +371,7 @@ fn handle_sdk_event(
                         append_message_to_conv(&mut conv, slint_msg);
 
                         conv.last_message = msg.content.clone().into();
-                        conv.last_message_time =
-                            msg.issued_at.format("%H:%M").to_string().into();
+                        conv.last_message_time = msg.issued_at.format("%H:%M").to_string().into();
 
                         if i as i32 != active {
                             conv.unread_count += 1;
@@ -424,8 +420,7 @@ fn handle_sdk_event(
             for i in 0..chats.row_count() {
                 if let Some(conv) = chats.row_data(i) {
                     if conv.id == uuid.to_string().as_str() {
-                        if let Some(model) =
-                            chats.as_any().downcast_ref::<VecModel<Conversation>>()
+                        if let Some(model) = chats.as_any().downcast_ref::<VecModel<Conversation>>()
                         {
                             model.remove(i);
                         }

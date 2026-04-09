@@ -173,21 +173,13 @@ impl Sdk {
     }
 
     /// Delete a message (sends a delete control message to the peer).
-    pub async fn delete_message(
-        &self,
-        _conversation_id: Uuid,
-        _message_id: Uuid,
-    ) -> Result<()> {
+    pub async fn delete_message(&self, _conversation_id: Uuid, _message_id: Uuid) -> Result<()> {
         // TODO: implement delete logic (send control message + update storage)
         Ok(())
     }
 
     /// Mark a message as read.
-    pub async fn mark_as_read(
-        &self,
-        _conversation_id: Uuid,
-        _message_id: Uuid,
-    ) -> Result<()> {
+    pub async fn mark_as_read(&self, _conversation_id: Uuid, _message_id: Uuid) -> Result<()> {
         // TODO: implement read receipt logic (send ack + update storage)
         Ok(())
     }

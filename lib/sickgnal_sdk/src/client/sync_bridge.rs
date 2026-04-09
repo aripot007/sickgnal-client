@@ -7,10 +7,10 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use sickgnal_core::chat::client::ChatEvent;
 use sickgnal_core::chat::dto::Conversation;
 use sickgnal_core::chat::message::Content;
 use sickgnal_core::chat::storage::Message;
-use sickgnal_core::chat::{client::ChatEvent};
 use sickgnal_core::e2e::message::UserProfile;
 use tokio::sync::mpsc;
 use uuid::Uuid;

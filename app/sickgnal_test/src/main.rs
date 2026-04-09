@@ -7,8 +7,8 @@ use tokio::sync::mpsc;
 use sickgnal_core::chat::client::ChatEvent as SdkEvent;
 use sickgnal_core::chat::message::Content;
 use sickgnal_core::chat::storage::MessageStatus;
-use sickgnal_sdk::client::SyncBridge;
 use sickgnal_sdk::TlsConfig;
+use sickgnal_sdk::client::SyncBridge;
 use uuid::Uuid;
 
 use sickgnal_sdk::account::AccountFile;
@@ -492,9 +492,7 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     // Step 10: Test list_conversations, get_messages, get_conversation
     // ================================================================
     println!("[10] Testing storage queries...");
-    let convos = alice
-        .list_conversations()
-        .expect("list_conversations");
+    let convos = alice.list_conversations().expect("list_conversations");
     assert!(
         !convos.is_empty(),
         "Alice should have at least one conversation"
@@ -514,9 +512,7 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     assert_eq!(msgs_page.len(), 1, "Paginated should return 1 message");
     println!("    OK - get_messages_paginated works");
 
-    let fetched_conv = alice
-        .get_conversation(conv.id)
-        .expect("get_conversation");
+    let fetched_conv = alice.get_conversation(conv.id).expect("get_conversation");
     assert!(fetched_conv.is_some(), "Conversation should exist");
     println!("    OK - get_conversation works");
     println!();
@@ -526,9 +522,7 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     // ================================================================
     println!("[11] Testing mark_conversation_as_read...");
     // Bob's conversation should have unread messages from Alice
-    let bob_convos = bob
-        .list_conversations()
-        .expect("bob list_conversations");
+    let bob_convos = bob.list_conversations().expect("bob list_conversations");
     let bob_alice_entry = bob_convos
         .iter()
         .find(|e| e.conversation.peers.first().map(|p| p.id) == Some(alice_id));
@@ -563,16 +557,12 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     // Step 12: Test delete_conversation
     // ================================================================
     println!("[12] Testing delete_conversation...");
-    let convos_before = charlie
-        .list_conversations()
-        .expect("list before delete");
+    let convos_before = charlie.list_conversations().expect("list before delete");
     let count_before = convos_before.len();
     charlie
         .delete_conversation(conv_cd.id)
         .expect("delete_conversation");
-    let convos_after = charlie
-        .list_conversations()
-        .expect("list after delete");
+    let convos_after = charlie.list_conversations().expect("list after delete");
     assert_eq!(
         convos_after.len(),
         count_before - 1,

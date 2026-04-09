@@ -22,11 +22,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     // Find current conversation and peer fingerprint
     let (conv_name, fingerprint) = app
         .current_conversation
-        .and_then(|cid| {
-            app.conversations
-                .iter()
-                .find(|e| e.conversation.id == cid)
-        })
+        .and_then(|cid| app.conversations.iter().find(|e| e.conversation.id == cid))
         .map(|entry| {
             let peer_id = entry
                 .conversation

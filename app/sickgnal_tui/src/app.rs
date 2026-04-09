@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use crossterm::event::{KeyCode, KeyEvent};
 use sickgnal_core::chat::client::ChatEvent as SdkEvent;
 use sickgnal_core::chat::storage::Message;
+use sickgnal_sdk::TlsConfig;
 use sickgnal_sdk::client::SyncBridge;
 use sickgnal_sdk::dto::ConversationEntry;
-use sickgnal_sdk::TlsConfig;
 use tokio::sync::mpsc;
 use tracing::error;
 use uuid::Uuid;
@@ -520,7 +520,9 @@ impl App {
             }
             KeyCode::Char('d') => {
                 if !self.conversations.is_empty() {
-                    let conv_id = self.conversations[self.selected_conversation].conversation.id;
+                    let conv_id = self.conversations[self.selected_conversation]
+                        .conversation
+                        .id;
                     if let Some(ref mut sdk) = self.sdk {
                         if let Err(e) = sdk.delete_conversation(conv_id) {
                             error!("Failed to delete conversation: {e}");
@@ -562,15 +564,14 @@ impl App {
 
                 if let Some(ref mut sdk) = self.sdk {
                     // Resolve username to UUID first
-                    let profile = match sdk.get_profile_by_username(
-                        self.new_conversation_username.clone(),
-                    ) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            self.status_message = Some(format!("User not found: {e}"));
-                            return;
-                        }
-                    };
+                    let profile =
+                        match sdk.get_profile_by_username(self.new_conversation_username.clone()) {
+                            Ok(p) => p,
+                            Err(e) => {
+                                self.status_message = Some(format!("User not found: {e}"));
+                                return;
+                            }
+                        };
 
                     match sdk.start_conversation(profile.id, None) {
                         Ok(conv) => {
@@ -716,8 +717,7 @@ impl App {
                 }
             }
             SdkEvent::ConversationDeleted(conv_id) => {
-                self.conversations
-                    .retain(|e| e.conversation.id != conv_id);
+                self.conversations.retain(|e| e.conversation.id != conv_id);
                 if self.current_conversation == Some(conv_id) {
                     self.screen = Screen::Conversations;
                     self.current_conversation = None;
