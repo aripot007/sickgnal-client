@@ -561,6 +561,81 @@ fn setup_chat_callbacks(
             });
         });
     }
+
+    // open_conversation_settings — populate peers and show settings view
+    {
+        let sdk = sdk.clone();
+        let conv_ids = conv_ids.clone();
+        let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_open_conversation_settings(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let active = ui.global::<Chat>().get_active_chat_id();
+
+            let ids = conv_ids.lock().unwrap();
+            let Some(&conv_uuid) = ids.get(active as usize) else { return };
+            drop(ids);
+
+            // Find the conversation entry to get peers
+            let chats = ui.global::<Chat>().get_chats();
+            if let Some(conv) = chats.row_data(active as usize) {
+                // We need to get peer info. The Slint Conversation doesn't store peers,
+                // so we look them up from the SDK's get_conversation.
+                let peers_data: Vec<PeerData> =
+                    if let Ok(Some(full_conv)) = sdk.get_conversation(conv_uuid) {
+                        full_conv
+                            .peers
+                            .iter()
+                            .map(|p| {
+                                let fp = sdk.get_peer_fingerprint(p.id);
+                                // Format fingerprint in groups of 4
+                                let fp_formatted: String = fp
+                                    .as_bytes()
+                                    .chunks(4)
+                                    .map(|c| std::str::from_utf8(c).unwrap_or(""))
+                                    .collect::<Vec<_>>()
+                                    .join(" ");
+                                PeerData {
+                                    id: p.id.to_string()[..8].into(),
+                                    name: p.name().into(),
+                                    fingerprint: fp_formatted.into(),
+                                }
+                            })
+                            .collect()
+                    } else {
+                        vec![]
+                    };
+
+                let model = VecModel::from(peers_data);
+                ui.global::<Chat>()
+                    .set_current_peers(ModelRc::new(model));
+            }
+
+            ui.global::<Chat>().set_show_conversation_settings(true);
+        });
+    }
+
+    // close_conversation_settings
+    {
+        let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_close_conversation_settings(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            ui.global::<Chat>().set_show_conversation_settings(false);
+        });
+    }
+
+    // rename_conversation — placeholder
+    {
+        ui.global::<Chat>().on_rename_conversation(move |_name| {
+            info!("Rename conversation: not implemented yet");
+        });
+    }
+
+    // add_member — placeholder
+    {
+        ui.global::<Chat>().on_add_member(move || {
+            info!("Add member: not implemented yet");
+        });
+    }
 }
 
 // ─── SDK event handler ─────────────────────────────────────────────────────

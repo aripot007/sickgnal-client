@@ -1,4 +1,5 @@
 import { Conversation } from "Conversation.slint";
+import { PeerData } from "Peer.slint";
 
 export global Chat {
     in-out property <[Conversation]> chats: [];
@@ -34,4 +35,12 @@ export global Chat {
     callback delete_message(/* msg_id */ string);
     callback start_edit(/* msg_id */ string, /* current_text */ string);
     callback cancel_edit();
+
+    // Conversation settings
+    in-out property <bool> show_conversation_settings: false;
+    in-out property <[PeerData]> current_peers;
+    callback open_conversation_settings();
+    callback close_conversation_settings();
+    callback rename_conversation(/* new_name */ string);
+    callback add_member();
 }

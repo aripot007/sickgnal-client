@@ -9,6 +9,7 @@ import { MessageBubble } from "../components/MessageBubble.slint";
 import { Chat } from "../models/Chat.slint";
 import { Conversation } from "../models/Conversation.slint";
 import { Button } from "../components/Button.slint";
+import { ConversationSettings } from "ConversationSettings.slint";
 
 export component ConversationLayout inherits VerticalBox {
     private property <bool> show-typing: false;
@@ -47,16 +48,51 @@ export component ConversationLayout inherits VerticalBox {
         height: 50px;
         background: Theme.background-light;
         border-color: Theme.background-dark;
-        Text {
-            text: Chat.current.name;
-            font-size: 18px;
-            font-weight: 600;
-            color: Theme.text-main;
-            horizontal-alignment: left;
+
+        HorizontalLayout {
+            padding-left: 15px;
+            padding-right: 10px;
+
+            Text {
+                text: Chat.current.name;
+                font-size: 18px;
+                font-weight: 600;
+                color: Theme.text-main;
+                horizontal-alignment: left;
+                vertical-alignment: center;
+            }
+
+            Rectangle { }
+
+            if Chat.has-active-conversation(): Rectangle {
+                width: 32px;
+                height: 32px;
+                border-radius: 6px;
+                background: info-touch.has-hover ? Theme.surface-hover : transparent;
+
+                info-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        Chat.open_conversation_settings();
+                    }
+                }
+
+                Text {
+                    text: "ⓘ";
+                    font-size: 18px;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
         }
     }
 
-    ScrollView {
+    // Conversation settings view (replaces messages when open)
+    if Chat.show_conversation_settings: ConversationSettings { }
+
+    // Messages view (hidden when settings is open)
+    if !Chat.show_conversation_settings: ScrollView {
         VerticalBox {
             padding: 15px;
             alignment: start;
@@ -88,7 +124,7 @@ export component ConversationLayout inherits VerticalBox {
         }
     }
 
-    if root.show-typing: HorizontalBox {
+    if root.show-typing && !Chat.show_conversation_settings: HorizontalBox {
         alignment: start;
         spacing: 6px;
         padding: 2px;
@@ -100,7 +136,7 @@ export component ConversationLayout inherits VerticalBox {
         }
     }
 
-    Rectangle {
+    if !Chat.show_conversation_settings: Rectangle {
         height: 70px;
         background: Theme.background-light;
         border-color: Theme.background-dark;
