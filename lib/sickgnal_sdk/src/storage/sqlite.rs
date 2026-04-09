@@ -27,6 +27,7 @@ use sickgnal_core::e2e::{
         X25519Secret,
     },
 };
+use tracing::error;
 use uuid::Uuid;
 
 /// SQLite implementation of the StorageBackend trait
@@ -69,7 +70,7 @@ impl Sqlite {
         // Verify the key is correct by attempting a simple query
         conn.query_one("SELECT count(*) FROM sqlite_master", (), |_| Ok(()))
             .map_err(|err| {
-                println!("Error selecting count : {}", err);
+                error!("Error selecting count : {}", err);
                 Error::InvalidEncryptionKey
             })?;
 
