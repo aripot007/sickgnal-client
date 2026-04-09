@@ -81,9 +81,9 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(data_dir: PathBuf) -> Self {
         let profile_manager =
-            ProfileManager::new(PathBuf::from("./tui_storage")).expect("create profile manager");
+            ProfileManager::new(data_dir.clone()).expect("create profile manager");
         let profiles = profile_manager.list_profiles().unwrap_or_default();
 
         // If no profiles exist, go straight to auth (sign-up).

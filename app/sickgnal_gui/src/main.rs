@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use clap::Parser;
 use slint::{Model, ModelRc, VecModel};
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -13,10 +14,19 @@ use sickgnal_sdk::client::Sdk;
 use sickgnal_sdk::dto::ConversationEntry;
 slint::include_modules!();
 
+#[derive(Parser)]
+#[command(name = "sickgnal", about = "Sickgnal GUI client")]
+struct Args {
+    /// Directory for account storage
+    #[arg(long, default_value = "./storage")]
+    data_dir: PathBuf,
+}
+
 fn main() {
     tracing_subscriber::fmt::init();
 
-    let dir = PathBuf::from("./storage");
+    let args = Args::parse();
+    let dir = args.data_dir;
 
     let rt = Arc::new(tokio::runtime::Runtime::new().expect("Failed to create tokio runtime"));
 
