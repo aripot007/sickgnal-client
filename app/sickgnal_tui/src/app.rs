@@ -630,6 +630,20 @@ impl App {
                     let conv_id = entry.conversation.id;
                     self.current_conversation = Some(conv_id);
 
+                    // Mark the messages as read
+                    if let Some(ref mut sdk) = self.sdk {
+                        if let Err(err) = sdk.mark_conversation_as_read(conv_id) {
+                            error!("Failed to mark conversation as read: {}", err);
+                            self.show_error_toast(friendly_error(
+                                "Marking conversation as read",
+                                &err,
+                            ));
+                        }
+                    }
+
+                    // Clear unread count in the entry
+                    self.conversations[self.selected_conversation].unread_messages_count = 0;
+
                     // Load messages
                     if let Some(ref sdk) = self.sdk {
                         match sdk.get_messages(conv_id) {
@@ -640,17 +654,6 @@ impl App {
                             }
                         }
                     }
-
-                    // Mark last message as read to clear unread count
-                    if let Some(last_msg) = self.messages.last() {
-                        if let Some(sdk) = &mut self.sdk {
-                            if let Err(e) = sdk.mark_as_read(conv_id, last_msg.id) {
-                                warn!("Failed to mark message as read: {e}");
-                            }
-                        }
-                    }
-                    // Clear unread count in the entry
-                    self.conversations[self.selected_conversation].unread_messages_count = 0;
 
                     self.message_input.clear();
                     self.scroll_offset = 0;

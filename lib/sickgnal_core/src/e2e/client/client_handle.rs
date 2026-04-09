@@ -30,13 +30,6 @@ where
     pub(super) storage: S,
 }
 
-// TODO: Add implementation to send chat messages, and later
-// synchronous requests (eg user profile)
-//
-// refactor Client::start_async_workers to not use a sending worker, send from the client
-// handle instead ? -> check which is better, since sneding worker just takes from queue
-// and sends directly to socket, as processing is done before by the client handle
-
 impl<S> ClientHandle<S>
 where
     S: SharedStorageBackend,
@@ -138,7 +131,6 @@ where
 
         self.send_channel.send(rq).await?;
 
-        // FIXME: Handle error correctly
         // Wait for the response
         let resp = channel.await.or(Err(Error::ReceiveWorkerStopped))?;
 

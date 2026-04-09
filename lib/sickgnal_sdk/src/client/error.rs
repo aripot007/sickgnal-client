@@ -14,7 +14,6 @@ pub enum Error {
     #[error("E2E error: {0}")]
     E2E(#[from] sickgnal_core::e2e::client::Error),
 
-    // FIXME: groupe storage errors
     /// Error originating from the SDK storage layer (config, SQLite setup)
     #[error("Storage error: {0}")]
     Storage(#[from] crate::storage::Error),

@@ -164,8 +164,6 @@ where
     ///
     /// Returns a [`ClientHandle`], a [`Receiver<ChatMessage>`] and the receiver and sender tasks that must be spawned.
     ///
-    /// TODO: The [`ClientHandle`] will shutdown the client when [`Drop`]ped
-    ///
     /// ```ignore
     ///
     /// let (handle, ch, recv_worker, send_worker) = client.start_async_workers().await?;
