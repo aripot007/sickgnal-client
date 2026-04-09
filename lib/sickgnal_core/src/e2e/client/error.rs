@@ -6,7 +6,7 @@ use tokio::sync::mpsc::error::SendError;
 use uuid::Uuid;
 
 use crate::e2e::{
-    self, keys::KeyStorageError, message::ErrorCode, message_stream::MessageStreamError,
+    self, keys::KeyStorageError, message::ErrorCode, message_stream::MessageStreamError, peer::Peer,
 };
 
 /// An E2E Client error
@@ -53,6 +53,9 @@ pub enum Error {
     /// When we can't receive a response because the receiving worker stopped
     #[error("Receiving worker stopped")]
     ReceiveWorkerStopped,
+
+    #[error("fingerp")]
+    FingerprintMismatch(Peer, String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

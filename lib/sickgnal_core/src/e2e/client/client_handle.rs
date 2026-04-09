@@ -11,7 +11,7 @@ use crate::{
     e2e::{
         client::{Account, ChatMessageSender, Error, error::Result, state::E2EClientState},
         message::{E2EMessage, E2EPacket, UserProfile},
-        peer::Peer,
+        peer::{Peer, format_fingerprint},
     },
 };
 
@@ -141,6 +141,22 @@ where
                 E2EMessage::PreKeyBundle(bundle) => bundle,
                 m => return Err(Error::UnexpectedE2EMessage(m)),
             };
+
+            let peer_fingerprint = Vec::from(bundle.identity_keys.fingerprint());
+            let mut peer = self.storage.peer(&to)?.unwrap_or(Peer::default(to));
+
+            // Compare fingerprints if present
+            if let Some(ref fp) = peer.fingerprint {
+                if fp != &peer_fingerprint {
+                    return Err(Error::FingerprintMismatch(
+                        peer,
+                        format_fingerprint(&Some(peer_fingerprint)),
+                    ));
+                }
+            } else {
+                peer.fingerprint = Some(Vec::from(peer_fingerprint));
+                self.storage.save_peer(&peer)?
+            }
 
             let (msg, sess) = {
                 let mut state = self.client_state.lock().unwrap();
