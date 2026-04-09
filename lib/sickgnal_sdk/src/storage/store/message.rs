@@ -24,6 +24,7 @@ impl Store<Message> for MessageStore {
         
         PRIMARY KEY (id, conversation_id),
         FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+        FOREIGN KEY (sender_id) REFERENCES peers(id)
     "#;
 
     const POST_CREATE_SQL: &str = r#"
