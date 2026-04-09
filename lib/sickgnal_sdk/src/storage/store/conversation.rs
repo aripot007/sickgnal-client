@@ -7,7 +7,6 @@ use sickgnal_core::{
     },
     e2e::peer::Peer,
 };
-use tokio::runtime::Id;
 use uuid::Uuid;
 
 use crate::{

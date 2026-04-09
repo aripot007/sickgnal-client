@@ -155,6 +155,52 @@ impl MessageStore {
         )?;
         Ok(())
     }
+
+    /// Get the messages in a conversation.
+    ///
+    /// To enable pagination, provide a page (starting at 0) and a number of elements per page (`limit`)
+    pub fn get_messages_in_conversation(
+        conn: &rusqlite::Connection,
+        conv_id: &Uuid,
+        page: Option<usize>,
+        limit: Option<usize>,
+    ) -> Result<Vec<Message>> {
+        let mut stmt = conn.prepare_cached(
+            r#"
+                SELECT id,
+                    conversation_id,
+                    sender_id,
+                    content,
+                    timestamp,
+                    status,
+                    reply_to_id,
+                FROM messages
+                WHERE conversation_id = ?1
+                ORDER BY timestamp DESC
+                LIMIT ?2
+                OFFSET ?3
+            "#,
+        )?;
+
+        let offset = match (limit, page) {
+            (None, _) | (_, None) => 0,
+            (Some(limit), Some(page)) => (page * limit) as isize,
+        };
+
+        let limit = match limit {
+            Some(n) => n as isize,
+            None => -1,
+        };
+
+        let mut rows = stmt.query(params![conv_id.to_string(), limit, offset])?;
+        let mut msgs = Vec::new();
+
+        while let Some(r) = rows.next()? {
+            msgs.push(parse_row(r)?);
+        }
+
+        Ok(msgs)
+    }
 }
 
 /// Parse a ro into a

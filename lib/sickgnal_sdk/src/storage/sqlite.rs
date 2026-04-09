@@ -89,6 +89,15 @@ impl Sqlite {
     pub(crate) fn delete_conversation(&self, id: &Uuid) -> Result<()> {
         ConversationStore::delete_by_id(&self.conn, id)
     }
+
+    pub(crate) fn get_messages_in_conversation(
+        &self,
+        conv_id: &Uuid,
+        page: Option<usize>,
+        limit: Option<usize>,
+    ) -> Result<Vec<Message>> {
+        MessageStore::get_messages_in_conversation(&self.conn, conv_id, page, limit)
+    }
 }
 
 #[cfg(false)]

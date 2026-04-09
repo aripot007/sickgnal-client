@@ -92,11 +92,11 @@ impl SyncBridge {
     pub fn get_messages_paginated(
         &self,
         conversation_id: Uuid,
-        limit: i32,
-        offset: i32,
+        page: usize,
+        limit: usize,
     ) -> Result<Vec<Message>> {
         self.sdk
-            .get_messages_paginated(conversation_id, limit, offset)
+            .get_messages_paginated(conversation_id, page, limit)
     }
 
     pub fn send_message(&mut self, conversation_id: Uuid, text: String) -> Result<Message> {

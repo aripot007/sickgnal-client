@@ -20,13 +20,12 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use sickgnal_core::chat::client::{ChatClientHandle, ChatEvent};
-use sickgnal_core::chat::storage::{Message, SharedStorageBackend, StorageBackend};
+use sickgnal_core::chat::storage::{Message, StorageBackend};
 use sickgnal_core::e2e::message::UserProfile;
 
 use crate::client::Error;
 use crate::dto::ConversationEntry;
 use crate::storage::Sqlite;
-use crate::storage::store::conversation::ConversationStore;
 use crate::tls::TlsConfig;
 
 use super::{Result, SdkClient};
@@ -133,20 +132,26 @@ impl Sdk {
     // ─── Messages ───────────────────────────────────────────────────────
 
     /// Get messages for a conversation.
-    pub fn get_messages(&self, _conversation_id: Uuid) -> Result<Vec<Message>> {
-        // TODO: implement using storage.list_messages()
-        Ok(vec![])
+    pub fn get_messages(&self, conversation_id: Uuid) -> Result<Vec<Message>> {
+        self.storage
+            .lock()
+            .unwrap()
+            .get_messages_in_conversation(&conversation_id, None, None)
+            .map_err(Error::from)
     }
 
     /// Get messages for a conversation with pagination.
     pub fn get_messages_paginated(
         &self,
-        _conversation_id: Uuid,
-        _limit: i32,
-        _offset: i32,
+        conversation_id: Uuid,
+        page: usize,
+        limit: usize,
     ) -> Result<Vec<Message>> {
-        // TODO: implement using storage.list_messages()
-        Ok(vec![])
+        self.storage
+            .lock()
+            .unwrap()
+            .get_messages_in_conversation(&conversation_id, Some(page), Some(limit))
+            .map_err(Error::from)
     }
 
     /// Send a text message to a conversation.
