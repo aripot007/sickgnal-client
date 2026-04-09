@@ -545,7 +545,7 @@ impl App {
 
                     // Mark last message as read to clear unread count
                     if let Some(last_msg) = self.messages.last() {
-                        if let Some(ref sdk) = self.sdk {
+                        if let Some(sdk) = &mut self.sdk {
                             let _ = sdk.mark_as_read(conv_id, last_msg.id);
                         }
                     }
@@ -676,7 +676,9 @@ impl App {
                 KeyCode::Enter => {
                     if let Some(msg_id) = self.editing_message_id.take() {
                         let new_text = self.message_input.clone();
-                        if let (Some(conv_id), Some(sdk)) = (self.current_conversation, &self.sdk) {
+                        if let (Some(conv_id), Some(sdk)) =
+                            (self.current_conversation, &mut self.sdk)
+                        {
                             if let Err(e) = sdk.edit_message(conv_id, msg_id, new_text.clone()) {
                                 error!("Failed to edit message: {e}");
                                 self.status_message = Some(format!("Edit failed: {e}"));
@@ -900,7 +902,7 @@ impl App {
                     self.messages.push(msg);
 
                     // Mark as read immediately since the conversation is open
-                    if let Some(ref sdk) = self.sdk {
+                    if let Some(sdk) = &mut self.sdk {
                         let _ = sdk.mark_as_read(conversation_id, msg_id);
                     }
                 }
