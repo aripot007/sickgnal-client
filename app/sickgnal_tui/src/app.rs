@@ -20,6 +20,7 @@ pub enum Screen {
     Auth,
     Conversations,
     Chat,
+    ConversationInfo,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +78,10 @@ pub struct App {
     pub editing_message_id: Option<Uuid>,
     pub original_message_text: String,
     pub confirm_delete: Option<Uuid>,
+
+    // Conversation info state
+    pub info_selected_peer: usize,
+    pub info_show_fingerprint: bool,
 
     // SDK bridge
     pub sdk: Option<SyncBridge>,
@@ -136,6 +141,9 @@ impl App {
             original_message_text: String::new(),
             confirm_delete: None,
 
+            info_selected_peer: 0,
+            info_show_fingerprint: false,
+
             sdk: None,
             event_rx: None,
 
@@ -182,6 +190,7 @@ impl App {
             Screen::Auth => self.handle_auth_key(key),
             Screen::Conversations => self.handle_conversations_key(key),
             Screen::Chat => self.handle_chat_key(key),
+            Screen::ConversationInfo => self.handle_conversation_info_key(key),
         }
     }
 
@@ -783,7 +792,14 @@ impl App {
                 }
             }
             KeyCode::Char(c) => {
-                self.message_input.push(c);
+                // 'i' with empty input opens conversation info
+                if c == 'i' && self.message_input.is_empty() {
+                    self.info_selected_peer = 0;
+                    self.info_show_fingerprint = false;
+                    self.screen = Screen::ConversationInfo;
+                } else {
+                    self.message_input.push(c);
+                }
             }
             KeyCode::Backspace => {
                 self.message_input.pop();
@@ -796,6 +812,35 @@ impl App {
             }
             KeyCode::Down => {
                 // No-op in input mode (already at bottom)
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_conversation_info_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.screen = Screen::Chat;
+            }
+            KeyCode::Up => {
+                self.info_selected_peer = self.info_selected_peer.saturating_sub(1);
+                self.info_show_fingerprint = false;
+            }
+            KeyCode::Down => {
+                if let Some(entry) = self
+                    .current_conversation
+                    .and_then(|cid| self.conversations.iter().find(|e| e.conversation.id == cid))
+                {
+                    let max = entry.conversation.peers.len().saturating_sub(1);
+                    if self.info_selected_peer < max {
+                        self.info_selected_peer += 1;
+                        self.info_show_fingerprint = false;
+                    }
+                }
+            }
+            KeyCode::Enter => {
+                // Toggle fingerprint display for the selected peer
+                self.info_show_fingerprint = !self.info_show_fingerprint;
             }
             _ => {}
         }
