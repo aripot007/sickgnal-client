@@ -218,7 +218,6 @@ where
     }
 
     pub async fn mark_as_read(&mut self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
-        // FIXME: send read ack to sender only
         self.dispatch_in_conversation(
             conversation_id,
             ChatMessage::new_ack_read(conversation_id, &[message_id]),
@@ -237,7 +236,6 @@ where
             .get_received_unread_messages(&conversation_id)?
             .ok_or(Error::ConversationNotFound(conversation_id))?;
 
-        // FIXME: send read ack to sender only
         self.dispatch_in_conversation(
             conversation_id,
             ChatMessage::new_ack_read(conversation_id, unread_msg_ids.clone()),

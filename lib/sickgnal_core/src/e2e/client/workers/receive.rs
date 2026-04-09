@@ -135,7 +135,6 @@ where
             }
         }
 
-        // TODO: Clean shutdown / send error to client ?
         info!("Stopping receiver");
         self.shutdown();
     }
@@ -267,7 +266,6 @@ where
                 self.cache.push(sender_id, key_id, ciphertext);
             }
 
-            // TODO: Better logging
             Err(e) => error!("Error decrypting ciphertext : {}", e),
         };
 

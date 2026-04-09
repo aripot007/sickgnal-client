@@ -136,7 +136,6 @@ where
                 .map(|(id, msgs)| format!("{} ({} messages)", id, msgs.len()))
                 .collect();
 
-            // TODO: Better logging
             warn!(
                 "Unknown keys for user {} : {}",
                 user_id,
@@ -255,7 +254,6 @@ where
                 return;
             }
 
-            // TODO: Better error logging
             Err(e) => {
                 error!("Error opening conversation : {}", e);
                 return;
@@ -309,7 +307,6 @@ where
 
             session_keys = &keys.keys;
         } else {
-            // TODO: Better logging
             warn!("No session with user {}", sender_id);
             return;
         }
@@ -347,7 +344,6 @@ where
 
                 Ok(PayloadMessage::E2EMessage(m)) => queue.push_front(m),
 
-                // TODO: Better logging
                 Err(e) => error!("Error decrypting ciphertext : {}", e),
             }
             return;
@@ -390,7 +386,6 @@ where
         let session_keys = match self.session_keys.get_mut(&sender_id) {
             Some(k) => k,
             None => {
-                // TODO: Better logging
                 error!("Trying to rotate key for an unknown session {}", sender_id);
                 return;
             }
@@ -400,7 +395,6 @@ where
         let prev_key = match session_keys.keys.get(&previous_key_id) {
             Some(k) => k,
             None => {
-                // TODO: Better logging
                 error!("Unknown previous key {}", previous_key_id);
                 return;
             }
@@ -417,11 +411,9 @@ where
             sess.receiving_key = next_key;
 
             if let Err(err) = self.e2e_client.state.update_session(sess) {
-                // TODO: Better logging
                 error!("Error saving new session state : {}", err);
             }
         } else {
-            // TODO: Better logging
             error!(
                 "Could not update session : no session for user {}",
                 sender_id
