@@ -60,9 +60,12 @@ impl SdkClient<Arc<Mutex<Sqlite>>> {
         let client_builder =
             ClientBuilder::create_account(username, storage.clone(), msg_stream, event_tx).await?;
 
-        let runtime = tokio::runtime::Handle::current();
+        let (chatclient, e2e_recv, e2e_send, chat_recv) = client_builder.start().await?;
 
-        let chatclient = client_builder.start(runtime).await?;
+        let runtime = tokio::runtime::Handle::current();
+        runtime.spawn(e2e_recv);
+        runtime.spawn(e2e_send);
+        runtime.spawn(chat_recv);
 
         Ok(Self {
             storage,
@@ -84,9 +87,12 @@ impl SdkClient<Arc<Mutex<Sqlite>>> {
 
         let client_builder = ClientBuilder::load(account, storage.clone(), msg_stream, event_tx)?;
 
-        let runtime = tokio::runtime::Handle::current();
+        let (chatclient, e2e_recv, e2e_send, chat_recv) = client_builder.start().await?;
 
-        let chatclient = client_builder.start(runtime).await?;
+        let runtime = tokio::runtime::Handle::current();
+        runtime.spawn(e2e_recv);
+        runtime.spawn(e2e_send);
+        runtime.spawn(chat_recv);
 
         Ok(Self {
             storage,

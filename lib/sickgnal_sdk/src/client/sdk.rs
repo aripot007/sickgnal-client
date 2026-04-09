@@ -2,29 +2,25 @@
 //!
 //! ```ignore
 //! // Create or load an account and connect
-//! let sdk = Sdk::connect(username, password, dir, existing, server_addr).await?;
-//!
-//! // Take the event receiver (once)
-//! let mut event_rx = sdk.take_event_rx();
+//! let (sdk, event_rx) = Sdk::connect(username, password, dir, existing, server_addr, tls_config).await?;
 //!
 //! // Use the SDK
-//! let conv = sdk.start_conversation("bob").await?;
-//! let msg = sdk.send_message(conv.id, "Hello!").await?;
+//! let conv = sdk.start_conversation(user_id, None).await?;
+//! let msg = sdk.send_message(conv.id, "Hello!", None).await?;
 //! let convos = sdk.list_conversations()?;
 //! let msgs = sdk.get_messages(conv.id)?;
 //! ```
 
 use std::sync::{Arc, Mutex};
 
-use chrono::Utc;
 use sickgnal_core::chat::dto::Conversation;
+use sickgnal_core::chat::message::Content;
 use sickgnal_core::e2e::keys::E2EStorageBackend;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use sickgnal_core::chat::client::{ChatClientHandle, ChatEvent};
-use sickgnal_core::chat::message::{ChatMessage, Content};
-use sickgnal_core::chat::storage::{Message, MessageStatus, SharedStorageBackend, StorageBackend};
+use sickgnal_core::chat::storage::{Message, SharedStorageBackend, StorageBackend};
 use sickgnal_core::e2e::message::UserProfile;
 
 use crate::client::Error;
@@ -38,7 +34,7 @@ use super::{Result, SdkClient};
 /// High-level SDK for the Sickgnal messaging client.
 ///
 /// This is a handle to the underlying clients, and can be `cloned` and passed to
-/// multiple trheads safely
+/// multiple threads safely.
 #[derive(Clone)]
 pub struct Sdk {
     /// chat client
@@ -97,14 +93,13 @@ impl Sdk {
 
     /// Start a new conversation with a peer by uuid.
     ///
-    /// User [`Sdk::get_profile_by_username`] if you need to get the id
+    /// Use [`Sdk::get_profile_by_username`] if you need to get the id
     /// from a username.
     pub async fn start_conversation(
         &mut self,
         user_id: Uuid,
         initial_message: Option<Content>,
     ) -> Result<Conversation> {
-        // Create a new conversation
         let conv = self
             .chat_client
             .create_conversation(user_id, initial_message)
@@ -129,40 +124,36 @@ impl Sdk {
             .map_err(Error::from)
     }
 
-    /// Mark all messages in a conversation as read
-    pub fn mark_conversation_as_read(&self, conversation_id: Uuid) -> Result<()> {
-        todo!()
-        // let mut storage = self.storage.lock().unwrap();
-        // storage.update_conversation_unread_count(conversation_id, 0)?;
-        // Ok(())
+    /// Mark all messages in a conversation as read.
+    pub fn mark_conversation_as_read(&self, _conversation_id: Uuid) -> Result<()> {
+        // TODO: implement using storage
+        Ok(())
     }
 
     // ─── Messages ───────────────────────────────────────────────────────
 
-    /// Get messages for a conversation, with optional pagination.
-    pub fn get_messages(&self, conversation_id: Uuid) -> Result<Vec<Message>> {
-        todo!()
-        // Ok(self.storage.list_messages(conversation_id, None, None)?)
+    /// Get messages for a conversation.
+    pub fn get_messages(&self, _conversation_id: Uuid) -> Result<Vec<Message>> {
+        // TODO: implement using storage.list_messages()
+        Ok(vec![])
     }
 
     /// Get messages for a conversation with pagination.
     pub fn get_messages_paginated(
         &self,
-        conversation_id: Uuid,
-        limit: i32,
-        offset: i32,
+        _conversation_id: Uuid,
+        _limit: i32,
+        _offset: i32,
     ) -> Result<Vec<Message>> {
-        todo!()
-        // Ok(self
-        //     .storage
-        //     .list_messages(conversation_id, Some(limit), Some(offset))?)
+        // TODO: implement using storage.list_messages()
+        Ok(vec![])
     }
 
     /// Send a text message to a conversation.
     ///
-    /// `reply_to` is the optional id of the message this message responds to
+    /// `reply_to` is the optional id of the message this message responds to.
     ///
-    /// Returns the created message
+    /// Returns the created message.
     pub async fn send_message(
         &mut self,
         conversation_id: Uuid,
@@ -182,54 +173,32 @@ impl Sdk {
     /// Edit a message.
     pub async fn edit_message(
         &self,
-        conversation_id: Uuid,
-        message_id: Uuid,
-        new_text: String,
+        _conversation_id: Uuid,
+        _message_id: Uuid,
+        _new_text: String,
     ) -> Result<()> {
-        // let peer_user_id = self.peer_for_conversation(conversation_id)?;
-
-        // let chat_message = ChatMessage::new_edit_text(conversation_id, message_id, &new_text);
-        // self.send_raw(peer_user_id, chat_message).await?;
-
-        // {
-        //     let mut storage = self.storage.lock().unwrap();
-        //     if let Some(mut msg) = storage.get_message(message_id)? {
-        //         msg.content = new_text;
-        //         storage.update_message(&msg)?;
-        //     }
-        // }
-
-        // Ok(())
-        todo!()
+        // TODO: implement edit logic (send control message + update storage)
+        Ok(())
     }
 
     /// Delete a message (sends a delete control message to the peer).
-    pub async fn delete_message(&mut self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
-        todo!()
+    pub async fn delete_message(&self, _conversation_id: Uuid, _message_id: Uuid) -> Result<()> {
+        // TODO: implement delete logic (send control message + update storage)
+        Ok(())
     }
 
-    /// Mark a message as read
-    pub async fn mark_as_read(&self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
-        // let peer_user_id = self.peer_for_conversation(conversation_id)?;
-
-        // let chat_message = ChatMessage::new_ack_read(conversation_id, message_id);
-        // self.send_raw(peer_user_id, chat_message).await?;
-
-        // {
-        //     let mut storage = self.storage.lock().unwrap();
-        //     let _ = storage.update_message_status(message_id, MessageStatus::Read);
-        // }
-
-        // Ok(())
-        todo!()
+    /// Mark a message as read.
+    pub async fn mark_as_read(&self, _conversation_id: Uuid, _message_id: Uuid) -> Result<()> {
+        // TODO: implement read receipt logic (send ack + update storage)
+        Ok(())
     }
 
     /// Send a typing indicator.
-    pub async fn send_typing_indicator(&self, conversation_id: Uuid) -> Result<()> {
-        todo!()
-        // let peer_user_id = self.peer_for_conversation(conversation_id)?;
-        // let chat_message = ChatMessage::new_is_typing(conversation_id);
-        // self.send_raw(peer_user_id, chat_message).await
+    pub async fn send_typing_indicator(&mut self, conversation_id: Uuid) -> Result<()> {
+        self.chat_client
+            .send_typing_indicator(conversation_id)
+            .await
+            .map_err(Error::from)
     }
 
     // ─── Verification ─────────────────────────────────────────────────

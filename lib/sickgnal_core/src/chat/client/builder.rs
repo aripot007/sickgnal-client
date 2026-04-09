@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use crate::chat::client::ChatEvent;
 use crate::chat::client::client::ChatClientHandle;
 use crate::e2e::client::{Account, E2EClient};
@@ -56,11 +58,17 @@ where
         })
     }
 
-    /// Synchronizes the client with the server, and return the initialized
-    /// client with the worker tasks.
-    pub async fn start(self, runtime: tokio::runtime::Handle) -> Result<ChatClientHandle<S>> {
-        let state = ChatClientHandle::sync_builder(self, runtime).await?;
-
-        Ok(state)
+    /// Synchronizes the client with the server, and returns the initialized
+    /// client handle along with three background tasks that must be spawned
+    /// on a tokio runtime by the caller.
+    pub async fn start(
+        self,
+    ) -> Result<(
+        ChatClientHandle<S>,
+        impl Future<Output = ()> + Send + 'static,
+        impl Future<Output = ()> + Send + 'static,
+        impl Future<Output = ()> + Send + 'static,
+    )> {
+        ChatClientHandle::sync_builder(self).await
     }
 }

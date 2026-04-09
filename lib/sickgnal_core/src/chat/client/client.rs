@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use chrono::{DateTime, Utc};
 use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
@@ -39,11 +41,18 @@ impl<S> ChatClientHandle<S>
 where
     S: SharedStorageBackend + 'static,
 {
-    /// Create a client state by synchronizing with the server
+    /// Create a client state by synchronizing with the server.
+    ///
+    /// Returns the client handle and three opaque background tasks that must
+    /// be spawned by the caller on a tokio runtime.
     pub(crate) async fn sync_builder<M: E2EMessageStream>(
         builder: ClientBuilder<S, M>,
-        rt: tokio::runtime::Handle,
-    ) -> Result<Self> {
+    ) -> Result<(
+        Self,
+        impl Future<Output = ()> + Send + 'static,
+        impl Future<Output = ()> + Send + 'static,
+        impl Future<Output = ()> + Send + 'static,
+    )> {
         let ClientBuilder {
             mut storage,
             mut e2e_client,
@@ -74,14 +83,10 @@ where
             event_tx,
         };
 
-        // start the e2e workers
-        rt.spawn(recv_task);
-        rt.spawn(send_task);
+        // Build the chat receive loop as an opaque future
+        let chat_recv_task = worker::receive_loop(state.clone(), recv_rx);
 
-        // start the chat client workers
-        rt.spawn(worker::receive_loop(state, recv_rx));
-
-        todo!()
+        Ok((state, recv_task, send_task, chat_recv_task))
     }
 
     /// Handle an incoming message
@@ -176,11 +181,6 @@ where
         content: Content,
         reply_to: Option<Uuid>,
     ) -> Result<Message> {
-        let peers = self
-            .storage
-            .get_conversation_peers(&conversation_id)?
-            .ok_or(Error::ConversationNotFound(conversation_id))?;
-
         let chat_msg = ChatMessage::new_content_reply(conversation_id, content, reply_to)
             .with_sender_id(self.account_id);
 
@@ -188,9 +188,8 @@ where
 
         self.storage.save_message(&msg_dto)?;
 
-        for peer in peers {
-            self.e2e_client.send(peer.id, chat_msg.clone()).await?;
-        }
+        self.dispatch_in_conversation(conversation_id, chat_msg)
+            .await?;
 
         self.storage
             .update_message_status(&conversation_id, &msg_dto.id, MessageStatus::Sent)?;
@@ -198,6 +197,11 @@ where
         msg_dto.status = MessageStatus::Sent;
 
         Ok(msg_dto)
+    }
+
+    pub async fn send_typing_indicator(&mut self, conv_id: Uuid) -> Result<()> {
+        self.dispatch_in_conversation(conv_id, ChatMessage::new_is_typing(conv_id))
+            .await
     }
 
     // endregion: Public API
@@ -220,6 +224,20 @@ where
     //         .await
     //         .map_err(|_| Error::EventChannelClosed)
     // }
+
+    /// Dispatch a message in a conversation
+    async fn dispatch_in_conversation(&mut self, conv_id: Uuid, msg: ChatMessage) -> Result<()> {
+        let peers = self
+            .storage
+            .get_conversation_peers(&conv_id)?
+            .ok_or(Error::ConversationNotFound(conv_id))?;
+
+        for peer in peers {
+            self.e2e_client.send(peer.id, msg.clone()).await?;
+        }
+
+        Ok(())
+    }
 }
 
 // We need to detach the processing functions to be able to use them

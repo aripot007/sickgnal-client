@@ -55,18 +55,19 @@ pub fn draw(f: &mut Frame, app: &App) {
             .conversations
             .iter()
             .enumerate()
-            .map(|(i, conv)| {
+            .map(|(i, entry)| {
                 let is_selected = i == app.selected_conversation;
 
-                let unread_str = if conv.unread_count > 0 {
-                    format!(" ({})", conv.unread_count)
+                let unread_str = if entry.unread_messages_count > 0 {
+                    format!(" ({})", entry.unread_messages_count)
                 } else {
                     String::new()
                 };
 
-                let time = conv
-                    .last_message_at
-                    .map(|t| t.format("%H:%M").to_string())
+                let time = entry
+                    .last_message
+                    .as_ref()
+                    .map(|m| m.issued_at.format("%H:%M").to_string())
                     .unwrap_or_default();
 
                 let style = if is_selected {
@@ -81,7 +82,7 @@ pub fn draw(f: &mut Frame, app: &App) {
 
                 let line = Line::from(vec![
                     Span::styled(marker, style),
-                    Span::styled(conv.peer_name.clone(), style),
+                    Span::styled(entry.conversation.title.clone(), style),
                     Span::styled(unread_str, Style::default().fg(Color::Yellow)),
                     Span::styled(format!("  {}", time), Style::default().fg(Color::DarkGray)),
                 ]);

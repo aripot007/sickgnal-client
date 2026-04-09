@@ -22,14 +22,20 @@ pub fn draw(f: &mut Frame, app: &App) {
     // Find current conversation and peer fingerprint
     let (conv_name, fingerprint) = app
         .current_conversation
-        .and_then(|cid| app.conversations.iter().find(|c| c.id == cid))
-        .map(|c| {
+        .and_then(|cid| app.conversations.iter().find(|e| e.conversation.id == cid))
+        .map(|entry| {
+            let peer_id = entry
+                .conversation
+                .peers
+                .first()
+                .map(|p| p.id)
+                .unwrap_or_default();
             let fp = app
                 .sdk
                 .as_ref()
-                .map(|sdk| sdk.get_peer_fingerprint(c.peer_user_id))
+                .map(|sdk| sdk.get_peer_fingerprint(peer_id))
                 .unwrap_or_default();
-            (c.peer_name.clone(), fp)
+            (entry.conversation.title.clone(), fp)
         })
         .unwrap_or_else(|| ("Chat".into(), String::new()));
 

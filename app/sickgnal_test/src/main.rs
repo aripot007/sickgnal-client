@@ -5,13 +5,13 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 use sickgnal_core::chat::client::ChatEvent as SdkEvent;
+use sickgnal_core::chat::message::Content;
 use sickgnal_core::chat::storage::MessageStatus;
 use sickgnal_sdk::TlsConfig;
+use sickgnal_sdk::client::SyncBridge;
 use uuid::Uuid;
 
 use sickgnal_sdk::account::AccountFile;
-
-mod sdk_bridge_test;
 
 const PLAIN_ADDR: &str = "127.0.0.1:8080";
 const TLS_ADDR: &str = "127.0.0.1:8443";
@@ -167,16 +167,19 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     let alice_af = AccountFile::new(alice_dir.clone()).unwrap();
     alice_af.create(&alice_name, password).unwrap();
 
-    let mut alice = sdk_bridge_test::SdkBridge::connect(
-        alice_name.clone(),
-        password.to_string(),
-        alice_dir.clone(),
-        false,
-        server_addr,
-        tls_config,
-    )
-    .expect("Alice connect");
-    let alice_id = alice.my_user_id();
+    let (mut alice, mut alice_event_rx) = {
+        let (bridge, rx) = SyncBridge::connect(
+            alice_name.clone(),
+            password,
+            alice_dir.clone(),
+            false,
+            server_addr,
+            tls_config,
+        )
+        .expect("Alice connect");
+        (bridge, rx)
+    };
+    let alice_id = alice.user_id();
     println!("    Alice connected: id={alice_id}");
 
     // Create Bob's account
@@ -185,36 +188,39 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     let bob_af = AccountFile::new(bob_dir.clone()).unwrap();
     bob_af.create(&bob_name, password).unwrap();
 
-    let mut bob = sdk_bridge_test::SdkBridge::connect(
-        bob_name.clone(),
-        password.to_string(),
-        bob_dir.clone(),
-        false,
-        server_addr,
-        tls_config,
-    )
-    .expect("Bob connect");
-    let bob_id = bob.my_user_id();
+    let (mut bob, mut bob_event_rx) = {
+        let (bridge, rx) = SyncBridge::connect(
+            bob_name.clone(),
+            password,
+            bob_dir.clone(),
+            false,
+            server_addr,
+            tls_config,
+        )
+        .expect("Bob connect");
+        (bridge, rx)
+    };
+    let bob_id = bob.user_id();
     println!("    Bob connected: id={bob_id}");
     assert_ne!(alice_id, bob_id);
     println!("    OK");
     println!();
 
-    // Take event receivers
-    let mut alice_event_rx = alice.take_event_rx();
-    let mut bob_event_rx = bob.take_event_rx();
-
     // ================================================================
     // Step 2: Alice starts a conversation with Bob (profile lookup + create)
     // ================================================================
     println!("[2] Alice: Starting conversation with Bob...");
+    let bob_profile = alice
+        .get_profile_by_username(bob_name.clone())
+        .expect("Alice lookup Bob profile");
     let conv = alice
-        .start_conversation(bob_name.clone(), None)
+        .start_conversation(bob_profile.id, None)
         .expect("Alice start conversation with Bob");
-    assert_eq!(conv.peer_user_id, bob_id);
+    let peer_id = conv.peers.first().map(|p| p.id).unwrap();
+    assert_eq!(peer_id, bob_id);
     println!(
-        "    OK - Conversation created: id={}, peer={}",
-        conv.id, conv.peer_name
+        "    OK - Conversation created: id={}, title={}",
+        conv.id, conv.title
     );
     println!();
 
@@ -279,8 +285,11 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     // Step 7: Bob starts a conversation with Alice and replies
     // ================================================================
     println!("[7] Bob: Starting conversation with Alice and replying...");
+    let alice_profile = bob
+        .get_profile_by_username(alice_name.clone())
+        .expect("Bob lookup Alice profile");
     let bob_conv = bob
-        .start_conversation(alice_name.clone(), None)
+        .start_conversation(alice_profile.id, None)
         .expect("Bob start conversation with Alice");
     let reply = bob
         .send_message(bob_conv.id, "Hello Alice from Bob!".to_string())
@@ -311,7 +320,6 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     println!("[8b] Bob: Sending reply to Alice's first message...");
     // recv_msg is the first message Bob received from Alice
     let reply2 = bob
-        .inner()
         .send_reply(
             bob_conv.id,
             "Replying to your first msg!".to_string(),
@@ -339,7 +347,6 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     // ================================================================
     println!("[8c] Alice: Editing first message...");
     alice
-        .inner()
         .edit_message(conv.id, msg.id, "EDITED: Hello Bob!".to_string())
         .expect("Alice edit_message");
     println!("    OK - edit_message call succeeded");
@@ -363,13 +370,12 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     // ================================================================
     println!("[8d] Alice: Sending typing indicator...");
     alice
-        .inner()
         .send_typing_indicator(conv.id)
         .expect("Alice send_typing_indicator");
     println!("    OK - send_typing_indicator call succeeded");
 
     let typing_event = wait_for_event(&mut bob_event_rx, Duration::from_secs(5), |e| {
-        matches!(e, SdkEvent::TypingIndicator(_))
+        matches!(e, SdkEvent::TypingIndicator { .. })
     });
     assert!(
         typing_event.is_some(),
@@ -379,16 +385,21 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     println!();
 
     // ================================================================
-    // Step 8e: Test send_read_receipt (Bob sends read receipt for Alice's message)
+    // Step 8e: Test mark_as_read (Bob marks Alice's message as read)
     // ================================================================
-    println!("[8e] Bob: Sending read receipt...");
-    bob.inner()
-        .send_read_receipt(bob_conv.id, recv_msg.id)
-        .expect("Bob send_read_receipt");
-    println!("    OK - send_read_receipt call succeeded");
+    println!("[8e] Bob: Marking message as read...");
+    bob.mark_as_read(bob_conv.id, recv_msg.id)
+        .expect("Bob mark_as_read");
+    println!("    OK - mark_as_read call succeeded");
 
     let read_event = wait_for_event(&mut alice_event_rx, Duration::from_secs(5), |e| {
-        matches!(e, SdkEvent::MessageStatusUpdated(_, MessageStatus::Read))
+        matches!(
+            e,
+            SdkEvent::MessageStatusUpdated {
+                status: MessageStatus::Read,
+                ..
+            }
+        )
     });
     assert!(
         read_event.is_some(),
@@ -398,33 +409,10 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     println!();
 
     // ================================================================
-    // Step 8f: Test send_delivery_receipt
-    // ================================================================
-    println!("[8f] Bob: Sending delivery receipt...");
-    bob.inner()
-        .send_delivery_receipt(bob_conv.id, recv_msg2.id)
-        .expect("Bob send_delivery_receipt");
-    println!("    OK - send_delivery_receipt call succeeded");
-
-    let delivered_event = wait_for_event(&mut alice_event_rx, Duration::from_secs(5), |e| {
-        matches!(
-            e,
-            SdkEvent::MessageStatusUpdated(_, MessageStatus::Delivered)
-        )
-    });
-    assert!(
-        delivered_event.is_some(),
-        "Alice should receive MessageStatusUpdate(Delivered)"
-    );
-    println!("    OK - Alice received MessageStatusUpdate(Delivered)");
-    println!();
-
-    // ================================================================
     // Step 8g: Test delete_message (Alice deletes her second message)
     // ================================================================
     println!("[8g] Alice: Deleting second message...");
     alice
-        .inner()
         .delete_message(conv.id, msg2.id)
         .expect("Alice delete_message");
     println!("    OK - delete_message call succeeded");
@@ -455,9 +443,9 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     std::fs::create_dir_all(&charlie_dir).unwrap();
     let charlie_af = AccountFile::new(charlie_dir.clone()).unwrap();
     charlie_af.create(&charlie_name, password).unwrap();
-    let mut charlie = sdk_bridge_test::SdkBridge::connect(
+    let (mut charlie, _charlie_event_rx) = SyncBridge::connect(
         charlie_name.clone(),
-        password.to_string(),
+        password,
         charlie_dir.clone(),
         false,
         server_addr,
@@ -469,9 +457,9 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     std::fs::create_dir_all(&dave_dir).unwrap();
     let dave_af = AccountFile::new(dave_dir.clone()).unwrap();
     dave_af.create(&dave_name, password).unwrap();
-    let mut dave = sdk_bridge_test::SdkBridge::connect(
+    let (_dave, mut dave_event_rx) = SyncBridge::connect(
         dave_name.clone(),
-        password.to_string(),
+        password,
         dave_dir.clone(),
         false,
         server_addr,
@@ -479,14 +467,13 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     )
     .expect("Dave connect");
 
-    let mut dave_event_rx = dave.take_event_rx();
-    let _charlie_event_rx = charlie.take_event_rx();
-
     // Start conversation WITH initial message
+    let dave_profile = charlie
+        .get_profile_by_username(dave_name.clone())
+        .expect("Charlie lookup Dave profile");
     let conv_cd = charlie
-        .start_conversation(dave_name.clone(), Some("Hi Dave!".to_string()))
+        .start_conversation(dave_profile.id, Some(Content::Text("Hi Dave!".to_string())))
         .expect("Charlie start conversation with initial message");
-    assert!(conv_cd.opened, "Conversation should be marked as opened");
 
     let received = wait_for_message(&mut dave_event_rx, Duration::from_secs(5));
     assert!(
@@ -505,10 +492,7 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     // Step 10: Test list_conversations, get_messages, get_conversation
     // ================================================================
     println!("[10] Testing storage queries...");
-    let convos = alice
-        .inner()
-        .list_conversations()
-        .expect("list_conversations");
+    let convos = alice.list_conversations().expect("list_conversations");
     assert!(
         !convos.is_empty(),
         "Alice should have at least one conversation"
@@ -518,21 +502,17 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
         convos.len()
     );
 
-    let msgs = alice.inner().get_messages(conv.id).expect("get_messages");
+    let msgs = alice.get_messages(conv.id).expect("get_messages");
     assert!(msgs.len() >= 2, "Should have at least 2 messages");
     println!("    OK - get_messages: {} messages", msgs.len());
 
     let msgs_page = alice
-        .inner()
         .get_messages_paginated(conv.id, 1, 0)
         .expect("paginated");
     assert_eq!(msgs_page.len(), 1, "Paginated should return 1 message");
     println!("    OK - get_messages_paginated works");
 
-    let fetched_conv = alice
-        .inner()
-        .get_conversation(conv.id)
-        .expect("get_conversation");
+    let fetched_conv = alice.get_conversation(conv.id).expect("get_conversation");
     assert!(fetched_conv.is_some(), "Conversation should exist");
     println!("    OK - get_conversation works");
     println!();
@@ -542,36 +522,34 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     // ================================================================
     println!("[11] Testing mark_conversation_as_read...");
     // Bob's conversation should have unread messages from Alice
-    let bob_convos = bob
-        .inner()
-        .list_conversations()
-        .expect("bob list_conversations");
-    let bob_alice_conv = bob_convos.iter().find(|c| c.peer_user_id == alice_id);
+    let bob_convos = bob.list_conversations().expect("bob list_conversations");
+    let bob_alice_entry = bob_convos
+        .iter()
+        .find(|e| e.conversation.peers.first().map(|p| p.id) == Some(alice_id));
     assert!(
-        bob_alice_conv.is_some(),
+        bob_alice_entry.is_some(),
         "Bob should have a conversation with Alice"
     );
-    let bob_alice_conv = bob_alice_conv.unwrap();
+    let bob_alice_entry = bob_alice_entry.unwrap();
     // Bob received messages, so unread_count should be > 0
     println!(
         "    Bob's unread_count before: {}",
-        bob_alice_conv.unread_count
+        bob_alice_entry.unread_messages_count
     );
-    bob.inner()
-        .mark_conversation_as_read(bob_alice_conv.id)
+    bob.mark_conversation_as_read(bob_alice_entry.conversation.id)
         .expect("mark as read");
-    let bob_convos_after = bob.inner().list_conversations().expect("bob list after");
+    let bob_convos_after = bob.list_conversations().expect("bob list after");
     let bob_alice_after = bob_convos_after
         .iter()
-        .find(|c| c.peer_user_id == alice_id)
+        .find(|e| e.conversation.peers.first().map(|p| p.id) == Some(alice_id))
         .unwrap();
     assert_eq!(
-        bob_alice_after.unread_count, 0,
+        bob_alice_after.unread_messages_count, 0,
         "Unread count should be 0 after mark_as_read"
     );
     println!(
         "    OK - mark_conversation_as_read works (unread: {} -> 0)",
-        bob_alice_conv.unread_count
+        bob_alice_entry.unread_messages_count
     );
     println!();
 
@@ -579,19 +557,12 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     // Step 12: Test delete_conversation
     // ================================================================
     println!("[12] Testing delete_conversation...");
-    let convos_before = charlie
-        .inner()
-        .list_conversations()
-        .expect("list before delete");
+    let convos_before = charlie.list_conversations().expect("list before delete");
     let count_before = convos_before.len();
     charlie
-        .inner()
         .delete_conversation(conv_cd.id)
         .expect("delete_conversation");
-    let convos_after = charlie
-        .inner()
-        .list_conversations()
-        .expect("list after delete");
+    let convos_after = charlie.list_conversations().expect("list after delete");
     assert_eq!(
         convos_after.len(),
         count_before - 1,
@@ -618,15 +589,14 @@ fn run_tests(server_addr: &str, tls_config: &TlsConfig, temp_path: &PathBuf) {
     println!("  - send_reply (with reply_to_id): OK");
     println!("  - edit_message + peer receives MessageEdited: OK");
     println!("  - send_typing_indicator + peer receives TypingIndicator: OK");
-    println!("  - send_read_receipt + peer receives MessageStatusUpdate(Read): OK");
-    println!("  - send_delivery_receipt + peer receives MessageStatusUpdate(Delivered): OK");
+    println!("  - mark_as_read + peer receives MessageStatusUpdate(Read): OK");
     println!("  - delete_message + peer receives MessageDeleted: OK");
     println!("  - list_conversations, get_messages, get_messages_paginated, get_conversation: OK");
     println!("  - mark_conversation_as_read: OK");
     println!("  - delete_conversation: OK");
 }
 
-/// Wait for a NewMessage event (conversations are now created by process_incoming_message).
+/// Wait for a MessageReceived event.
 fn wait_for_message(
     rx: &mut mpsc::Receiver<SdkEvent>,
     timeout: Duration,
@@ -639,8 +609,11 @@ fn wait_for_message(
         }
 
         match rx.try_recv() {
-            Ok(SdkEvent::NewMessage(conv_id, msg)) => {
-                return Some((conv_id, msg));
+            Ok(SdkEvent::MessageReceived {
+                conversation_id,
+                msg,
+            }) => {
+                return Some((conversation_id, msg));
             }
             Ok(_other) => {
                 continue;

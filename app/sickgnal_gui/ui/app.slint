@@ -8,12 +8,15 @@ import {
 import { MainLayout } from "layout/Main.slint";
 import { Theme } from "theme.slint";
 import { LogLayout, Auth } from "layout/Log.slint";
+import { ErrorBanner } from "components/ErrorBanner.slint";
+import { Status } from "models/Status.slint";
 
 // Export models for Rust access
 export { Chat } from "models/Chat.slint";
 export { MessageData } from "models/Message.slint";
 export { Conversation } from "models/Conversation.slint";
 export { Auth } from "layout/Log.slint";
+export { Status } from "models/Status.slint";
 
 export component AppWindow inherits Window {
 
@@ -23,7 +26,14 @@ export component AppWindow inherits Window {
 
     background: Theme.background;
 
-    if (!Auth.is-logged-in): LogLayout { }
+    VerticalBox {
+        padding: 0;
+        spacing: 0;
 
-    if (Auth.is-logged-in): MainLayout { }
+        if (Status.has_error): ErrorBanner { }
+
+        if (!Auth.is-logged-in): LogLayout { }
+
+        if (Auth.is-logged-in): MainLayout { }
+    }
 }

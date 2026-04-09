@@ -14,7 +14,7 @@ impl Store<Message> for MessageStore {
     const TABLE: &str = "messages";
 
     const SCHEMA: &str = r#"
-        id TEXT PRIMARY KEY NOT NULL,
+        id TEXT NOT NULL,
         conversation_id TEXT NOT NULL,
         sender_id TEXT NOT NULL,
         content TEXT NOT NULL,

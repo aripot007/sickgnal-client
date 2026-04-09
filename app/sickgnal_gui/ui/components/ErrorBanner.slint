@@ -1,0 +1,47 @@
+import { HorizontalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Status } from "../models/Status.slint";
+
+export component ErrorBanner inherits Rectangle {
+    width: 100%;
+    height: 60px;
+    background: Status.is-fatal ? #cc3333 : #cc7700;
+    border-radius: 0;
+
+    HorizontalBox {
+        padding: 12px;
+        spacing: 12px;
+        alignment: space-between;
+
+        Text {
+            text: Status.error_message;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        Rectangle {
+            width: 80px;
+            height: 32px;
+            border-radius: 6px;
+            background: dismiss-touch.has-hover ? #ffffff40 : #ffffff20;
+
+            dismiss-touch := TouchArea {
+                clicked => {
+                    Status.dismiss_error();
+                }
+            }
+
+            Text {
+                text: Status.is-fatal ? "Quit" : "Close";
+                color: white;
+                font-size: 13px;
+                font-weight: 600;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
