@@ -175,14 +175,8 @@ pub fn draw(f: &mut Frame, app: &App) {
         };
         f.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled(
-                    format!("{frame} "),
-                    Style::default().fg(Color::Cyan),
-                ),
-                Span::styled(
-                    format!("{label}..."),
-                    Style::default().fg(Color::Yellow),
-                ),
+                Span::styled(format!("{frame} "), Style::default().fg(Color::Cyan)),
+                Span::styled(format!("{label}..."), Style::default().fg(Color::Yellow)),
             ]))
             .alignment(Alignment::Center),
             chunks[idx],

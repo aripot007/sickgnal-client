@@ -157,7 +157,8 @@ pub struct App {
     pub data_dir: PathBuf,
 
     // Async auth: background thread handle + spinner state
-    pub auth_handle: Option<thread::JoinHandle<Result<(SyncBridge, mpsc::Receiver<SdkEvent>), client::Error>>>,
+    pub auth_handle:
+        Option<thread::JoinHandle<Result<(SyncBridge, mpsc::Receiver<SdkEvent>), client::Error>>>,
     pub auth_spinner_tick: usize,
     pub auth_was_signup: bool,
 }
@@ -549,10 +550,7 @@ impl App {
             self.auth_spinner_tick = self.auth_spinner_tick.wrapping_add(1);
         }
 
-        let is_finished = self
-            .auth_handle
-            .as_ref()
-            .is_some_and(|h| h.is_finished());
+        let is_finished = self.auth_handle.as_ref().is_some_and(|h| h.is_finished());
 
         if !is_finished {
             return;
@@ -587,9 +585,7 @@ impl App {
 
                 // If sign-up failed, clean up the local account file so user can retry
                 if self.auth_was_signup {
-                    if let Ok(af) =
-                        sickgnal_sdk::account::AccountFile::new(self.data_dir.clone())
-                    {
+                    if let Ok(af) = sickgnal_sdk::account::AccountFile::new(self.data_dir.clone()) {
                         let _ = af.delete();
                     }
                 }

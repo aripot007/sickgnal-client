@@ -60,9 +60,7 @@ fn test_start_conversation() {
     let (bob, _) = create_test_user(&bob_name, TEST_PASSWORD, tmp.path());
 
     // Alice looks up Bob
-    let bob_profile = alice
-        .get_profile_by_username(bob_name)
-        .expect("lookup Bob");
+    let bob_profile = alice.get_profile_by_username(bob_name).expect("lookup Bob");
 
     assert_eq!(bob_profile.id, bob.user_id());
 
@@ -89,9 +87,7 @@ fn test_start_conversation_with_initial_message() {
     let (mut alice, _) = create_test_user(&alice_name, TEST_PASSWORD, tmp.path());
     let (_bob, mut bob_rx) = create_test_user(&bob_name, TEST_PASSWORD, tmp.path());
 
-    let bob_profile = alice
-        .get_profile_by_username(bob_name)
-        .expect("lookup Bob");
+    let bob_profile = alice.get_profile_by_username(bob_name).expect("lookup Bob");
 
     let _conv = alice
         .start_conversation(
@@ -123,9 +119,7 @@ fn test_send_and_receive_message() {
     let (mut alice, _) = create_test_user(&alice_name, TEST_PASSWORD, tmp.path());
     let (_bob, mut bob_rx) = create_test_user(&bob_name, TEST_PASSWORD, tmp.path());
 
-    let bob_profile = alice
-        .get_profile_by_username(bob_name)
-        .expect("lookup Bob");
+    let bob_profile = alice.get_profile_by_username(bob_name).expect("lookup Bob");
     let conv = alice
         .start_conversation(bob_profile.id, None)
         .expect("start conversation");
@@ -239,9 +233,7 @@ fn test_edit_message() {
     let (mut alice, _) = create_test_user(&alice_name, TEST_PASSWORD, tmp.path());
     let (_bob, _bob_rx) = create_test_user(&bob_name, TEST_PASSWORD, tmp.path());
 
-    let bob_profile = alice
-        .get_profile_by_username(bob_name)
-        .expect("lookup Bob");
+    let bob_profile = alice.get_profile_by_username(bob_name).expect("lookup Bob");
     let conv = alice
         .start_conversation(bob_profile.id, None)
         .expect("start conv");
@@ -267,9 +259,7 @@ fn test_delete_message() {
     let (mut alice, _) = create_test_user(&alice_name, TEST_PASSWORD, tmp.path());
     let (_bob, _bob_rx) = create_test_user(&bob_name, TEST_PASSWORD, tmp.path());
 
-    let bob_profile = alice
-        .get_profile_by_username(bob_name)
-        .expect("lookup Bob");
+    let bob_profile = alice.get_profile_by_username(bob_name).expect("lookup Bob");
     let conv = alice
         .start_conversation(bob_profile.id, None)
         .expect("start conv");
@@ -296,9 +286,7 @@ fn test_typing_indicator() {
     let (mut alice, _) = create_test_user(&alice_name, TEST_PASSWORD, tmp.path());
     let (_bob, mut bob_rx) = create_test_user(&bob_name, TEST_PASSWORD, tmp.path());
 
-    let bob_profile = alice
-        .get_profile_by_username(bob_name)
-        .expect("lookup Bob");
+    let bob_profile = alice.get_profile_by_username(bob_name).expect("lookup Bob");
     let conv = alice
         .start_conversation(bob_profile.id, None)
         .expect("start conv");
@@ -343,9 +331,7 @@ fn test_list_conversations() {
     let count_before = convos.len();
 
     // Start one
-    let bob_profile = alice
-        .get_profile_by_username(bob_name)
-        .expect("lookup Bob");
+    let bob_profile = alice.get_profile_by_username(bob_name).expect("lookup Bob");
     alice
         .start_conversation(bob_profile.id, None)
         .expect("start conv");
@@ -365,9 +351,7 @@ fn test_get_messages_paginated() {
     let (mut alice, _) = create_test_user(&alice_name, TEST_PASSWORD, tmp.path());
     let (_bob, _) = create_test_user(&bob_name, TEST_PASSWORD, tmp.path());
 
-    let bob_profile = alice
-        .get_profile_by_username(bob_name)
-        .expect("lookup Bob");
+    let bob_profile = alice.get_profile_by_username(bob_name).expect("lookup Bob");
     let conv = alice
         .start_conversation(bob_profile.id, None)
         .expect("start conv");
@@ -448,9 +432,7 @@ fn test_delete_conversation() {
     let (mut alice, _) = create_test_user(&alice_name, TEST_PASSWORD, tmp.path());
     let (_bob, _) = create_test_user(&bob_name, TEST_PASSWORD, tmp.path());
 
-    let bob_profile = alice
-        .get_profile_by_username(bob_name)
-        .expect("lookup Bob");
+    let bob_profile = alice.get_profile_by_username(bob_name).expect("lookup Bob");
     let conv = alice
         .start_conversation(bob_profile.id, None)
         .expect("start conv");
