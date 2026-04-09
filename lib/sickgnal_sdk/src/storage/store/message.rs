@@ -44,7 +44,7 @@ impl Store<Message> for MessageStore {
     type Id = Uuid;
 }
 
-fn parse_status(s: String) -> Result<MessageStatus> {
+pub(super) fn parse_status(s: String) -> Result<MessageStatus> {
     Ok(match s.as_str() {
         "sending" => MessageStatus::Sending,
         "sent" => MessageStatus::Sent,
@@ -55,7 +55,7 @@ fn parse_status(s: String) -> Result<MessageStatus> {
     })
 }
 
-fn encode_status(status: &MessageStatus) -> ToSqlOutput<'static> {
+pub(super) fn encode_status(status: &MessageStatus) -> ToSqlOutput<'static> {
     let s = match status {
         MessageStatus::Sending => "sending",
         MessageStatus::Sent => "sent",

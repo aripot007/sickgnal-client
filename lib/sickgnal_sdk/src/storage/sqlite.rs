@@ -1,4 +1,5 @@
 use super::{Error, Result};
+use crate::dto::ConversationEntry;
 use crate::storage::Config;
 use crate::storage::INITIALIZATION_SQL;
 use crate::storage::store::account::AccountStore;
@@ -80,38 +81,18 @@ impl Sqlite {
         self.conn.execute_batch(INITIALIZATION_SQL)?;
         Ok(())
     }
+
+    pub(crate) fn list_conversations(&self) -> Result<Vec<ConversationEntry>> {
+        ConversationStore::list_conversations(&self.conn)
+    }
+
+    pub(crate) fn delete_conversation(&self, id: &Uuid) -> Result<()> {
+        ConversationStore::delete_by_id(&self.conn, id)
+    }
 }
 
 #[cfg(false)]
 impl StorageBackend for Sqlite {
-    // ========== Conversation Operations ==========
-
-    fn list_conversations(&self) -> Result<Vec<Conversation>> {
-        let conn = self.conn.lock().unwrap();
-
-        let mut stmt = conn
-            .prepare("SELECT id, peer_user_id, peer_name, last_message_at, unread_count, opened FROM conversations ORDER BY last_message_at DESC")
-            .map_err(|e| Error::Database(e.to_string()))?;
-
-        let rows = stmt
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, Option<String>>(3)?,
-                    row.get::<_, i32>(4)?,
-                    row.get::<_, i32>(5)?,
-                ))
-            })
-            .map_err(|e| Error::Database(e.to_string()))?;
-
-        rows.map(|row| {
-            let row = row.map_err(|e| Error::Database(e.to_string()))?;
-            Self::row_to_conversation(row)
-        })
-        .collect()
-    }
     // ========== Message Operations ==========
 
     fn list_messages(

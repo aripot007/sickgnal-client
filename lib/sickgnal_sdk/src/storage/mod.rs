@@ -2,7 +2,7 @@ mod config;
 mod error;
 mod schema;
 mod sqlite;
-mod store;
+pub mod store;
 
 pub use config::*;
 pub use error::*;

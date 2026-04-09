@@ -5011,6 +5011,7 @@ dependencies = [
  "rusqlite",
  "rustls-native-certs",
  "serde",
+ "serde_json",
  "sickgnal_core",
  "sickgnal_insecure_tls",
  "tempfile",

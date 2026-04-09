@@ -23,6 +23,9 @@ pub enum Error {
     #[error("no account")]
     NoAccount,
 
+    #[error("error decoding json : {0}")]
+    JsonError(#[from] serde_json::Error),
+
     #[error("uuid error : {0}")]
     UuidError(#[from] uuid::Error),
 

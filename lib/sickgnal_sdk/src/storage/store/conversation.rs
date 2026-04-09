@@ -1,3 +1,4 @@
+use chrono::DateTime;
 use rusqlite::{OptionalExtension, params};
 use sickgnal_core::{
     chat::{
@@ -6,11 +7,16 @@ use sickgnal_core::{
     },
     e2e::peer::Peer,
 };
+use tokio::runtime::Id;
 use uuid::Uuid;
 
 use crate::{
     dto::ConversationEntry,
-    storage::{Error, error::Result, store::Store},
+    storage::{
+        Error,
+        error::Result,
+        store::{Store, message::parse_status},
+    },
 };
 
 pub struct ConversationStore;
@@ -177,29 +183,62 @@ impl ConversationStore {
         Ok(Some(Conversation::from_info(info, peers)))
     }
 
-    pub fn list_conversations(
-        conn: &rusqlite::Connection,
-        conv_id: &Uuid,
-    ) -> Result<Vec<ConversationEntry>> {
-        ConversationEntry {
-            conversation: Conversation {
-                id: todo!(),
-                title: todo!(),
-                peers: todo!(),
-            },
-            unread_messages_count: 0,
-            last_message: Some(Message {
-                id: todo!(),
-                conversation_id: todo!(),
-                sender_id: todo!(),
-                content: todo!(),
-                issued_at: todo!(),
-                status: todo!(),
-                reply_to_id: todo!(),
-            }),
-        };
+    pub fn list_conversations(conn: &rusqlite::Connection) -> Result<Vec<ConversationEntry>> {
+        let mut stmt = conn.prepare_cached(LIST_CONVERSATIONS_STMT)?;
 
-        todo!()
+        let mut rows = stmt.query([])?;
+        let mut conversations = Vec::new();
+
+        while let Some(r) = rows.next()? {
+            let info = ConversationInfo {
+                id: Uuid::try_from(r.get::<_, String>(0)?)?,
+                custom_title: r.get(1)?,
+            };
+
+            let peers: Vec<Peer> = serde_json::from_str(&r.get::<_, String>(2)?)?;
+
+            let conversation = Conversation::from_info(info, peers);
+
+            let unread_messages_count: i64 = r.get(3)?;
+
+            let last_message = if let Some(id) = r.get::<_, Option<String>>(4)? {
+                let id = Uuid::try_from(id)?;
+                let sender_id = Uuid::try_from(r.get::<_, String>(5)?)?;
+
+                let issued_at = DateTime::parse_from_rfc3339(&r.get::<_, String>(7)?)
+                    .map_err(Error::from)?
+                    .to_utc();
+
+                let reply_to_id = match r.get::<_, Option<String>>(8)? {
+                    Some(s) => Some(Uuid::try_from(s)?),
+                    None => None,
+                };
+
+                let msg = Message {
+                    id,
+                    conversation_id: conversation.id,
+                    sender_id,
+                    content: r.get(6)?,
+                    issued_at,
+                    status: parse_status(r.get(8)?)?,
+                    reply_to_id,
+                };
+
+                Some(msg)
+            } else {
+                None
+            };
+
+            let entry = ConversationEntry {
+                conversation,
+                unread_messages_count: unread_messages_count as usize,
+                last_message,
+            };
+
+            conversations.push(entry);
+        }
+
+        Ok(conversations)
     }
 
     pub fn delete_by_id(conn: &rusqlite::Connection, id: &Uuid) -> Result<()> {
@@ -261,5 +300,5 @@ LEFT JOIN PeerList pl ON c.id = pl.conversation_id
 LEFT JOIN UnreadCounts uc ON c.id = uc.conversation_id
 LEFT JOIN LatestMessages lm ON c.id = lm.conversation_id
 ORDER BY lm.timestamp DESC
-LIMIT :limit OFFSET :offset; 
+LIMIT ?1 OFFSET ?2; 
 "#;

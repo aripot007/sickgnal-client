@@ -1,6 +1,7 @@
+use serde::Deserialize;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Peer {
     pub id: Uuid,
     pub username: Option<String>,

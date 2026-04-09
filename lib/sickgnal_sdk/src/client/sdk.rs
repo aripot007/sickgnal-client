@@ -18,6 +18,7 @@ use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use sickgnal_core::chat::dto::Conversation;
+use sickgnal_core::e2e::keys::E2EStorageBackend;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -29,6 +30,7 @@ use sickgnal_core::e2e::message::UserProfile;
 use crate::client::Error;
 use crate::dto::ConversationEntry;
 use crate::storage::Sqlite;
+use crate::storage::store::conversation::ConversationStore;
 use crate::tls::TlsConfig;
 
 use super::{Result, SdkClient};
@@ -86,9 +88,11 @@ impl Sdk {
 
     /// List all conversations, ordered by last message time.
     pub fn list_conversations(&self) -> Result<Vec<ConversationEntry>> {
-        let a: usize;
-        todo!()
-        // Ok(self.storage.lock().unwrap().list_conversations()?)
+        self.storage
+            .lock()
+            .unwrap()
+            .list_conversations()
+            .map_err(Error::from)
     }
 
     /// Start a new conversation with a peer by uuid.
@@ -111,14 +115,18 @@ impl Sdk {
 
     /// Delete a conversation and all its messages.
     pub fn delete_conversation(&mut self, conversation_id: Uuid) -> Result<()> {
-        // self.storage.lock().delete_conversation(conversation_id)?;
-        todo!()
+        self.storage
+            .lock()
+            .unwrap()
+            .delete_conversation(&conversation_id)
+            .map_err(Error::from)
     }
 
     /// Get a single conversation by ID.
     pub fn get_conversation(&self, conversation_id: Uuid) -> Result<Option<Conversation>> {
-        todo!()
-        // Ok(self.storage.get_conversation(conversation_id)?)
+        self.storage
+            .get_conversation(&conversation_id)
+            .map_err(Error::from)
     }
 
     /// Mark all messages in a conversation as read
@@ -196,18 +204,8 @@ impl Sdk {
     }
 
     /// Delete a message (sends a delete control message to the peer).
-    pub async fn delete_message(&self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
-        // let peer_user_id = self.peer_for_conversation(conversation_id)?;
-
-        // let chat_message = ChatMessage::new_delete(conversation_id, message_id);
-        // self.send_raw(peer_user_id, chat_message).await?;
-
-        // {
-        //     let mut storage = self.storage.lock().unwrap();
-        //     storage.delete_message(message_id)?;
-        // }
-        todo!();
-        Ok(())
+    pub async fn delete_message(&mut self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
+        todo!()
     }
 
     /// Mark a message as read
@@ -237,10 +235,11 @@ impl Sdk {
     // ─── Verification ─────────────────────────────────────────────────
 
     /// Get the verification fingerprint for a peer's identity key.
-    pub fn get_peer_fingerprint(&self, peer_user_id: Uuid) -> String {
-        // TODO: Replace with real identity key fingerprint from the E2E client
-        // e.g. e2e_client.get_peer_identity_fingerprint(peer_user_id)
-        hex::encode(peer_user_id.as_bytes())
+    pub fn get_peer_fingerprint(&self, peer_user_id: Uuid) -> Result<Option<String>> {
+        if let Some(peer) = self.storage.peer(&peer_user_id)? {
+            return Ok(Some(peer.format_fingerprint()));
+        }
+        Ok(None)
     }
 
     // ─── Profile ────────────────────────────────────────────────────────
