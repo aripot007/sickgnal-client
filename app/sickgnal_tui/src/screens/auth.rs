@@ -11,17 +11,22 @@ use crate::app::{App, AuthField, AuthMode, SPINNER_FRAMES};
 pub fn draw(f: &mut Frame, app: &App) {
     let area = f.area();
 
+    let tls_warning = app.tls_warning();
+    let form_height = if tls_warning.is_some() { 16 } else { 14 };
+
     // Center the auth form
     let vert = Layout::vertical([
         Constraint::Min(1),
-        Constraint::Length(14),
+        Constraint::Length(form_height),
         Constraint::Min(1),
     ])
     .split(area);
 
+    let form_width = if tls_warning.is_some() { 76 } else { 50 };
+
     let horiz = Layout::horizontal([
         Constraint::Min(1),
-        Constraint::Length(50),
+        Constraint::Length(form_width),
         Constraint::Min(1),
     ])
     .split(vert[1]);
@@ -43,7 +48,15 @@ pub fn draw(f: &mut Frame, app: &App) {
     let inner = block.inner(form_area);
     f.render_widget(block, form_area);
 
-    let constraints = vec![
+    let mut constraints = Vec::new();
+
+    // TLS warning rows (if applicable)
+    if tls_warning.is_some() {
+        constraints.push(Constraint::Length(1)); // warning text
+        constraints.push(Constraint::Length(1)); // spacing
+    }
+
+    constraints.extend([
         Constraint::Length(1), // Username label
         Constraint::Length(1), // Username input
         Constraint::Length(1), // spacing
@@ -55,11 +68,26 @@ pub fn draw(f: &mut Frame, app: &App) {
         Constraint::Length(1), // spacing
         Constraint::Length(1), // error or status
         Constraint::Min(0),    // filler
-    ];
+    ]);
 
     let chunks = Layout::vertical(constraints).split(inner);
 
     let mut idx = 0;
+
+    // TLS warning
+    if let Some(warning) = tls_warning {
+        f.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                warning,
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )))
+            .alignment(Alignment::Center),
+            chunks[idx],
+        );
+        idx += 2; // warning + spacing
+    }
 
     // Username
     let label_style = if app.auth_field == AuthField::Username {

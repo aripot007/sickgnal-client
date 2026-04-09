@@ -14,15 +14,19 @@ const CARD_HEIGHT: u16 = 7;
 pub fn draw(f: &mut Frame, app: &App) {
     let area = f.area();
 
-    // Vertical layout: title, cards, password/help
+    let tls_warning = app.tls_warning();
+    let warning_rows: u16 = if tls_warning.is_some() { 2 } else { 0 }; // warning + spacer
+
+    // Vertical layout: title, [warning], cards, password/help
     let chunks = Layout::vertical([
-        Constraint::Min(3),              // Top spacer
-        Constraint::Length(3),           // Title
-        Constraint::Length(1),           // Spacer
-        Constraint::Length(CARD_HEIGHT), // Cards row
-        Constraint::Length(2),           // Spacer
-        Constraint::Length(3),           // Password / help area
-        Constraint::Min(1),              // Bottom spacer
+        Constraint::Min(3),               // Top spacer
+        Constraint::Length(3),            // Title
+        Constraint::Length(warning_rows), // TLS warning (0 when absent)
+        Constraint::Length(1),            // Spacer
+        Constraint::Length(CARD_HEIGHT),  // Cards row
+        Constraint::Length(2),            // Spacer
+        Constraint::Length(3),            // Password / help area
+        Constraint::Min(1),               // Bottom spacer
     ])
     .split(area);
 
@@ -36,10 +40,24 @@ pub fn draw(f: &mut Frame, app: &App) {
     .alignment(Alignment::Center);
     f.render_widget(title, chunks[1]);
 
+    // TLS warning (below title)
+    if let Some(warning) = tls_warning {
+        f.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                warning,
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )))
+            .alignment(Alignment::Center),
+            chunks[2],
+        );
+    }
+
     // Calculate card positions (centered horizontally)
     let total_cards = app.profiles.len() + 1; // profiles + "+" card
     let total_width = total_cards as u16 * (CARD_WIDTH + 2); // cards + gaps
-    let cards_area = chunks[3];
+    let cards_area = chunks[4];
 
     // Center the cards row
     let horiz = Layout::horizontal([
@@ -157,7 +175,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     }
 
     // Bottom area: password input, loading spinner, or help text
-    let bottom_area = chunks[5];
+    let bottom_area = chunks[6];
 
     if app.auth_loading {
         // Show spinner while connecting after password entry

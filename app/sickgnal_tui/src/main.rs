@@ -7,14 +7,26 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use app::App;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{Terminal, prelude::CrosstermBackend};
+use sickgnal_sdk::TlsConfig;
 use tracing_subscriber::EnvFilter;
+
+/// TLS implementation to use for the server connection.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum TlsMode {
+    /// Production TLS via rustls (recommended)
+    Rustls,
+    /// Custom (experimental) TLS implementation
+    Insecure,
+    /// No TLS — plain TCP (development only)
+    None,
+}
 
 #[derive(Parser)]
 #[command(name = "sickgnal-tui", about = "Sickgnal TUI client")]
@@ -26,10 +38,33 @@ struct Args {
     /// Enable tracing and log to the specified file
     #[arg(long)]
     log: Option<PathBuf>,
+
+    /// Server address (host:port)
+    #[arg(long, default_value = "127.0.0.1:8080")]
+    server: String,
+
+    /// TLS implementation to use
+    #[arg(long, value_enum, default_value_t = TlsMode::Rustls)]
+    tls: TlsMode,
+
+    /// Path to a PEM-encoded CA certificate to trust (for self-signed servers)
+    #[arg(long)]
+    tls_ca: Option<PathBuf>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+
+    // Build TlsConfig from CLI args
+    let tls_config = match args.tls {
+        TlsMode::Rustls => TlsConfig::Rustls {
+            custom_ca: args.tls_ca,
+        },
+        TlsMode::Insecure => TlsConfig::Insecure {
+            custom_ca: args.tls_ca,
+        },
+        TlsMode::None => TlsConfig::None,
+    };
 
     // Setup tracing if --log is provided
     let _guard = if let Some(log_path) = &args.log {
@@ -58,7 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut terminal = Terminal::new(backend)?;
 
     // Run app
-    let result = run_app(&mut terminal, args.data_dir);
+    let result = run_app(&mut terminal, args.data_dir, args.server, tls_config);
 
     // Restore terminal
     disable_raw_mode()?;
@@ -79,8 +114,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     data_dir: PathBuf,
+    server_addr: String,
+    tls_config: TlsConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut app = App::new(data_dir);
+    let mut app = App::new(data_dir, server_addr, tls_config);
 
     loop {
         terminal.draw(|f| ui::draw(f, &mut app))?;
