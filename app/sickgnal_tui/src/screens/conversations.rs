@@ -100,7 +100,47 @@ pub fn draw(f: &mut Frame, app: &App) {
     }
 
     // Status bar / help
-    let help_text = if app.new_conversation_mode {
+    let added_display = if app.group_conversation_mode {
+        let added = app
+            .group_conversation_usernames
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        if added.is_empty() {
+            String::new()
+        } else {
+            format!("[{}] ", added)
+        }
+    } else {
+        String::new()
+    };
+
+    let help_text = if app.group_conversation_mode {
+        Line::from(vec![
+            Span::styled(
+                "Group: ",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(added_display, Style::default().fg(Color::Yellow)),
+            Span::styled(
+                &app.group_conversation_input,
+                Style::default().fg(Color::Cyan),
+            ),
+            Span::styled(
+                "_",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::SLOW_BLINK),
+            ),
+            Span::styled(
+                "  | Enter: add user | F5: create | Esc: cancel",
+                Style::default().fg(Color::DarkGray),
+            ),
+        ])
+    } else if app.new_conversation_mode {
         Line::from(vec![
             Span::styled(
                 "New conversation with: ",
@@ -123,7 +163,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         ])
     } else {
         Line::from(vec![Span::styled(
-            " n: new | Enter: open | d: delete | q: quit",
+            " n: new | g: group | Enter: open | d: delete | q: quit",
             Style::default().fg(Color::DarkGray),
         )])
     };

@@ -895,10 +895,75 @@ fn setup_chat_callbacks(
         });
     }
 
-    // add_member — placeholder
+    // add_member — open the add member dialog
     {
+        let ui_weak = ui_weak.clone();
         ui.global::<Chat>().on_add_member(move || {
-            info!("Add member: not implemented yet");
+            let Some(ui) = ui_weak.upgrade() else { return };
+            ui.global::<Chat>().set_show_add_member_dialog(true);
+            ui.global::<Chat>().set_add_member_error("".into());
+        });
+    }
+
+    // confirm_add_member — resolve username and add to conversation
+    {
+        let sdk = sdk.clone();
+        let conv_ids = conv_ids.clone();
+        let ui_weak = ui_weak.clone();
+        let rt = rt.clone();
+        ui.global::<Chat>().on_confirm_add_member(move |username| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let active = ui.global::<Chat>().get_active_chat_id();
+            let conv_uuid = {
+                let ids = conv_ids.lock().unwrap();
+                match ids.get(active as usize) {
+                    Some(&id) => id,
+                    None => return,
+                }
+            };
+
+            let mut sdk = sdk.clone();
+            let ui_weak = ui_weak.clone();
+            let username = username.to_string();
+            rt.spawn(async move {
+                // Resolve username
+                let profile = match sdk.get_profile_by_username(username).await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui.global::<Chat>()
+                                .set_add_member_error(format!("User not found: {e}").into());
+                        });
+                        return;
+                    }
+                };
+
+                // Add to conversation
+                match sdk.add_peer_to_conversation(conv_uuid, profile.id).await {
+                    Ok(()) => {
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui.global::<Chat>().set_show_add_member_dialog(false);
+                            ui.global::<Chat>().set_add_member_error("".into());
+                        });
+                    }
+                    Err(e) => {
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui.global::<Chat>()
+                                .set_add_member_error(format!("Error: {e}").into());
+                        });
+                    }
+                }
+            });
+        });
+    }
+
+    // cancel_add_member
+    {
+        let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_cancel_add_member(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            ui.global::<Chat>().set_show_add_member_dialog(false);
+            ui.global::<Chat>().set_add_member_error("".into());
         });
     }
 
@@ -1083,6 +1148,44 @@ fn handle_sdk_event(
         }
         ChatEvent::ConnectionStateChanged(state) => {
             info!("Connection state: {:?}", state);
+        }
+        ChatEvent::PeerAddedToConversation {
+            conversation_id,
+            peer_id: _,
+        } => {
+            // Refresh conversation data to get updated peers list
+            if let Ok(Some(conv)) = sdk.get_conversation(conversation_id) {
+                let chats = ui.global::<Chat>().get_chats();
+                let conv_id_str: slint::SharedString = conversation_id.to_string().into();
+                for i in 0..chats.row_count() {
+                    if let Some(mut slint_conv) = chats.row_data(i) {
+                        if slint_conv.id == conv_id_str {
+                            slint_conv.name = conv.title.into();
+                            chats.set_row_data(i, slint_conv);
+                            break;
+                        }
+                    }
+                }
+
+                // Also update the current_peers if conversation settings is open
+                let active = ui.global::<Chat>().get_active_chat_id();
+                let ids = conv_ids.lock().unwrap();
+                if let Some(&active_uuid) = ids.get(active as usize) {
+                    if active_uuid == conversation_id {
+                        let peers_data: Vec<PeerData> = conv
+                            .peers
+                            .iter()
+                            .map(|p| PeerData {
+                                id: p.id.to_string()[..8].to_string().into(),
+                                name: p.name().into(),
+                                fingerprint: p.format_fingerprint().into(),
+                            })
+                            .collect();
+                        ui.global::<Chat>()
+                            .set_current_peers(ModelRc::new(VecModel::from(peers_data)));
+                    }
+                }
+            }
         }
     }
 }

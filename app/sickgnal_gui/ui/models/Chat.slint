@@ -53,4 +53,10 @@ export global Chat {
     in-out property <string> reply_to_preview: "";
     callback start_reply(/* msg_id */ string, /* preview_text */ string);
     callback cancel_reply();
+
+    // Add member dialog state
+    in-out property <bool> show_add_member_dialog: false;
+    in-out property <string> add_member_error: "";
+    callback confirm_add_member(/* username */ string);
+    callback cancel_add_member();
 }

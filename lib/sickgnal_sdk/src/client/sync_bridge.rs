@@ -71,6 +71,20 @@ impl SyncBridge {
             .block_on(self.sdk.start_conversation(user_id, initial_message))
     }
 
+    pub fn start_group_conversation(
+        &mut self,
+        peers: Vec<Uuid>,
+        initial_message: Option<Content>,
+    ) -> Result<Conversation> {
+        self.rt
+            .block_on(self.sdk.start_group_conversation(peers, initial_message))
+    }
+
+    pub fn add_peer_to_conversation(&mut self, conversation_id: Uuid, peer_id: Uuid) -> Result<()> {
+        self.rt
+            .block_on(self.sdk.add_peer_to_conversation(conversation_id, peer_id))
+    }
+
     pub fn delete_conversation(&mut self, conversation_id: Uuid) -> Result<()> {
         self.sdk.delete_conversation(conversation_id)
     }

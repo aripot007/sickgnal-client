@@ -11,10 +11,12 @@ use crate::app::App;
 pub fn draw(f: &mut Frame, app: &App) {
     let area = f.area();
 
+    let bottom_height = if app.info_add_member_mode { 3 } else { 5 };
+
     let chunks = Layout::vertical([
-        Constraint::Length(5), // Title area
-        Constraint::Min(1),    // Peer list
-        Constraint::Length(5), // Fingerprint area
+        Constraint::Length(5),             // Title area
+        Constraint::Min(1),                // Peer list
+        Constraint::Length(bottom_height), // Bottom area
     ])
     .split(area);
 
@@ -95,38 +97,68 @@ pub fn draw(f: &mut Frame, app: &App) {
     );
     f.render_widget(peer_list, chunks[1]);
 
-    // ── Fingerprint area ──
-    let fingerprint_content = if app.info_show_fingerprint {
-        if let Some(peer) = peers.get(app.info_selected_peer) {
-            let fp = peer.format_fingerprint();
-
-            vec![
-                Line::from(vec![Span::styled(
-                    format!("  Fingerprint for {}: ", peer.name()),
-                    Style::default().fg(Color::DarkGray),
-                )]),
-                Line::from(vec![Span::styled(
-                    format!("  {}", fp),
-                    Style::default().fg(Color::Yellow),
-                )]),
-            ]
-        } else {
-            vec![Line::from("")]
-        }
+    // ── Bottom area ──
+    if app.info_add_member_mode {
+        // Add member input
+        let masked = &app.info_add_member_input;
+        let input = Paragraph::new(Line::from(vec![
+            Span::styled(
+                "  Add member: ",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(masked, Style::default().fg(Color::White)),
+            Span::styled(
+                "_",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::SLOW_BLINK),
+            ),
+        ]))
+        .block(
+            Block::default()
+                .borders(Borders::TOP)
+                .border_style(Style::default().fg(Color::DarkGray))
+                .title(" Enter: add | Esc: cancel ")
+                .title_alignment(Alignment::Right)
+                .title_style(Style::default().fg(Color::DarkGray)),
+        );
+        f.render_widget(input, chunks[2]);
     } else {
-        vec![Line::from(vec![Span::styled(
-            "  Press Enter to show fingerprint for selected peer",
-            Style::default().fg(Color::DarkGray),
-        )])]
-    };
+        // Fingerprint / help area
+        let fingerprint_content = if app.info_show_fingerprint {
+            if let Some(peer) = peers.get(app.info_selected_peer) {
+                let fp = peer.format_fingerprint();
 
-    let fp_widget = Paragraph::new(fingerprint_content).block(
-        Block::default()
-            .title(" Esc: back | ↑↓: navigate | Enter: fingerprint ")
-            .title_alignment(Alignment::Right)
-            .title_style(Style::default().fg(Color::DarkGray))
-            .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-    f.render_widget(fp_widget, chunks[2]);
+                vec![
+                    Line::from(vec![Span::styled(
+                        format!("  Fingerprint for {}: ", peer.name()),
+                        Style::default().fg(Color::DarkGray),
+                    )]),
+                    Line::from(vec![Span::styled(
+                        format!("  {}", fp),
+                        Style::default().fg(Color::Yellow),
+                    )]),
+                ]
+            } else {
+                vec![Line::from("")]
+            }
+        } else {
+            vec![Line::from(vec![Span::styled(
+                "  Press Enter to show fingerprint for selected peer",
+                Style::default().fg(Color::DarkGray),
+            )])]
+        };
+
+        let fp_widget = Paragraph::new(fingerprint_content).block(
+            Block::default()
+                .title(" Esc: back | ↑↓: nav | Enter: fingerprint | a: add member ")
+                .title_alignment(Alignment::Right)
+                .title_style(Style::default().fg(Color::DarkGray))
+                .borders(Borders::TOP)
+                .border_style(Style::default().fg(Color::DarkGray)),
+        );
+        f.render_widget(fp_widget, chunks[2]);
+    }
 }

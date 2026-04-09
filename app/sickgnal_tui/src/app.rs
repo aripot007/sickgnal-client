@@ -123,10 +123,17 @@ pub struct App {
     pub new_conversation_mode: bool,
     pub new_conversation_username: String,
 
+    // Group conversation creation
+    pub group_conversation_mode: bool,
+    pub group_conversation_input: String,
+    pub group_conversation_usernames: Vec<String>,
+    pub group_conversation_peer_ids: Vec<Uuid>,
+
     // Chat state
     pub current_conversation: Option<Uuid>,
     pub messages: Vec<Message>,
     pub message_input: String,
+    pub input_cursor: usize, // byte offset into message_input
     pub scroll_offset: u16,
     pub my_user_id: Option<Uuid>,
 
@@ -142,6 +149,8 @@ pub struct App {
     // Conversation info state
     pub info_selected_peer: usize,
     pub info_show_fingerprint: bool,
+    pub info_add_member_mode: bool,
+    pub info_add_member_input: String,
 
     // Typing indicators
     pub last_typing_sent: Option<Instant>,
@@ -204,9 +213,15 @@ impl App {
             new_conversation_mode: false,
             new_conversation_username: String::new(),
 
+            group_conversation_mode: false,
+            group_conversation_input: String::new(),
+            group_conversation_usernames: Vec::new(),
+            group_conversation_peer_ids: Vec::new(),
+
             current_conversation: None,
             messages: Vec::new(),
             message_input: String::new(),
+            input_cursor: 0,
             scroll_offset: 0,
             my_user_id: None,
 
@@ -219,6 +234,8 @@ impl App {
 
             info_selected_peer: 0,
             info_show_fingerprint: false,
+            info_add_member_mode: false,
+            info_add_member_input: String::new(),
 
             last_typing_sent: None,
             typing_indicators: HashMap::new(),
@@ -236,6 +253,62 @@ impl App {
             auth_spinner_tick: 0,
             auth_was_signup: false,
         }
+    }
+
+    // ─── Cursor helpers ─────────────────────────────────────────────────
+
+    /// Insert a character at the current cursor position in `message_input`.
+    fn input_insert(&mut self, c: char) {
+        self.message_input.insert(self.input_cursor, c);
+        self.input_cursor += c.len_utf8();
+    }
+
+    /// Delete the character before the cursor in `message_input`.
+    fn input_backspace(&mut self) {
+        if self.input_cursor > 0 {
+            // Find the previous char boundary
+            let prev = self.message_input[..self.input_cursor]
+                .char_indices()
+                .next_back()
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            self.message_input.remove(prev);
+            self.input_cursor = prev;
+        }
+    }
+
+    /// Move cursor left by one character.
+    fn input_cursor_left(&mut self) {
+        if self.input_cursor > 0 {
+            self.input_cursor = self.message_input[..self.input_cursor]
+                .char_indices()
+                .next_back()
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+        }
+    }
+
+    /// Move cursor right by one character.
+    fn input_cursor_right(&mut self) {
+        if self.input_cursor < self.message_input.len() {
+            self.input_cursor = self.message_input[self.input_cursor..]
+                .char_indices()
+                .nth(1)
+                .map(|(i, _)| self.input_cursor + i)
+                .unwrap_or(self.message_input.len());
+        }
+    }
+
+    /// Clear message_input and reset cursor.
+    fn input_clear(&mut self) {
+        self.message_input.clear();
+        self.input_cursor = 0;
+    }
+
+    /// Set message_input to a string and place cursor at end.
+    fn input_set(&mut self, s: String) {
+        self.input_cursor = s.len();
+        self.message_input = s;
     }
 
     /// Show a toast notification.
@@ -633,12 +706,22 @@ impl App {
             self.handle_new_conversation_key(key);
             return;
         }
+        if self.group_conversation_mode {
+            self.handle_group_conversation_key(key);
+            return;
+        }
 
         match key.code {
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char('n') => {
                 self.new_conversation_mode = true;
                 self.new_conversation_username.clear();
+            }
+            KeyCode::Char('g') => {
+                self.group_conversation_mode = true;
+                self.group_conversation_input.clear();
+                self.group_conversation_usernames.clear();
+                self.group_conversation_peer_ids.clear();
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 if self.selected_conversation > 0 {
@@ -686,7 +769,7 @@ impl App {
                         }
                     }
 
-                    self.message_input.clear();
+                    self.input_clear();
                     self.scroll_offset = 0;
                     self.selected_message = None;
                     self.screen = Screen::Chat;
@@ -761,13 +844,92 @@ impl App {
                             // Open the conversation directly
                             self.current_conversation = Some(conv_id);
                             self.messages.clear();
-                            self.message_input.clear();
+                            self.input_clear();
                             self.scroll_offset = 0;
                             self.screen = Screen::Chat;
                         }
                         Err(e) => {
                             error!("Failed to start conversation: {e}");
                             self.show_error_toast(friendly_error("Starting conversation", &e));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_group_conversation_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.group_conversation_mode = false;
+                self.group_conversation_input.clear();
+                self.group_conversation_usernames.clear();
+                self.group_conversation_peer_ids.clear();
+            }
+            KeyCode::Char(c) => {
+                self.group_conversation_input.push(c);
+            }
+            KeyCode::Backspace => {
+                self.group_conversation_input.pop();
+            }
+            KeyCode::Enter => {
+                if !self.group_conversation_input.is_empty() {
+                    // Resolve username and add to the group
+                    if let Some(ref mut sdk) = self.sdk {
+                        let username = self.group_conversation_input.clone();
+                        match sdk.get_profile_by_username(username.clone()) {
+                            Ok(profile) => {
+                                if self.group_conversation_peer_ids.contains(&profile.id) {
+                                    self.show_error_toast("User already added");
+                                } else {
+                                    self.group_conversation_peer_ids.push(profile.id);
+                                    self.group_conversation_usernames.push(username);
+                                    self.group_conversation_input.clear();
+                                }
+                            }
+                            Err(e) => {
+                                self.show_error_toast(friendly_error("Finding user", &e));
+                            }
+                        }
+                    }
+                }
+            }
+            KeyCode::F(5) => {
+                // Finalize group creation
+                if self.group_conversation_peer_ids.len() < 2 {
+                    self.show_error_toast("Add at least 2 members for a group");
+                    return;
+                }
+
+                if let Some(ref mut sdk) = self.sdk {
+                    let peers = self.group_conversation_peer_ids.clone();
+                    match sdk.start_group_conversation(peers, None) {
+                        Ok(conv) => {
+                            let conv_id = conv.id;
+                            let entry = ConversationEntry {
+                                conversation: conv,
+                                unread_messages_count: 0,
+                                last_message: None,
+                            };
+                            self.conversations.push(entry);
+                            self.selected_conversation = self.conversations.len() - 1;
+
+                            self.group_conversation_mode = false;
+                            self.group_conversation_input.clear();
+                            self.group_conversation_usernames.clear();
+                            self.group_conversation_peer_ids.clear();
+
+                            // Open the conversation directly
+                            self.current_conversation = Some(conv_id);
+                            self.messages.clear();
+                            self.input_clear();
+                            self.scroll_offset = 0;
+                            self.screen = Screen::Chat;
+                        }
+                        Err(e) => {
+                            error!("Failed to create group: {e}");
+                            self.show_error_toast(friendly_error("Creating group", &e));
                         }
                     }
                 }
@@ -821,21 +983,23 @@ impl App {
                                 msg.content = new_text;
                             }
                         }
-                        self.message_input.clear();
+                        self.input_clear();
                         self.original_message_text.clear();
                     }
                 }
                 KeyCode::Esc => {
                     self.editing_message_id = None;
-                    self.message_input.clear();
+                    self.input_clear();
                     self.original_message_text.clear();
                 }
                 KeyCode::Char(c) => {
-                    self.message_input.push(c);
+                    self.input_insert(c);
                 }
                 KeyCode::Backspace => {
-                    self.message_input.pop();
+                    self.input_backspace();
                 }
+                KeyCode::Left => self.input_cursor_left(),
+                KeyCode::Right => self.input_cursor_right(),
                 _ => {}
             }
             return;
@@ -865,7 +1029,7 @@ impl App {
                         if Some(msg.sender_id) == self.my_user_id {
                             self.editing_message_id = Some(msg.id);
                             self.original_message_text = msg.content.clone();
-                            self.message_input = msg.content.clone();
+                            self.input_set(msg.content.clone());
                             self.selected_message = None;
                         } else {
                             self.show_error_toast("Can only edit your own messages");
@@ -896,7 +1060,7 @@ impl App {
                 KeyCode::Char(c) => {
                     // Any other char exits selection and starts typing
                     self.selected_message = None;
-                    self.message_input.push(c);
+                    self.input_insert(c);
                 }
                 _ => {}
             }
@@ -939,7 +1103,7 @@ impl App {
                         match result {
                             Ok(msg) => {
                                 self.messages.push(msg);
-                                self.message_input.clear();
+                                self.input_clear();
                                 self.scroll_offset = 0;
                             }
                             Err(e) => {
@@ -950,21 +1114,23 @@ impl App {
                     }
                 }
             }
+            KeyCode::F(3) => {
+                self.info_selected_peer = 0;
+                self.info_show_fingerprint = false;
+                self.info_add_member_mode = false;
+                self.info_add_member_input.clear();
+                self.screen = Screen::ConversationInfo;
+            }
             KeyCode::Char(c) => {
-                // 'i' with empty input opens conversation info
-                if c == 'i' && self.message_input.is_empty() {
-                    self.info_selected_peer = 0;
-                    self.info_show_fingerprint = false;
-                    self.screen = Screen::ConversationInfo;
-                } else {
-                    self.message_input.push(c);
-                    // Send typing indicator with 3-second cooldown
-                    self.maybe_send_typing_indicator();
-                }
+                self.input_insert(c);
+                // Send typing indicator with 3-second cooldown
+                self.maybe_send_typing_indicator();
             }
             KeyCode::Backspace => {
-                self.message_input.pop();
+                self.input_backspace();
             }
+            KeyCode::Left => self.input_cursor_left(),
+            KeyCode::Right => self.input_cursor_right(),
             KeyCode::Up => {
                 // Enter message selection mode at the last message
                 if !self.messages.is_empty() {
@@ -997,6 +1163,67 @@ impl App {
     }
 
     fn handle_conversation_info_key(&mut self, key: KeyEvent) {
+        // ── Add member sub-mode ──
+        if self.info_add_member_mode {
+            match key.code {
+                KeyCode::Esc => {
+                    self.info_add_member_mode = false;
+                    self.info_add_member_input.clear();
+                }
+                KeyCode::Char(c) => {
+                    self.info_add_member_input.push(c);
+                }
+                KeyCode::Backspace => {
+                    self.info_add_member_input.pop();
+                }
+                KeyCode::Enter => {
+                    if self.info_add_member_input.is_empty() {
+                        self.show_error_toast("Username cannot be empty");
+                        return;
+                    }
+                    let conv_id = match self.current_conversation {
+                        Some(id) => id,
+                        None => return,
+                    };
+                    let sdk = match self.sdk.as_mut() {
+                        Some(s) => s,
+                        None => return,
+                    };
+                    let username = self.info_add_member_input.clone();
+                    match sdk.get_profile_by_username(username) {
+                        Ok(profile) => {
+                            match sdk.add_peer_to_conversation(conv_id, profile.id) {
+                                Ok(()) => {
+                                    // Refresh conversation data
+                                    if let Ok(Some(conv)) = sdk.get_conversation(conv_id) {
+                                        if let Some(entry) = self
+                                            .conversations
+                                            .iter_mut()
+                                            .find(|e| e.conversation.id == conv_id)
+                                        {
+                                            entry.conversation = conv;
+                                        }
+                                    }
+                                    self.show_info_toast("Member added");
+                                    self.info_add_member_mode = false;
+                                    self.info_add_member_input.clear();
+                                }
+                                Err(e) => {
+                                    self.show_error_toast(friendly_error("Adding member", &e));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            self.show_error_toast(friendly_error("Finding user", &e));
+                        }
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // ── Normal info navigation ──
         match key.code {
             KeyCode::Esc => {
                 self.screen = Screen::Chat;
@@ -1020,6 +1247,10 @@ impl App {
             KeyCode::Enter => {
                 // Toggle fingerprint display for the selected peer
                 self.info_show_fingerprint = !self.info_show_fingerprint;
+            }
+            KeyCode::Char('a') => {
+                self.info_add_member_mode = true;
+                self.info_add_member_input.clear();
             }
             _ => {}
         }
@@ -1146,6 +1377,25 @@ impl App {
             }
             SdkEvent::ConnectionStateChanged(state) => {
                 self.show_info_toast(format!("Connection: {:?}", state));
+            }
+            SdkEvent::PeerAddedToConversation {
+                conversation_id,
+                peer_id,
+            } => {
+                // Refresh the conversation entry to get updated peers list
+                if let Some(ref sdk) = self.sdk {
+                    if let Ok(Some(conv)) = sdk.get_conversation(conversation_id) {
+                        if let Some(entry) = self
+                            .conversations
+                            .iter_mut()
+                            .find(|e| e.conversation.id == conversation_id)
+                        {
+                            entry.conversation = conv;
+                        }
+                    }
+                }
+                let name = peer_id.to_string()[..8].to_string();
+                self.show_info_toast(format!("New member added: {}", name));
             }
         }
     }

@@ -14,6 +14,7 @@ import { NewConversationDialog } from "components/NewConversationDialog.slint";
 import { Chat } from "models/Chat.slint";
 import { ProfileSelectLayout } from "layout/ProfileSelect.slint";
 import { ProfileSelect, ProfileData } from "models/Profile.slint";
+import { AddMemberDialog } from "components/AddMemberDialog.slint";
 
 // Export models for Rust access
 export { Chat } from "models/Chat.slint";
@@ -49,4 +50,5 @@ export component AppWindow inherits Window {
 
     // Overlay dialogs (rendered on top of everything)
     if (Chat.show_new_conversation_dialog): NewConversationDialog { }
+    if (Chat.show_add_member_dialog): AddMemberDialog { }
 }
