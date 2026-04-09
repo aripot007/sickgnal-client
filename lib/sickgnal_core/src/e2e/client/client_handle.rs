@@ -7,24 +7,27 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::{
-    chat::message::ChatMessage,
+    chat::{message::ChatMessage, storage::SharedStorageBackend},
     e2e::{
         client::{Account, ChatMessageSender, Error, error::Result, state::E2EClientState},
-        keys::E2EStorageBackend,
         message::{E2EMessage, E2EPacket, UserProfile},
+        peer::Peer,
     },
 };
 
 #[derive(Clone)]
 pub struct ClientHandle<S>
 where
-    S: E2EStorageBackend + Send + 'static,
+    S: SharedStorageBackend + 'static,
 {
     /// The channel to send [`E2EMessage`] to the server
     pub(super) send_channel: mpsc::Sender<E2EPacket>,
 
     /// The client state
     pub(super) client_state: Arc<Mutex<E2EClientState<S>>>,
+
+    /// The storage
+    pub(super) storage: S,
 }
 
 // TODO: Add implementation to send chat messages, and later
@@ -36,7 +39,7 @@ where
 
 impl<S> ClientHandle<S>
 where
-    S: E2EStorageBackend + Send,
+    S: SharedStorageBackend,
 {
     // region:    Public API
 
@@ -48,23 +51,52 @@ where
 
     /// Get a user's profile by its id
     pub async fn get_profile_by_id(&mut self, id: Uuid) -> Result<UserProfile> {
+        // Try to get the profile from the db first
+        if let Some(peer) = self.storage.peer(&id)? {
+            if let Some(username) = peer.username {
+                return Ok(UserProfile { id, username });
+            }
+        }
+
         let rq;
         {
             let state = self.client_state.lock().unwrap();
+
             rq = E2EMessage::UserProfileById {
                 token: state.token().clone(),
                 id,
             };
         }
 
-        match self.request(rq).await? {
-            E2EMessage::UserProfile(profile) => Ok(profile),
-            m => Err(Error::UnexpectedE2EMessage(m)),
-        }
+        let profile = match self.request(rq).await? {
+            E2EMessage::UserProfile(profile) => profile,
+            m => return Err(Error::UnexpectedE2EMessage(m)),
+        };
+
+        // Save the peer in the database
+        let peer = Peer {
+            id,
+            username: Some(profile.username.clone()),
+            fingerprint: None,
+        };
+
+        self.storage.save_peer(&peer)?;
+
+        Ok(profile)
     }
 
     /// Get a user's profile by its username
     pub async fn get_profile_by_username(&mut self, username: String) -> Result<UserProfile> {
+        // Try to get the profile from the db first
+        if let Some(peer) = self.storage.find_peer_by_username(&username)? {
+            if let Some(username) = peer.username {
+                return Ok(UserProfile {
+                    id: peer.id,
+                    username,
+                });
+            }
+        }
+
         let rq;
         {
             let state = self.client_state.lock().unwrap();
@@ -74,10 +106,21 @@ where
             };
         }
 
-        match self.request(rq).await? {
-            E2EMessage::UserProfile(profile) => Ok(profile),
-            m => Err(Error::UnexpectedE2EMessage(m)),
-        }
+        let profile = match self.request(rq).await? {
+            E2EMessage::UserProfile(profile) => profile,
+            m => return Err(Error::UnexpectedE2EMessage(m)),
+        };
+
+        // Save the peer in the database
+        let peer = Peer {
+            id: profile.id,
+            username: Some(profile.username.clone()),
+            fingerprint: None,
+        };
+
+        self.storage.save_peer(&peer)?;
+
+        Ok(profile)
     }
 
     // endregion: Public API
@@ -111,7 +154,7 @@ where
 #[async_trait]
 impl<S> ChatMessageSender for ClientHandle<S>
 where
-    S: E2EStorageBackend + Send,
+    S: SharedStorageBackend,
 {
     /// Send a [`ChatMessage`] to a user.
     ///

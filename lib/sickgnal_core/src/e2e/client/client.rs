@@ -18,7 +18,7 @@ use uuid::Uuid;
 use x25519_dalek::PublicKey;
 
 use crate::{
-    chat::message::ChatMessage,
+    chat::{message::ChatMessage, storage::SharedStorageBackend},
     e2e::{
         client::{
             ChatMessageSender,
@@ -28,7 +28,7 @@ use crate::{
             sync_iterator::SyncIterator,
             workers,
         },
-        keys::{E2EStorageBackend, EphemeralSecretKey, X25519Secret},
+        keys::{EphemeralSecretKey, X25519Secret},
         message::{E2EMessage, EphemeralKey, ErrorCode, SignedPreKey},
         message_stream::E2EMessageStream,
         peer::Peer,
@@ -55,7 +55,7 @@ pub struct Account {
 /// A client for the E2E protocol
 pub struct E2EClient<Storage, MsgStream>
 where
-    Storage: E2EStorageBackend,
+    Storage: SharedStorageBackend,
     MsgStream: E2EMessageStream,
 {
     /// Message stream to communicate with the server
@@ -71,7 +71,7 @@ where
 
 impl<Storage, MsgStream> E2EClient<Storage, MsgStream>
 where
-    Storage: E2EStorageBackend + Send + 'static,
+    Storage: SharedStorageBackend + 'static,
     MsgStream: E2EMessageStream + Send,
 {
     // region:    Public API
@@ -199,6 +199,8 @@ where
         let (send_tx, send_rx) = mpsc::channel(100);
         let (recv_tx, recv_rx) = mpsc::channel(100);
 
+        let storage = self.state.storage.clone();
+
         let state = Arc::new(Mutex::new(self.state));
 
         let receiver_task = workers::receive::receive_loop(state.clone(), reader, recv_tx);
@@ -208,6 +210,7 @@ where
         let handle = ClientHandle {
             send_channel: send_tx,
             client_state: state,
+            storage,
         };
 
         Ok((handle, recv_rx, receiver_task, sender_task))
@@ -510,7 +513,7 @@ where
 #[async_trait]
 impl<Storage, MsgStream> ChatMessageSender for E2EClient<Storage, MsgStream>
 where
-    Storage: E2EStorageBackend + Send + 'static,
+    Storage: SharedStorageBackend + 'static,
     MsgStream: E2EMessageStream + Send,
 {
     /// Send a [`ChatMessage`] to another user

@@ -7,11 +7,14 @@ use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::{
-    chat::message::{ChatMessage, ChatMessageKind, ControlMessage},
+    chat::{
+        message::{ChatMessage, ChatMessageKind, ControlMessage},
+        storage::SharedStorageBackend,
+    },
     e2e::{
         client::{E2EClient, Error, PREKEY_AMOUNT},
         kdf::kdf,
-        keys::{E2EStorageBackend, SymetricKey},
+        keys::SymetricKey,
         message::{
             E2EMessage, KeyExchangeData,
             encrypted_payload::{EncryptedPayload, PayloadMessage},
@@ -31,7 +34,7 @@ use crate::{
 /// be lost.
 pub struct SyncIterator<'c, Storage, MsgStream>
 where
-    Storage: E2EStorageBackend + Send,
+    Storage: SharedStorageBackend,
     MsgStream: E2EMessageStream + Send,
 {
     /// Number of messages to fetch on each batch
@@ -78,7 +81,7 @@ struct SessionKeys {
 
 impl<'c, Storage, MsgStream> SyncIterator<'c, Storage, MsgStream>
 where
-    Storage: E2EStorageBackend + Send + 'static,
+    Storage: SharedStorageBackend + 'static,
     MsgStream: E2EMessageStream + Send,
 {
     pub(super) fn new(client: &'c mut E2EClient<Storage, MsgStream>) -> Self {
