@@ -1,5 +1,8 @@
 use const_format::{concatcp, formatcp};
-use sickgnal_core::{chat::dto::Conversation, e2e::peer::Peer};
+use sickgnal_core::{
+    chat::dto::Conversation,
+    e2e::{client::Account, keys::IdentityKeyPair, peer::Peer},
+};
 
 use crate::storage::store::{
     account::AccountStore, conversation::ConversationStore, ephemeral_keys::EphemeralKeyStore,
@@ -38,7 +41,8 @@ macro_rules! create_store_tables {
 
 /// SQL to create all tables
 const CREATE_TABLES: &str = create_store_tables!(
-    AccountStore,
+    AccountStore as Store<Account>,
+    AccountStore as Store<IdentityKeyPair>,
     EphemeralKeyStore,
     SessionKeyStore,
     SessionStore,

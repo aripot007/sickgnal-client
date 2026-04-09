@@ -24,6 +24,18 @@ impl Store<Account> for AccountStore {
     type Id = ();
 }
 
+impl Store<IdentityKeyPair> for AccountStore {
+    const TABLE: &str = "account_keys";
+
+    const SCHEMA: &str = r#"
+        _id INT PRIMARY KEY DEFAULT 0 CHECK (_id = 0),  -- prevent inserting multiple rows
+        identity_key BLOB,
+        midterm_key BLOB
+    "#;
+
+    type Id = ();
+}
+
 impl AccountStore {
     pub fn persist(conn: &rusqlite::Connection, val: &Account) -> Result<()> {
         let mut stmt = conn.prepare_cached(
@@ -69,7 +81,7 @@ impl AccountStore {
     /// Get the identity keypair if set
     pub fn identity_keypair(conn: &rusqlite::Connection) -> Result<Option<IdentityKeyPair>> {
         let res: Option<Vec<u8>> = conn
-            .query_one("SELECT identity_key FROM account", (), |r| r.get(0))
+            .query_one("SELECT identity_key FROM account_keys", (), |r| r.get(0))
             .optional()?
             .flatten();
 
@@ -88,7 +100,10 @@ impl AccountStore {
     ) -> Result<()> {
         let data = bincode::serialize(keypair)?;
 
-        let nb_updated = conn.execute("UPDATE account SET identity_key = ?1", [data])?;
+        let nb_updated = conn.execute(
+            "REPLACE INTO account_keys (identity_key) VALUES (?1)",
+            [data],
+        )?;
 
         if nb_updated != 1 {
             return Err(Error::NoAccount.into());
@@ -98,14 +113,14 @@ impl AccountStore {
     }
 
     pub fn clear_identity_keypair(conn: &rusqlite::Connection) -> Result<()> {
-        conn.execute("UPDATE account SET identity_key = NULL", ())?;
+        conn.execute("REPLACE INTO account_keys (identity_key) VALUES (NULL)", ())?;
         Ok(())
     }
 
     /// Get the midterm key if set
     pub fn midterm_key(conn: &rusqlite::Connection) -> Result<Option<X25519Secret>> {
         let res: Option<Vec<u8>> = conn
-            .query_one("SELECT midterm_key FROM account", (), |r| r.get(0))
+            .query_one("SELECT midterm_key FROM account_keys", (), |r| r.get(0))
             .optional()?
             .flatten();
 
@@ -121,7 +136,10 @@ impl AccountStore {
     pub fn set_midterm_key(conn: &rusqlite::Connection, key: &X25519Secret) -> Result<()> {
         let data = bincode::serialize(key)?;
 
-        let nb_updated = conn.execute("UPDATE account SET midterm_key = ?1", [data])?;
+        let nb_updated = conn.execute(
+            "REPLACE INTO account_keys (midterm_key) VALUES (?1)",
+            [data],
+        )?;
 
         if nb_updated != 1 {
             return Err(Error::NoAccount.into());
@@ -131,7 +149,7 @@ impl AccountStore {
     }
 
     pub fn clear_midterm_key(conn: &rusqlite::Connection) -> Result<()> {
-        conn.execute("UPDATE account SET midterm_key = NULL", ())?;
+        conn.execute("REPLACE INTO account_keys (midterm_key) VALUES (NULL)", ())?;
         Ok(())
     }
 }
