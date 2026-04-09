@@ -363,6 +363,10 @@ fn spawn_sdk(
 
         let my_id = sdk.user_id();
 
+        // Drain events emitted during sync — the DB already reflects them.
+        // Only live events (after this point) should be processed.
+        while event_rx.try_recv().is_ok() {}
+
         // UUID mapping: index -> conversation UUID
         let conv_ids: Arc<Mutex<Vec<Uuid>>> = Arc::new(Mutex::new(Vec::new()));
 

@@ -563,7 +563,11 @@ impl App {
 
         let handle = self.auth_handle.take().unwrap();
         match handle.join() {
-            Ok(Ok((bridge, event_rx))) => {
+            Ok(Ok((bridge, mut event_rx))) => {
+                // Drain events emitted during sync — the DB already reflects them.
+                // Only live events (after this point) should be processed.
+                while event_rx.try_recv().is_ok() {}
+
                 self.my_user_id = Some(bridge.user_id());
                 self.event_rx = Some(event_rx);
 
