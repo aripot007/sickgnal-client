@@ -513,9 +513,10 @@ fn show_fatal_error(ui: &AppWindow, msg: &str) {
 /// Convert a core `Message` to a Slint `MessageData`.
 fn message_to_slint(msg: &Message, my_id: Uuid) -> MessageData {
     MessageData {
+        id: msg.id.to_string().into(),
         text: msg.content.clone().into(),
         time: msg.issued_at.format("%H:%M").to_string().into(),
-        status: status_to_str(msg.status).into(),
+        status: status_to_str(msg.status),
         is_me: msg.sender_id == my_id,
     }
 }
@@ -564,17 +565,39 @@ fn append_message_to_conv(conv: &mut Conversation, msg: MessageData) {
 }
 
 /// Update the status of a specific message in a conversation.
-fn update_message_status(_conv: &mut Conversation, message_id: Uuid, status: slint::SharedString) {
-    // Messages don't carry their UUID in the Slint model, so we can't
-    // match by ID here. For now this is a placeholder — a proper
-    // implementation would need message IDs in the Slint model.
-    // TODO: add message ID to MessageData for proper matching
-    let _ = (message_id, status);
+fn update_message_status(conv: &mut Conversation, message_id: Uuid, status: slint::SharedString) {
+    let messages = conv.messages.clone();
+    let id_str: slint::SharedString = message_id.to_string().into();
+
+    let mut vec: Vec<MessageData> = (0..messages.row_count())
+        .filter_map(|i| messages.row_data(i))
+        .collect();
+
+    for msg in &mut vec {
+        if msg.id == id_str {
+            msg.status = status;
+            break;
+        }
+    }
+
+    conv.messages = ModelRc::new(VecModel::from(vec));
 }
 
 /// Update the text of a specific message in a conversation.
-fn update_message_text(_conv: &mut Conversation, message_id: Uuid, new_text: &str) {
-    // Same limitation as update_message_status — no message ID in Slint model.
-    // TODO: add message ID to MessageData for proper matching
-    let _ = (message_id, new_text);
+fn update_message_text(conv: &mut Conversation, message_id: Uuid, new_text: &str) {
+    let messages = conv.messages.clone();
+    let id_str: slint::SharedString = message_id.to_string().into();
+
+    let mut vec: Vec<MessageData> = (0..messages.row_count())
+        .filter_map(|i| messages.row_data(i))
+        .collect();
+
+    for msg in &mut vec {
+        if msg.id == id_str {
+            msg.text = new_text.into();
+            break;
+        }
+    }
+
+    conv.messages = ModelRc::new(VecModel::from(vec));
 }
