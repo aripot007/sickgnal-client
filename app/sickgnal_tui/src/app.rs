@@ -1,15 +1,16 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use chrono::Utc;
 use crossterm::event::{KeyCode, KeyEvent};
 use sickgnal_core::chat::client::ChatEvent as SdkEvent;
-use sickgnal_core::chat::storage::{Conversation, Message};
+use sickgnal_core::chat::storage::Message;
+use sickgnal_sdk::client::SyncBridge;
+use sickgnal_sdk::dto::ConversationEntry;
+use sickgnal_sdk::TlsConfig;
 use tokio::sync::mpsc;
+use tracing::error;
 use uuid::Uuid;
 
 use sickgnal_sdk::account::{Profile, ProfileManager};
-
-use crate::sdk_bridge::SdkBridge;
 
 // ─── Screens ───────────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ pub struct App {
     pub auth_loading: bool,
 
     // Conversations state
-    pub conversations: Vec<Conversation>,
+    pub conversations: Vec<ConversationEntry>,
     pub selected_conversation: usize,
     pub new_conversation_mode: bool,
     pub new_conversation_username: String,
@@ -72,7 +73,7 @@ pub struct App {
     pub my_user_id: Option<Uuid>,
 
     // SDK bridge
-    pub sdk: Option<SdkBridge>,
+    pub sdk: Option<SyncBridge>,
     pub event_rx: Option<mpsc::Receiver<SdkEvent>>,
 
     // Storage dir
@@ -429,19 +430,24 @@ impl App {
 
         // Connect to server via SDK
         let existing = self.auth_mode == AuthMode::SignIn;
-        match SdkBridge::connect(
+        match SyncBridge::connect(
             self.username.clone(),
-            self.password.clone(),
+            &self.password,
             self.data_dir.clone(),
             existing,
+            "127.0.0.1:8080",
+            &TlsConfig::None,
         ) {
-            Ok(mut bridge) => {
-                self.my_user_id = Some(bridge.my_user_id());
-                self.event_rx = Some(bridge.take_event_rx());
+            Ok((bridge, event_rx)) => {
+                self.my_user_id = Some(bridge.user_id());
+                self.event_rx = Some(event_rx);
 
                 // Load conversations from storage
-                if let Ok(convos) = bridge.list_conversations() {
-                    self.conversations = convos;
+                match bridge.list_conversations() {
+                    Ok(convos) => self.conversations = convos,
+                    Err(e) => {
+                        error!("Failed to list conversations: {e}");
+                    }
                 }
 
                 self.sdk = Some(bridge);
@@ -458,12 +464,7 @@ impl App {
                     let _ = account_file.delete();
                 }
 
-                let msg = if e.contains("Username already taken") {
-                    "Username already taken.".to_string()
-                } else {
-                    format!("Connection failed: {e}")
-                };
-
+                let msg = format!("Connection failed: {e}");
                 self.auth_error = Some(msg);
                 self.auth_loading = false;
             }
@@ -498,13 +499,17 @@ impl App {
             }
             KeyCode::Enter => {
                 if !self.conversations.is_empty() {
-                    let conv = &self.conversations[self.selected_conversation];
-                    self.current_conversation = Some(conv.id);
+                    let entry = &self.conversations[self.selected_conversation];
+                    self.current_conversation = Some(entry.conversation.id);
 
                     // Load messages
                     if let Some(ref sdk) = self.sdk {
-                        if let Ok(msgs) = sdk.get_messages(conv.id) {
-                            self.messages = msgs;
+                        match sdk.get_messages(entry.conversation.id) {
+                            Ok(msgs) => self.messages = msgs,
+                            Err(e) => {
+                                error!("Failed to load messages: {e}");
+                                self.status_message = Some(format!("Failed to load messages: {e}"));
+                            }
                         }
                     }
 
@@ -515,9 +520,12 @@ impl App {
             }
             KeyCode::Char('d') => {
                 if !self.conversations.is_empty() {
-                    let conv_id = self.conversations[self.selected_conversation].id;
+                    let conv_id = self.conversations[self.selected_conversation].conversation.id;
                     if let Some(ref mut sdk) = self.sdk {
-                        let _ = sdk.delete_conversation(conv_id);
+                        if let Err(e) = sdk.delete_conversation(conv_id) {
+                            error!("Failed to delete conversation: {e}");
+                            self.status_message = Some(format!("Delete failed: {e}"));
+                        }
                     }
                     self.conversations.remove(self.selected_conversation);
                     if self.selected_conversation > 0
@@ -553,10 +561,26 @@ impl App {
                 }
 
                 if let Some(ref mut sdk) = self.sdk {
-                    match sdk.start_conversation(self.new_conversation_username.clone()) {
+                    // Resolve username to UUID first
+                    let profile = match sdk.get_profile_by_username(
+                        self.new_conversation_username.clone(),
+                    ) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            self.status_message = Some(format!("User not found: {e}"));
+                            return;
+                        }
+                    };
+
+                    match sdk.start_conversation(profile.id, None) {
                         Ok(conv) => {
                             let conv_id = conv.id;
-                            self.conversations.push(conv);
+                            let entry = ConversationEntry {
+                                conversation: conv,
+                                unread_messages_count: 0,
+                                last_message: None,
+                            };
+                            self.conversations.push(entry);
                             self.selected_conversation = self.conversations.len() - 1;
                             self.new_conversation_mode = false;
                             self.new_conversation_username.clear();
@@ -585,8 +609,11 @@ impl App {
             KeyCode::Esc => {
                 // Refresh conversations list before going back
                 if let Some(ref sdk) = self.sdk {
-                    if let Ok(convos) = sdk.list_conversations() {
-                        self.conversations = convos;
+                    match sdk.list_conversations() {
+                        Ok(convos) => self.conversations = convos,
+                        Err(e) => {
+                            error!("Failed to refresh conversations: {e}");
+                        }
                     }
                 }
                 self.screen = Screen::Conversations;
@@ -595,14 +622,17 @@ impl App {
             }
             KeyCode::Enter => {
                 if !self.message_input.is_empty() {
-                    if let (Some(conv_id), Some(sdk)) = (self.current_conversation, &self.sdk) {
-                        match sdk.send_message(conv_id, self.message_input.clone()) {
+                    let conv_id = self.current_conversation;
+                    let text = self.message_input.clone();
+                    if let (Some(conv_id), Some(sdk)) = (conv_id, &mut self.sdk) {
+                        match sdk.send_message(conv_id, text) {
                             Ok(msg) => {
                                 self.messages.push(msg);
                                 self.message_input.clear();
                                 self.scroll_offset = 0;
                             }
                             Err(e) => {
+                                error!("Failed to send message: {e}");
                                 self.status_message = Some(format!("Send failed: {e}"));
                             }
                         }
@@ -645,30 +675,49 @@ impl App {
 
     fn handle_sdk_event(&mut self, event: SdkEvent) {
         match event {
-            SdkEvent::NewMessage(conv_id, message) => {
-                if self.current_conversation == Some(conv_id) {
-                    self.messages.push(message);
+            SdkEvent::MessageReceived {
+                conversation_id,
+                msg,
+            } => {
+                if self.current_conversation == Some(conversation_id) {
+                    self.messages.push(msg);
                 }
 
-                if let Some(conv) = self.conversations.iter_mut().find(|c| c.id == conv_id) {
-                    if self.current_conversation != Some(conv_id) {
-                        conv.unread_count += 1;
+                if let Some(entry) = self
+                    .conversations
+                    .iter_mut()
+                    .find(|e| e.conversation.id == conversation_id)
+                {
+                    if self.current_conversation != Some(conversation_id) {
+                        entry.unread_messages_count += 1;
                     }
-                    conv.last_message_at = Some(Utc::now());
                 }
             }
-            SdkEvent::MessageStatusUpdated(msg_id, status) => {
-                if let Some(msg) = self.messages.iter_mut().find(|m| m.id == msg_id) {
+            SdkEvent::MessageStatusUpdated {
+                conversation_id: _,
+                message_id,
+                status,
+            } => {
+                if let Some(msg) = self.messages.iter_mut().find(|m| m.id == message_id) {
                     msg.status = status;
                 }
             }
-            SdkEvent::ConversationCreated(conv) => {
-                if !self.conversations.iter().any(|c| c.id == conv.id) {
-                    self.conversations.push(conv);
+            SdkEvent::ConversationCreatedByPeer(conv) => {
+                if !self
+                    .conversations
+                    .iter()
+                    .any(|e| e.conversation.id == conv.id)
+                {
+                    self.conversations.push(ConversationEntry {
+                        conversation: conv,
+                        unread_messages_count: 0,
+                        last_message: None,
+                    });
                 }
             }
             SdkEvent::ConversationDeleted(conv_id) => {
-                self.conversations.retain(|c| c.id != conv_id);
+                self.conversations
+                    .retain(|e| e.conversation.id != conv_id);
                 if self.current_conversation == Some(conv_id) {
                     self.screen = Screen::Conversations;
                     self.current_conversation = None;
@@ -682,9 +731,7 @@ impl App {
             } => {
                 if self.current_conversation == Some(conversation_id) {
                     if let Some(msg) = self.messages.iter_mut().find(|m| m.id == message_id) {
-                        msg.content = match new_content {
-                            sickgnal_core::chat::message::Content::Text(txt) => txt,
-                        };
+                        msg.content = new_content.to_string();
                     }
                 }
             }
@@ -698,7 +745,10 @@ impl App {
                     }
                 }
             }
-            SdkEvent::TypingIndicator(_conv_id) => {
+            SdkEvent::TypingIndicator {
+                conversation_id: _,
+                peer_id: _,
+            } => {
                 // TODO: show typing indicator in UI
             }
             SdkEvent::ConnectionStateChanged(state) => {
