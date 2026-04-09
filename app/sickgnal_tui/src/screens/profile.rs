@@ -163,14 +163,8 @@ pub fn draw(f: &mut Frame, app: &App) {
         // Show spinner while connecting after password entry
         let frame = SPINNER_FRAMES[app.auth_spinner_tick % SPINNER_FRAMES.len()];
         let spinner = Paragraph::new(Line::from(vec![
-            Span::styled(
-                format!("{frame} "),
-                Style::default().fg(Color::Cyan),
-            ),
-            Span::styled(
-                "Signing in...",
-                Style::default().fg(Color::Yellow),
-            ),
+            Span::styled(format!("{frame} "), Style::default().fg(Color::Cyan)),
+            Span::styled("Signing in...", Style::default().fg(Color::Yellow)),
         ]))
         .alignment(Alignment::Center);
         f.render_widget(spinner, bottom_area);

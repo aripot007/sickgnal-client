@@ -7,11 +7,14 @@ use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::{
-    chat::message::{ChatMessage, ChatMessageKind, ControlMessage},
+    chat::{
+        message::{ChatMessage, ChatMessageKind, ControlMessage},
+        storage::SharedStorageBackend,
+    },
     e2e::{
         client::{E2EClient, Error, PREKEY_AMOUNT},
         kdf::kdf,
-        keys::{E2EStorageBackend, SymetricKey},
+        keys::SymetricKey,
         message::{
             E2EMessage, KeyExchangeData,
             encrypted_payload::{EncryptedPayload, PayloadMessage},
@@ -31,7 +34,7 @@ use crate::{
 /// be lost.
 pub struct SyncIterator<'c, Storage, MsgStream>
 where
-    Storage: E2EStorageBackend + Send,
+    Storage: SharedStorageBackend,
     MsgStream: E2EMessageStream + Send,
 {
     /// Number of messages to fetch on each batch
@@ -78,7 +81,7 @@ struct SessionKeys {
 
 impl<'c, Storage, MsgStream> SyncIterator<'c, Storage, MsgStream>
 where
-    Storage: E2EStorageBackend + Send + 'static,
+    Storage: SharedStorageBackend + 'static,
     MsgStream: E2EMessageStream + Send,
 {
     pub(super) fn new(client: &'c mut E2EClient<Storage, MsgStream>) -> Self {
@@ -244,7 +247,7 @@ where
             .handle_open_session(sender_id, sender_name, &data);
 
         // Get the initial chat message
-        let m = match res {
+        let mut m = match res {
             Ok(PayloadMessage::ChatMessage(m)) => m,
 
             Ok(PayloadMessage::E2EMessage(m)) => {
@@ -266,6 +269,8 @@ where
             warn!("Unexpected first session message : {:?}", m);
             return;
         }
+
+        m.sender_id = sender_id;
 
         self.messages.push(m);
     }
@@ -315,7 +320,10 @@ where
                 .expect("stored session key should have a valid length");
 
             match ciphertext.decrypt(&aead) {
-                Ok(PayloadMessage::ChatMessage(m)) => self.messages.push(m),
+                Ok(PayloadMessage::ChatMessage(mut m)) => {
+                    m.sender_id = sender_id;
+                    self.messages.push(m)
+                }
 
                 // Handle key rotation
                 Ok(PayloadMessage::E2EMessage(E2EMessage::KeyRotation {

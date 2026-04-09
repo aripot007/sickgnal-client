@@ -20,6 +20,10 @@ impl Store<Peer> for PeerStore {
         -- Index peers we need to resolve the name of
         CREATE INDEX IF NOT EXISTS idx_unknown_peers
             ON peers(id) WHERE username IS NULL;
+
+        -- Index peers by username
+        CREATE INDEX IF NOT EXISTS idx_peers_usernames
+            ON peers(username) WHERE username IS NOT NULL;
     "#;
 
     type Id = Uuid;
@@ -56,6 +60,27 @@ impl PeerStore {
                 Ok(Some(Peer {
                     id,
                     username: r.get(0)?,
+                    fingerprint,
+                }))
+            },
+        );
+
+        match res {
+            Err(Error::SqliteError(rusqlite::Error::QueryReturnedNoRows)) => Ok(None),
+            _ => res,
+        }
+    }
+
+    pub fn find_by_username(conn: &rusqlite::Connection, username: &str) -> Result<Option<Peer>> {
+        let res = conn.query_row_and_then(
+            "SELECT id, username, fingerprint FROM peers WHERE username = ?1",
+            [username],
+            |r| {
+                let fp_b64: Option<String> = r.get(2)?;
+                let fingerprint = fp_b64.and_then(|s| BASE64.decode(s).ok());
+                Ok(Some(Peer {
+                    id: Uuid::try_from(r.get::<_, String>(0)?)?,
+                    username: r.get(1)?,
                     fingerprint,
                 }))
             },
