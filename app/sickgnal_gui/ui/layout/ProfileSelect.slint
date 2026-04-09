@@ -2,6 +2,7 @@ import { VerticalBox, HorizontalBox, LineEdit } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { ProfileSelect, ProfileData } from "../models/Profile.slint";
 import { Button } from "../components/Button.slint";
+import { Auth } from "Log.slint";
 
 component ProfileCard inherits Rectangle {
     in property <string> username;
@@ -78,6 +79,15 @@ export component ProfileSelectLayout inherits VerticalBox {
             font-size: Theme.font-size-title;
             font-weight: 700;
             color: Theme.text-main;
+            horizontal-alignment: center;
+        }
+
+        // TLS warning (shown when not using production TLS)
+        if (Auth.tls-warning != ""): Text {
+            text: Auth.tls-warning;
+            font-size: 13px;
+            font-weight: 600;
+            color: #cc8800;
             horizontal-alignment: center;
         }
 

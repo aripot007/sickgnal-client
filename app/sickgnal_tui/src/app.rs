@@ -168,6 +168,10 @@ pub struct App {
     // Storage dir
     pub data_dir: PathBuf,
 
+    // Connection settings
+    pub server_addr: String,
+    pub tls_config: TlsConfig,
+
     // Async auth: background thread handle + spinner state
     pub auth_handle:
         Option<thread::JoinHandle<Result<(SyncBridge, mpsc::Receiver<SdkEvent>), client::Error>>>,
@@ -176,7 +180,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(data_dir: PathBuf) -> Self {
+    pub fn new(data_dir: PathBuf, server_addr: String, tls_config: TlsConfig) -> Self {
         let profile_manager =
             ProfileManager::new(data_dir.clone()).expect("create profile manager");
         let profiles = profile_manager.list_profiles().unwrap_or_default();
@@ -249,9 +253,25 @@ impl App {
 
             data_dir: PathBuf::new(),
 
+            server_addr,
+            tls_config,
+
             auth_handle: None,
             auth_spinner_tick: 0,
             auth_was_signup: false,
+        }
+    }
+
+    /// Returns a TLS warning message if the connection is not using production TLS.
+    pub fn tls_warning(&self) -> Option<&'static str> {
+        match &self.tls_config {
+            TlsConfig::None => Some(
+                "WARNING: TLS is disabled \u{2014} your connection to the server is not encrypted",
+            ),
+            TlsConfig::Insecure { .. } => Some(
+                "WARNING: Custom TLS implementation in use \u{2014} the connection may be less secure",
+            ),
+            TlsConfig::Rustls { .. } => None,
         }
     }
 
@@ -607,14 +627,17 @@ impl App {
         let existing = self.auth_mode == AuthMode::SignIn;
         self.auth_was_signup = self.auth_mode == AuthMode::SignUp;
 
+        let server_addr = self.server_addr.clone();
+        let tls_config = self.tls_config.clone();
+
         let handle = thread::spawn(move || {
             SyncBridge::connect(
                 username,
                 &password,
                 dir,
                 existing,
-                "127.0.0.1:8080",
-                &TlsConfig::None,
+                &server_addr,
+                &tls_config,
             )
         });
 

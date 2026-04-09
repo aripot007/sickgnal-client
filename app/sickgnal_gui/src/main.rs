@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use slint::{Model, ModelRc, VecModel};
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -16,12 +16,35 @@ use sickgnal_sdk::client::Sdk;
 use sickgnal_sdk::dto::ConversationEntry;
 slint::include_modules!();
 
+/// TLS implementation to use for the server connection.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum TlsMode {
+    /// Production TLS via rustls (recommended)
+    Rustls,
+    /// Custom (experimental) TLS implementation
+    Insecure,
+    /// No TLS — plain TCP (development only)
+    None,
+}
+
 #[derive(Parser)]
 #[command(name = "sickgnal", about = "Sickgnal GUI client")]
 struct Args {
     /// Directory for account storage
     #[arg(long, default_value = "./storage")]
     data_dir: PathBuf,
+
+    /// Server address (host:port)
+    #[arg(long, default_value = "127.0.0.1:8080")]
+    server: String,
+
+    /// TLS implementation to use
+    #[arg(long, value_enum, default_value_t = TlsMode::Rustls)]
+    tls: TlsMode,
+
+    /// Path to a PEM-encoded CA certificate to trust (for self-signed servers)
+    #[arg(long)]
+    tls_ca: Option<PathBuf>,
 }
 
 fn main() {
@@ -30,9 +53,36 @@ fn main() {
     let args = Args::parse();
     let base_dir = args.data_dir;
 
+    // Build TlsConfig from CLI args
+    let tls_config = match args.tls {
+        TlsMode::Rustls => TlsConfig::Rustls {
+            custom_ca: args.tls_ca,
+        },
+        TlsMode::Insecure => TlsConfig::Insecure {
+            custom_ca: args.tls_ca,
+        },
+        TlsMode::None => TlsConfig::None,
+    };
+
+    let server_addr = args.server;
+
+    // Compute TLS warning message (if any)
+    let tls_warning: &str = match &tls_config {
+        TlsConfig::None => {
+            "WARNING: TLS is disabled \u{2014} your connection to the server is not encrypted"
+        }
+        TlsConfig::Insecure { .. } => {
+            "WARNING: Custom TLS implementation in use \u{2014} the connection may be less secure"
+        }
+        TlsConfig::Rustls { .. } => "",
+    };
+
     let rt = Arc::new(tokio::runtime::Runtime::new().expect("Failed to create tokio runtime"));
 
     let ui = AppWindow::new().expect("Failed to load UI");
+
+    // Set TLS warning on the Auth global (visible on login screens)
+    ui.global::<Auth>().set_tls_warning(tls_warning.into());
 
     // ── Profile management ────────────────────────────────────────────
     let profile_manager = ProfileManager::new(base_dir.clone()).expect("create profile manager");
@@ -55,6 +105,8 @@ fn main() {
             let ui_weak = ui.as_weak();
             let rt = Arc::clone(&rt);
             let pm = profile_manager.clone();
+            let server_addr = server_addr.clone();
+            let tls_config = tls_config.clone();
             ui.global::<Auth>()
                 .on_sign_up(move |user, pass, conf_pass| {
                     let Some(ui) = ui_weak.upgrade() else {
@@ -96,6 +148,8 @@ fn main() {
                         pass.to_string(),
                         profile_dir,
                         false,
+                        server_addr.clone(),
+                        tls_config.clone(),
                     );
 
                     ui.global::<Auth>().set_is_logged_in(true);
@@ -108,6 +162,8 @@ fn main() {
             let ui_weak = ui.as_weak();
             let rt = Arc::clone(&rt);
             let dir = base_dir.clone();
+            let server_addr = server_addr.clone();
+            let tls_config = tls_config.clone();
             ui.global::<Auth>().on_sign_in(move |pass| {
                 let Some(ui) = ui_weak.upgrade() else {
                     return;
@@ -131,6 +187,8 @@ fn main() {
                             pass.to_string(),
                             dir.clone(),
                             true,
+                            server_addr.clone(),
+                            tls_config.clone(),
                         );
                         ui.global::<Auth>().set_is_logged_in(true);
                         ui.window().set_maximized(true);
@@ -186,6 +244,8 @@ fn main() {
             let rt = Arc::clone(&rt);
             let pm = profile_manager.clone();
             let profiles = profiles.clone();
+            let server_addr = server_addr.clone();
+            let tls_config = tls_config.clone();
             ui.global::<ProfileSelect>()
                 .on_submit_password(move |pass| {
                     let Some(ui) = ui_weak.upgrade() else { return };
@@ -225,6 +285,8 @@ fn main() {
                                 pass.to_string(),
                                 profile_dir,
                                 true,
+                                server_addr.clone(),
+                                tls_config.clone(),
                             );
 
                             ui.global::<Auth>().set_is_logged_in(true);
@@ -250,6 +312,8 @@ fn main() {
             let ui_weak = ui.as_weak();
             let pm = profile_manager.clone();
             let rt_clone = Arc::clone(&rt);
+            let server_addr = server_addr.clone();
+            let tls_config = tls_config.clone();
             ui.global::<ProfileSelect>().on_create_new_profile(move || {
                 let Some(ui) = ui_weak.upgrade() else { return };
                 ui.global::<ProfileSelect>().set_show_profile_select(false);
@@ -259,6 +323,8 @@ fn main() {
                 let ui_weak2 = ui.as_weak();
                 let rt = rt_clone.clone();
                 let pm = pm.clone();
+                let server_addr = server_addr.clone();
+                let tls_config = tls_config.clone();
                 ui.global::<Auth>()
                     .on_sign_up(move |user, pass, conf_pass| {
                         let Some(ui) = ui_weak2.upgrade() else {
@@ -299,6 +365,8 @@ fn main() {
                             pass.to_string(),
                             profile_dir,
                             false,
+                            server_addr.clone(),
+                            tls_config.clone(),
                         );
 
                         ui.global::<Auth>().set_is_logged_in(true);
@@ -336,6 +404,8 @@ fn spawn_sdk(
     password: String,
     dir: PathBuf,
     existing_account: bool,
+    server_addr: String,
+    tls_config: TlsConfig,
 ) {
     let rt_clone = rt.clone();
     rt.spawn(async move {
@@ -345,8 +415,8 @@ fn spawn_sdk(
             &password,
             dir,
             existing_account,
-            "127.0.0.1:8080",
-            &TlsConfig::None,
+            &server_addr,
+            &tls_config,
         )
         .await
         {
