@@ -12,9 +12,17 @@ use sickgnal_core::chat::storage::MessageStatus;
 pub fn draw(f: &mut Frame, app: &App) {
     let area = f.area();
 
+    // Check for active typing indicator
+    let typing_text = app
+        .current_conversation
+        .and_then(|cid| app.typing_indicators.get(&cid))
+        .map(|(name, _)| format!("{} is typing...", name));
+
     let chunks = Layout::vertical([
         Constraint::Length(3), // Header with conversation name
         Constraint::Min(1),    // Messages area
+        Constraint::Length(if typing_text.is_some() { 1 } else { 0 }), // Typing indicator
+        Constraint::Length(if typing_text.is_some() { 1 } else { 0 }), // Typing indicator
         Constraint::Length(3), // Input area
     ])
     .split(area);
@@ -193,6 +201,17 @@ pub fn draw(f: &mut Frame, app: &App) {
         f.render_widget(list, messages_area);
     }
 
+    // Typing indicator
+    if let Some(ref text) = typing_text {
+        let typing = Paragraph::new(Line::from(vec![Span::styled(
+            format!("  {text}"),
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::ITALIC),
+        )]));
+        f.render_widget(typing, chunks[2]);
+    }
+
     // Input area — adapts to current mode
     let (input_prefix, input_text, hint_text) = if app.confirm_delete.is_some() {
         (
@@ -243,5 +262,5 @@ pub fn draw(f: &mut Frame, app: &App) {
             .title_alignment(Alignment::Right)
             .title_style(Style::default().fg(Color::DarkGray)),
     );
-    f.render_widget(input, chunks[2]);
+    f.render_widget(input, chunks[3]);
 }

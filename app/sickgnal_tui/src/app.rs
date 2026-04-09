@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use sickgnal_core::chat::client::ChatEvent as SdkEvent;
@@ -83,6 +85,10 @@ pub struct App {
     pub info_selected_peer: usize,
     pub info_show_fingerprint: bool,
 
+    // Typing indicators
+    pub last_typing_sent: Option<Instant>,
+    pub typing_indicators: HashMap<Uuid, (String, Instant)>,
+
     // SDK bridge
     pub sdk: Option<SyncBridge>,
     pub event_rx: Option<mpsc::Receiver<SdkEvent>>,
@@ -143,6 +149,9 @@ impl App {
 
             info_selected_peer: 0,
             info_show_fingerprint: false,
+
+            last_typing_sent: None,
+            typing_indicators: HashMap::new(),
 
             sdk: None,
             event_rx: None,
@@ -799,6 +808,8 @@ impl App {
                     self.screen = Screen::ConversationInfo;
                 } else {
                     self.message_input.push(c);
+                    // Send typing indicator with 3-second cooldown
+                    self.maybe_send_typing_indicator();
                 }
             }
             KeyCode::Backspace => {
@@ -814,6 +825,22 @@ impl App {
                 // No-op in input mode (already at bottom)
             }
             _ => {}
+        }
+    }
+
+    /// Send a typing indicator if the 3-second cooldown has expired.
+    fn maybe_send_typing_indicator(&mut self) {
+        let now = Instant::now();
+        let should_send = self
+            .last_typing_sent
+            .map(|t| now.duration_since(t).as_secs() >= 3)
+            .unwrap_or(true);
+
+        if should_send {
+            if let (Some(conv_id), Some(sdk)) = (self.current_conversation, &self.sdk) {
+                let _ = sdk.send_typing_indicator(conv_id);
+            }
+            self.last_typing_sent = Some(now);
         }
     }
 
@@ -862,6 +889,11 @@ impl App {
         for event in events {
             self.handle_sdk_event(event);
         }
+
+        // Clean up expired typing indicators (older than 5 seconds)
+        let now = Instant::now();
+        self.typing_indicators
+            .retain(|_, (_, timestamp)| now.duration_since(*timestamp).as_secs() < 5);
     }
 
     fn handle_sdk_event(&mut self, event: SdkEvent) {
@@ -943,10 +975,20 @@ impl App {
                 }
             }
             SdkEvent::TypingIndicator {
-                conversation_id: _,
-                peer_id: _,
+                conversation_id,
+                peer_id,
             } => {
-                // TODO: show typing indicator in UI
+                // Look up peer name
+                let peer_name = self
+                    .conversations
+                    .iter()
+                    .find(|e| e.conversation.id == conversation_id)
+                    .and_then(|e| e.conversation.peers.iter().find(|p| p.id == peer_id))
+                    .map(|p| p.name())
+                    .unwrap_or_else(|| "Someone".into());
+
+                self.typing_indicators
+                    .insert(conversation_id, (peer_name, Instant::now()));
             }
             SdkEvent::ConnectionStateChanged(state) => {
                 self.status_message = Some(format!("Connection: {:?}", state));

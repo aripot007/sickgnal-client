@@ -147,6 +147,9 @@ export component ConversationLayout inherits VerticalBox {
                 placeholder-text: Chat.is_editing ? "Edit message..." : "Écrire un message...";
                 text: Chat.editing_text;
                 enabled: Chat.active_chat_id >= 0;
+                edited => {
+                    Chat.typing();
+                }
             }
 
             if Chat.is_editing: Button {

@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use clap::Parser;
 use slint::{Model, ModelRc, VecModel};
@@ -634,6 +635,38 @@ fn setup_chat_callbacks(
     {
         ui.global::<Chat>().on_add_member(move || {
             info!("Add member: not implemented yet");
+        });
+    }
+
+    // typing — send typing indicator with 3-second cooldown
+    {
+        let sdk = sdk.clone();
+        let conv_ids = conv_ids.clone();
+        let ui_weak = ui_weak.clone();
+        let rt = rt.clone();
+        let last_typing: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
+        ui.global::<Chat>().on_typing(move || {
+            let now = Instant::now();
+            let mut last = last_typing.lock().unwrap();
+            let should_send = last
+                .map(|t| now.duration_since(t).as_secs() >= 3)
+                .unwrap_or(true);
+
+            if should_send {
+                *last = Some(now);
+                drop(last);
+
+                let Some(ui) = ui_weak.upgrade() else { return };
+                let active = ui.global::<Chat>().get_active_chat_id();
+                let ids = conv_ids.lock().unwrap();
+                let Some(&conv_uuid) = ids.get(active as usize) else { return };
+                drop(ids);
+
+                let sdk = sdk.clone();
+                rt.spawn(async move {
+                    let _ = sdk.send_typing_indicator(conv_uuid).await;
+                });
+            }
         });
     }
 }
