@@ -1,12 +1,12 @@
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Flex, Layout, Rect},
+    layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::app::App;
+use crate::app::{App, SPINNER_FRAMES};
 
 const CARD_WIDTH: u16 = 16;
 const CARD_HEIGHT: u16 = 7;
@@ -156,10 +156,25 @@ pub fn draw(f: &mut Frame, app: &App) {
         f.render_widget(card_text, inner);
     }
 
-    // Bottom area: password input or help text
+    // Bottom area: password input, loading spinner, or help text
     let bottom_area = chunks[5];
 
-    if app.profile_password_mode {
+    if app.auth_loading {
+        // Show spinner while connecting after password entry
+        let frame = SPINNER_FRAMES[app.auth_spinner_tick % SPINNER_FRAMES.len()];
+        let spinner = Paragraph::new(Line::from(vec![
+            Span::styled(
+                format!("{frame} "),
+                Style::default().fg(Color::Cyan),
+            ),
+            Span::styled(
+                "Signing in...",
+                Style::default().fg(Color::Yellow),
+            ),
+        ]))
+        .alignment(Alignment::Center);
+        f.render_widget(spinner, bottom_area);
+    } else if app.profile_password_mode {
         let profile = &app.profiles[app.selected_profile];
         let masked: String = "*".repeat(app.profile_password.len());
 

@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::app::{App, AuthField};
+use crate::app::{App, AuthField, AuthMode, SPINNER_FRAMES};
 
 pub fn draw(f: &mut Frame, app: &App) {
     let area = f.area();
@@ -28,8 +28,14 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     let form_area = horiz[1];
 
+    let title = if app.auth_mode == AuthMode::SignIn {
+        " Sign In "
+    } else {
+        " Create Account "
+    };
+
     let block = Block::default()
-        .title(" Create Account ")
+        .title(title)
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan));
@@ -161,11 +167,23 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     // Error or loading or help
     if app.auth_loading {
+        let frame = SPINNER_FRAMES[app.auth_spinner_tick % SPINNER_FRAMES.len()];
+        let label = if app.auth_mode == AuthMode::SignIn {
+            "Signing in"
+        } else {
+            "Creating account"
+        };
         f.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                "Connecting...",
-                Style::default().fg(Color::Yellow),
-            )))
+            Paragraph::new(Line::from(vec![
+                Span::styled(
+                    format!("{frame} "),
+                    Style::default().fg(Color::Cyan),
+                ),
+                Span::styled(
+                    format!("{label}..."),
+                    Style::default().fg(Color::Yellow),
+                ),
+            ]))
             .alignment(Alignment::Center),
             chunks[idx],
         );
@@ -179,10 +197,11 @@ pub fn draw(f: &mut Frame, app: &App) {
             chunks[idx],
         );
     } else {
-        let hint = if app.profiles.is_empty() {
-            "Enter to create account"
-        } else {
-            "Enter to create account | Esc to go back"
+        let hint = match (app.auth_mode, app.profiles.is_empty()) {
+            (AuthMode::SignIn, true) => "Enter to sign in",
+            (AuthMode::SignIn, false) => "Enter to sign in | Esc to go back",
+            (AuthMode::SignUp, true) => "Enter to create account",
+            (AuthMode::SignUp, false) => "Enter to create account | Esc to go back",
         };
         f.render_widget(
             Paragraph::new(Line::from(Span::styled(
