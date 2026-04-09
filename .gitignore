@@ -5,3 +5,4 @@ tui_storage
 *.db-shm
 *.db-wal
 log.txt
+storage.salt
