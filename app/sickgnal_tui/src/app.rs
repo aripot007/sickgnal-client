@@ -511,21 +511,33 @@ impl App {
             KeyCode::Enter => {
                 if !self.conversations.is_empty() {
                     let entry = &self.conversations[self.selected_conversation];
-                    self.current_conversation = Some(entry.conversation.id);
+                    let conv_id = entry.conversation.id;
+                    self.current_conversation = Some(conv_id);
 
                     // Load messages
                     if let Some(ref sdk) = self.sdk {
-                        match sdk.get_messages(entry.conversation.id) {
+                        match sdk.get_messages(conv_id) {
                             Ok(msgs) => self.messages = msgs,
                             Err(e) => {
                                 error!("Failed to load messages: {e}");
-                                self.status_message = Some(format!("Failed to load messages: {e}"));
+                                self.status_message =
+                                    Some(format!("Failed to load messages: {e}"));
                             }
                         }
                     }
 
+                    // Mark last message as read to clear unread count
+                    if let Some(last_msg) = self.messages.last() {
+                        if let Some(ref sdk) = self.sdk {
+                            let _ = sdk.mark_as_read(conv_id, last_msg.id);
+                        }
+                    }
+                    // Clear unread count in the entry
+                    self.conversations[self.selected_conversation].unread_messages_count = 0;
+
                     self.message_input.clear();
                     self.scroll_offset = 0;
+                    self.selected_message = None;
                     self.screen = Screen::Chat;
                 }
             }
@@ -813,8 +825,15 @@ impl App {
                 conversation_id,
                 msg,
             } => {
+                let msg_id = msg.id;
+
                 if self.current_conversation == Some(conversation_id) {
                     self.messages.push(msg);
+
+                    // Mark as read immediately since the conversation is open
+                    if let Some(ref sdk) = self.sdk {
+                        let _ = sdk.mark_as_read(conversation_id, msg_id);
+                    }
                 }
 
                 if let Some(entry) = self

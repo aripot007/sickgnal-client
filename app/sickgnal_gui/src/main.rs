@@ -208,8 +208,10 @@ fn spawn_sdk(
         while let Some(event) = event_rx.recv().await {
             let ui_weak = ui_weak.clone();
             let conv_ids = conv_ids.clone();
+            let sdk = sdk.clone();
+            let rt_handle = tokio::runtime::Handle::current();
             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                handle_sdk_event(&ui, event, my_id, &conv_ids);
+                handle_sdk_event(&ui, event, my_id, &conv_ids, &sdk, &rt_handle);
             });
         }
         warn!("SDK event channel closed");
@@ -259,6 +261,13 @@ fn setup_chat_callbacks(
             let chats = ui.global::<Chat>().get_chats();
             if let Some(mut conv) = chats.row_data(index as usize) {
                 conv.messages = ModelRc::new(VecModel::from(slint_msgs));
+
+                // Mark last message as read to clear unread count
+                if let Some(last_msg) = msgs.last() {
+                    let _ = sdk.mark_as_read(conv_uuid, last_msg.id);
+                }
+                conv.unread_count = 0;
+
                 chats.set_row_data(index as usize, conv);
             }
         });
@@ -481,6 +490,8 @@ fn handle_sdk_event(
     event: ChatEvent,
     my_id: Uuid,
     conv_ids: &Arc<Mutex<Vec<Uuid>>>,
+    sdk: &Sdk,
+    rt: &tokio::runtime::Handle,
 ) {
     match event {
         ChatEvent::MessageReceived {
@@ -493,13 +504,20 @@ fn handle_sdk_event(
             for i in 0..chats.row_count() {
                 if let Some(mut conv) = chats.row_data(i) {
                     if conv.id == conversation_id.to_string().as_str() {
+                        let msg_id = msg.id;
                         let slint_msg = message_to_slint(&msg, my_id);
                         append_message_to_conv(&mut conv, slint_msg);
 
                         conv.last_message = msg.content.clone().into();
                         conv.last_message_time = msg.issued_at.format("%H:%M").to_string().into();
 
-                        if i as i32 != active {
+                        if i as i32 == active {
+                            // Conversation is open — mark as read immediately
+                            let sdk = sdk.clone();
+                            rt.spawn(async move {
+                                let _ = sdk.mark_as_read(conversation_id, msg_id).await;
+                            });
+                        } else {
                             conv.unread_count += 1;
                         }
                         chats.set_row_data(i, conv);
