@@ -377,14 +377,6 @@ mod tests {
         let mut sqlite = Sqlite { conn };
         sqlite.initialize().unwrap();
 
-        let account = Account {
-            username: "PLACEHOLDER_USERNAME".into(),
-            id: Uuid::nil(),
-            token: "PLACEHOLDER_TOKEN".into(),
-        };
-
-        sqlite.set_account(&account).unwrap();
-
         Arc::new(Mutex::new(sqlite))
     }
 
