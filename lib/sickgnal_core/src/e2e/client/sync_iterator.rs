@@ -3,6 +3,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
+use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::{
@@ -133,7 +134,7 @@ where
                 .collect();
 
             // TODO: Better logging
-            println!(
+            warn!(
                 "Unknown keys for user {} : {}",
                 user_id,
                 &keys_strs.join(",")
@@ -143,7 +144,7 @@ where
         // Cleanup old session keys
         for user_id in self.session_keys.keys() {
             if let Err(err) = self.e2e_client.state.clean_session_keys(user_id) {
-                println!("Could not clean keys for user {} : {}", user_id, err);
+                error!("Could not clean keys for user {} : {}", user_id, err);
             }
         }
 
@@ -223,7 +224,7 @@ where
                     self.process_conversation_message(sender_id, msg_ciphertext, &mut queue)
                         .await
                 }
-                _ => println!("Unexpected message : {:?}", msg),
+                _ => error!("Unexpected message : {:?}", msg),
             };
         }
     }
@@ -247,13 +248,13 @@ where
             Ok(PayloadMessage::ChatMessage(m)) => m,
 
             Ok(PayloadMessage::E2EMessage(m)) => {
-                println!("Invalid opening payload : {:?}", m);
+                warn!("Invalid opening payload : {:?}", m);
                 return;
             }
 
             // TODO: Better error logging
             Err(e) => {
-                println!("Error opening conversation : {}", e);
+                error!("Error opening conversation : {}", e);
                 return;
             }
         };
@@ -262,7 +263,7 @@ where
             m.kind,
             ChatMessageKind::Ctrl(ControlMessage::OpenConv { .. })
         ) {
-            println!("Unexpected first session message : {:?}", m);
+            warn!("Unexpected first session message : {:?}", m);
             return;
         }
 
@@ -304,7 +305,7 @@ where
             session_keys = &keys.keys;
         } else {
             // TODO: Better logging
-            println!("No session with user {}", sender_id);
+            warn!("No session with user {}", sender_id);
             return;
         }
 
@@ -339,7 +340,7 @@ where
                 Ok(PayloadMessage::E2EMessage(m)) => queue.push_front(m),
 
                 // TODO: Better logging
-                Err(e) => println!("Error decrypting ciphertext : {}", e),
+                Err(e) => error!("Error decrypting ciphertext : {}", e),
             }
             return;
         }
@@ -382,7 +383,7 @@ where
             Some(k) => k,
             None => {
                 // TODO: Better logging
-                println!("Trying to rotate key for an unknown session {}", sender_id);
+                error!("Trying to rotate key for an unknown session {}", sender_id);
                 return;
             }
         };
@@ -392,7 +393,7 @@ where
             Some(k) => k,
             None => {
                 // TODO: Better logging
-                println!("Unknown previous key {}", previous_key_id);
+                error!("Unknown previous key {}", previous_key_id);
                 return;
             }
         };
@@ -409,11 +410,11 @@ where
 
             if let Err(err) = self.e2e_client.state.update_session(sess) {
                 // TODO: Better logging
-                println!("Error saving new session state : {}", err);
+                error!("Error saving new session state : {}", err);
             }
         } else {
             // TODO: Better logging
-            println!(
+            error!(
                 "Could not update session : no session for user {}",
                 sender_id
             );

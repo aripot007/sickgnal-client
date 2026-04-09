@@ -16,6 +16,7 @@ use crate::{
     },
 };
 use tokio::sync::mpsc;
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 struct ReceiveWorker<R, S>
@@ -80,11 +81,13 @@ where
 
     /// Main worker loop
     async fn main_loop(&mut self) {
+        info!("Started receiver");
+
         'main: loop {
             // Process queued messages
             while let Some(msg) = self.queue.pop_front() {
                 if let Err(e) = self.process_message(msg).await {
-                    println!("Error processing message : {}", e);
+                    error!("Error processing message : {}", e);
                     break 'main;
                 }
             }
@@ -92,7 +95,7 @@ where
             let packet = match self.reader.receive().await {
                 Ok(packet) => packet,
                 Err(err) => {
-                    println!("Reader error : {}", err);
+                    error!("Reader error : {}", err);
                     break;
                 }
             };
@@ -108,7 +111,7 @@ where
 
                 if let Some(channel) = waiting_channel {
                     if channel.send(packet.message).is_err() {
-                        println!(
+                        warn!(
                             "Response channel for packet {} closed, discarding packet",
                             packet.request_id
                         );
@@ -116,7 +119,7 @@ where
                     continue;
                 } else {
                     // If no channel waiting for this packet, log and dispatch normally
-                    println!(
+                    warn!(
                         "No response channel for tagged packet {}",
                         packet.request_id
                     );
@@ -127,13 +130,13 @@ where
 
             // Stop worker on error
             if let Err(e) = res {
-                println!("Error processing message : {}", e);
+                error!("Error processing message : {}", e);
                 break;
             }
         }
 
         // TODO: Clean shutdown / send error to client ?
-        println!("Stopping receiver");
+        info!("Stopping receiver");
         self.shutdown();
     }
 
@@ -169,7 +172,7 @@ where
 
             // Drop unexpected messages with log
             m => {
-                println!("Dropping unexpected message : {:?}", m);
+                warn!("Dropping unexpected message : {:?}", m);
                 Ok(())
             }
         }
@@ -205,7 +208,7 @@ where
             m.kind,
             ChatMessageKind::Ctrl(ControlMessage::OpenConv { .. })
         ) {
-            println!("Unexpected first session message : {:?}", m);
+            warn!("Unexpected first session message : {:?}", m);
             return Ok(());
         }
 
@@ -265,7 +268,7 @@ where
             }
 
             // TODO: Better logging
-            Err(e) => println!("Error decrypting ciphertext : {}", e),
+            Err(e) => error!("Error decrypting ciphertext : {}", e),
         };
 
         Ok(())

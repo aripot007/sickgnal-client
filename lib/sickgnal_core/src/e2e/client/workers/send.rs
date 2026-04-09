@@ -1,4 +1,5 @@
 use tokio::sync::mpsc;
+use tracing::{error, info};
 
 use crate::e2e::{message::E2EPacket, message_stream::E2EMessageWriter};
 
@@ -9,6 +10,8 @@ pub async fn send_loop<W>(mut writer: W, mut channel_out: mpsc::Receiver<E2EPack
 where
     W: E2EMessageWriter,
 {
+    info!("Starting sending worker");
+
     loop {
         let msg = match channel_out.recv().await {
             Some(msg) => msg,
@@ -18,10 +21,10 @@ where
         };
 
         if let Err(e) = writer.send(msg).await {
-            println!("Error sending message : {}", e);
+            error!("Error sending message : {}", e);
             break;
         }
     }
 
-    println!("Stopping sending worker");
+    info!("Stopping sending worker");
 }
