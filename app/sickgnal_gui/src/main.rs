@@ -8,6 +8,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use sickgnal_core::chat::client::ChatEvent;
+use sickgnal_core::chat::message::Content;
 use sickgnal_core::chat::storage::{Message, MessageStatus};
 use sickgnal_sdk::TlsConfig;
 use sickgnal_sdk::account::AccountFile;
@@ -231,7 +232,7 @@ fn setup_chat_callbacks(
 ) {
     // switch_conversation
     {
-        let sdk = sdk.clone();
+        let mut sdk = sdk.clone();
         let conv_ids = conv_ids.clone();
         let ui_weak = ui_weak.clone();
         ui.global::<Chat>().on_switch_conversation(move |index| {
@@ -494,12 +495,12 @@ fn setup_chat_callbacks(
                     Err(_) => return,
                 };
 
-                let sdk = sdk.clone();
+                let mut sdk = sdk.clone();
                 let ui_weak = ui_weak.clone();
                 let new_text = new_text.to_string();
                 rt.spawn(async move {
                     match sdk
-                        .edit_message(conv_uuid, msg_uuid, new_text.clone())
+                        .edit_message(conv_uuid, msg_uuid, Content::Text(new_text.clone()))
                         .await
                     {
                         Ok(()) => {
@@ -549,7 +550,7 @@ fn setup_chat_callbacks(
                 Err(_) => return,
             };
 
-            let sdk = sdk.clone();
+            let mut sdk = sdk.clone();
             let ui_weak = ui_weak.clone();
             rt.spawn(async move {
                 match sdk.delete_message(conv_uuid, msg_uuid).await {
@@ -705,7 +706,7 @@ fn handle_sdk_event(
 
                         if i as i32 == active {
                             // Conversation is open — mark as read immediately
-                            let sdk = sdk.clone();
+                            let mut sdk = sdk.clone();
                             rt.spawn(async move {
                                 let _ = sdk.mark_as_read(conversation_id, msg_id).await;
                             });

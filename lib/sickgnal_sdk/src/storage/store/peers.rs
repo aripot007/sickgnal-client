@@ -1,3 +1,4 @@
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use rusqlite::params;
 use sickgnal_core::e2e::peer::Peer;
 use uuid::Uuid;
@@ -12,7 +13,7 @@ impl Store<Peer> for PeerStore {
     const SCHEMA: &str = r#"
         id TEXT PRIMARY KEY NOT NULL,
         username TEXT,
-        fingerprint BLOB
+        fingerprint TEXT
     "#;
 
     const POST_CREATE_SQL: &str = r#"
@@ -26,6 +27,8 @@ impl Store<Peer> for PeerStore {
 
 impl PeerStore {
     pub fn persist(conn: &rusqlite::Connection, val: &Peer) -> Result<()> {
+        let fp_b64 = val.fingerprint.as_ref().map(|b| BASE64.encode(b));
+
         let mut stmt = conn.prepare_cached(
             r#"
                 INSERT INTO peers (
@@ -38,7 +41,7 @@ impl PeerStore {
             "#,
         )?;
 
-        stmt.execute(params![val.id.to_string(), val.username, val.fingerprint])?;
+        stmt.execute(params![val.id.to_string(), val.username, fp_b64])?;
 
         Ok(())
     }
@@ -48,10 +51,12 @@ impl PeerStore {
             "SELECT username, fingerprint FROM peers WHERE id = ?1",
             [id.to_string()],
             |r| {
+                let fp_b64: Option<String> = r.get(1)?;
+                let fingerprint = fp_b64.and_then(|s| BASE64.decode(s).ok());
                 Ok(Some(Peer {
                     id,
                     username: r.get(0)?,
-                    fingerprint: r.get(1)?,
+                    fingerprint,
                 }))
             },
         );

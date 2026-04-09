@@ -122,15 +122,10 @@ pub fn draw(f: &mut Frame, app: &App) {
             ),
         ])
     } else {
-        let status = app.status_message.as_deref().unwrap_or("");
-
-        Line::from(vec![
-            Span::styled(
-                " n: new | Enter: open | d: delete | q: quit",
-                Style::default().fg(Color::DarkGray),
-            ),
-            Span::styled(format!("  {}", status), Style::default().fg(Color::Green)),
-        ])
+        Line::from(vec![Span::styled(
+            " n: new | Enter: open | d: delete | q: quit",
+            Style::default().fg(Color::DarkGray),
+        )])
     };
 
     let status_bar = Paragraph::new(help_text).block(

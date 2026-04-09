@@ -26,8 +26,8 @@ impl Store<Message> for MessageStore {
         status TEXT NOT NULL CHECK (status IN ('sending', 'sent', 'delivered', 'read', 'failed')),               -- 'sending', 'sent', 'delivered', 'read', 'failed'
         reply_to_id TEXT,                   -- ID of message being replied to (may reference remote messages)
         
-        PRIMARY KEY (id, conversation_id)
-        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+        PRIMARY KEY (id, conversation_id),
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
         FOREIGN KEY (sender_id) REFERENCES peers(id)
     "#;
 
@@ -113,7 +113,7 @@ impl MessageStore {
                     content,
                     timestamp,
                     status,
-                    reply_to_id,
+                    reply_to_id
                 FROM messages
                 WHERE id = ?1 AND conversation_id = ?2
             "#,

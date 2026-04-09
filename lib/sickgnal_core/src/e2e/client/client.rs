@@ -31,6 +31,7 @@ use crate::{
         keys::{E2EStorageBackend, EphemeralSecretKey, X25519Secret},
         message::{E2EMessage, EphemeralKey, ErrorCode, SignedPreKey},
         message_stream::E2EMessageStream,
+        peer::Peer,
     },
 };
 
@@ -127,6 +128,14 @@ where
         };
 
         storage.set_account(&account)?;
+
+        let account_peer = Peer {
+            id: account.id,
+            username: Some(account.username.clone()),
+            fingerprint: Some(Vec::from(idk.public_keys().fingerprint())),
+        };
+
+        storage.save_peer(&account_peer)?;
 
         let state = E2EClientState::new(account, storage, rng, HashMap::new());
 

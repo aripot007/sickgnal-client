@@ -36,7 +36,11 @@ impl SdkClient<Arc<Mutex<Sqlite>>> {
         let (event_tx, event_rx) = mpsc::channel(32);
 
         let storage_config = Config::new(db_path, password, None)?;
-        let storage = Arc::new(Mutex::new(Sqlite::new(storage_config)?));
+        let mut storage = Sqlite::new(storage_config)?;
+
+        storage.initialize()?;
+
+        let storage = Arc::new(Mutex::new(storage));
 
         let transport = connect_transport(server_addr, tls_config).await?;
         let msg_stream = RawJsonMessageStream::new(transport);
@@ -54,8 +58,6 @@ impl SdkClient<Arc<Mutex<Sqlite>>> {
     ) -> Result<Self> {
         let (storage, msg_stream, event_tx, event_rx) =
             Self::init(db_path, password, server_addr, tls_config).await?;
-
-        storage.lock().unwrap().initialize()?;
 
         let client_builder =
             ClientBuilder::create_account(username, storage.clone(), msg_stream, event_tx).await?;
