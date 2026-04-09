@@ -98,18 +98,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     // ── Fingerprint area ──
     let fingerprint_content = if app.info_show_fingerprint {
         if let Some(peer) = peers.get(app.info_selected_peer) {
-            let fp = app
-                .sdk
-                .as_ref()
-                .map(|sdk| sdk.get_peer_fingerprint(peer.id))
-                .unwrap_or_default();
-
-            // Format fingerprint in groups of 4 hex chars
-            let grouped: Vec<&str> = fp
-                .as_bytes()
-                .chunks(4)
-                .map(|c| std::str::from_utf8(c).unwrap_or(""))
-                .collect();
+            let fp = peer.format_fingerprint();
 
             vec![
                 Line::from(vec![Span::styled(
@@ -117,7 +106,7 @@ pub fn draw(f: &mut Frame, app: &App) {
                     Style::default().fg(Color::DarkGray),
                 )]),
                 Line::from(vec![Span::styled(
-                    format!("  {}", grouped.join(" ")),
+                    format!("  {}", fp),
                     Style::default().fg(Color::Yellow),
                 )]),
             ]

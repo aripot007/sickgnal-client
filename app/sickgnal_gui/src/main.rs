@@ -599,20 +599,10 @@ fn setup_chat_callbacks(
                         full_conv
                             .peers
                             .iter()
-                            .map(|p| {
-                                let fp = sdk.get_peer_fingerprint(p.id);
-                                // Format fingerprint in groups of 4
-                                let fp_formatted: String = fp
-                                    .as_bytes()
-                                    .chunks(4)
-                                    .map(|c| std::str::from_utf8(c).unwrap_or(""))
-                                    .collect::<Vec<_>>()
-                                    .join(" ");
-                                PeerData {
-                                    id: p.id.to_string()[..8].into(),
-                                    name: p.name().into(),
-                                    fingerprint: fp_formatted.into(),
-                                }
+                            .map(|p| PeerData {
+                                id: p.id.to_string()[..8].into(),
+                                name: p.name().into(),
+                                fingerprint: p.format_fingerprint().into(),
                             })
                             .collect()
                     } else {
@@ -676,7 +666,7 @@ fn setup_chat_callbacks(
                 };
                 drop(ids);
 
-                let sdk = sdk.clone();
+                let mut sdk = sdk.clone();
                 rt.spawn(async move {
                     let _ = sdk.send_typing_indicator(conv_uuid).await;
                 });

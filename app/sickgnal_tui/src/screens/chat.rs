@@ -22,7 +22,6 @@ pub fn draw(f: &mut Frame, app: &App) {
         Constraint::Length(3), // Header with conversation name
         Constraint::Min(1),    // Messages area
         Constraint::Length(if typing_text.is_some() { 1 } else { 0 }), // Typing indicator
-        Constraint::Length(if typing_text.is_some() { 1 } else { 0 }), // Typing indicator
         Constraint::Length(3), // Input area
     ])
     .split(area);
@@ -32,31 +31,21 @@ pub fn draw(f: &mut Frame, app: &App) {
         .current_conversation
         .and_then(|cid| app.conversations.iter().find(|e| e.conversation.id == cid))
         .map(|entry| {
-            let peer_id = entry
+            let fp = entry
                 .conversation
                 .peers
                 .first()
-                .map(|p| p.id)
-                .unwrap_or_default();
-            let fp = app
-                .sdk
-                .as_ref()
-                .map(|sdk| sdk.get_peer_fingerprint(peer_id))
+                .map(|p| p.format_fingerprint())
                 .unwrap_or_default();
             (entry.conversation.title.clone(), fp)
         })
         .unwrap_or_else(|| ("Chat".into(), String::new()));
 
-    // Format fingerprint for display (groups of 4 hex chars)
-    let fp_display = if fingerprint.is_empty() {
+    // Format fingerprint for display
+    let fp_display = if fingerprint.is_empty() || fingerprint == "no fingerprint" {
         String::new()
     } else {
-        let grouped: Vec<&str> = fingerprint
-            .as_bytes()
-            .chunks(4)
-            .map(|c| std::str::from_utf8(c).unwrap_or(""))
-            .collect();
-        format!("  [{}]", grouped.join(" "))
+        format!("  [{}]", fingerprint)
     };
 
     // Header
