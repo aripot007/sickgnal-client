@@ -101,10 +101,36 @@ impl Sdk {
     ) -> Result<Conversation> {
         let conv = self
             .chat_client
-            .create_conversation(user_id, initial_message)
+            .create_conversation(vec![user_id], initial_message)
             .await?;
 
         Ok(conv)
+    }
+
+    /// Start a new group conversation
+    pub async fn start_group_conversation(
+        &mut self,
+        peers: Vec<Uuid>,
+        initial_message: Option<Content>,
+    ) -> Result<Conversation> {
+        let conv = self
+            .chat_client
+            .create_conversation(peers, initial_message)
+            .await?;
+
+        Ok(conv)
+    }
+
+    /// Add a peer to an existing conversation
+    pub async fn add_peer_to_conversation(
+        &mut self,
+        conversation_id: Uuid,
+        peer_id: Uuid,
+    ) -> Result<()> {
+        self.chat_client
+            .add_peer_to_conversation(conversation_id, peer_id)
+            .await?;
+        Ok(())
     }
 
     /// Delete a conversation and all its messages.

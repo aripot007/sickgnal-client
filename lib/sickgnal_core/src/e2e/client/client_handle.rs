@@ -42,42 +42,6 @@ where
         self.client_state.lock().unwrap().account.clone()
     }
 
-    /// Get a user's profile by its id
-    pub async fn get_profile_by_id(&mut self, id: Uuid) -> Result<UserProfile> {
-        // Try to get the profile from the db first
-        if let Some(peer) = self.storage.peer(&id)? {
-            if let Some(username) = peer.username {
-                return Ok(UserProfile { id, username });
-            }
-        }
-
-        let rq;
-        {
-            let state = self.client_state.lock().unwrap();
-
-            rq = E2EMessage::UserProfileById {
-                token: state.token().clone(),
-                id,
-            };
-        }
-
-        let profile = match self.request(rq).await? {
-            E2EMessage::UserProfile(profile) => profile,
-            m => return Err(Error::UnexpectedE2EMessage(m)),
-        };
-
-        // Save the peer in the database
-        let peer = Peer {
-            id,
-            username: Some(profile.username.clone()),
-            fingerprint: None,
-        };
-
-        self.storage.save_peer(&peer)?;
-
-        Ok(profile)
-    }
-
     /// Get a user's profile by its username
     pub async fn get_profile_by_username(&mut self, username: String) -> Result<UserProfile> {
         // Try to get the profile from the db first
@@ -199,5 +163,40 @@ where
         }
 
         Ok(())
+    }
+
+    async fn get_profile_by_id(&mut self, id: Uuid) -> Result<UserProfile> {
+        // Try to get the profile from the db first
+        if let Some(peer) = self.storage.peer(&id)? {
+            if let Some(username) = peer.username {
+                return Ok(UserProfile { id, username });
+            }
+        }
+
+        let rq;
+        {
+            let state = self.client_state.lock().unwrap();
+
+            rq = E2EMessage::UserProfileById {
+                token: state.token().clone(),
+                id,
+            };
+        }
+
+        let profile = match self.request(rq).await? {
+            E2EMessage::UserProfile(profile) => profile,
+            m => return Err(Error::UnexpectedE2EMessage(m)),
+        };
+
+        // Save the peer in the database
+        let peer = Peer {
+            id,
+            username: Some(profile.username.clone()),
+            fingerprint: None,
+        };
+
+        self.storage.save_peer(&peer)?;
+
+        Ok(profile)
     }
 }

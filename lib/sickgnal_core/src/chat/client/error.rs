@@ -33,6 +33,10 @@ pub enum Error {
     /// When there is an error sending an event message on the event channel
     #[error("event channel closed")]
     EventChannelClosed,
+
+    /// When we try to create a conversation without any peer
+    #[error("cannot create conversation with no peers")]
+    EmptyConversation,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

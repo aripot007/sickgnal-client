@@ -15,6 +15,12 @@ pub enum ChatEvent {
     },
     /// A new conversation was created by a peer
     ConversationCreatedByPeer(Conversation),
+
+    /// A peer was added to a conversation
+    PeerAddedToConversation {
+        conversation_id: Uuid,
+        peer_id: Uuid,
+    },
     /// A conversation was deleted.
     ConversationDeleted(Uuid),
     /// A message was edited by the peer.

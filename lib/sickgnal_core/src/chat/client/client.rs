@@ -16,7 +16,6 @@ use crate::{
         client::{ChatMessageSender, client_handle::ClientHandle},
         message::UserProfile,
         message_stream::E2EMessageStream,
-        peer::Peer,
     },
 };
 
@@ -124,14 +123,17 @@ where
             .map_err(Error::from)
     }
 
-    /// Create a new conversation with a peer
+    /// Create a new conversation with one or more peers
     ///
     /// Returns the created conversation
     pub async fn create_conversation(
         &mut self,
-        peer_id: Uuid,
+        peers: Vec<Uuid>,
         initial_message: Option<Content>,
     ) -> Result<Conversation> {
+        if peers.is_empty() {
+            return Err(Error::EmptyConversation);
+        }
         // FIXME: Created conversations might appear at the end since there is no message
 
         let info = ConversationInfo {
@@ -145,7 +147,11 @@ where
             content,
         });
 
-        let rq = ChatMessage::new_open_conv(info.id, initial_message.clone());
+        let rq = if peers.len() == 1 {
+            ChatMessage::new_open_conv(info.id, initial_message.clone())
+        } else {
+            ChatMessage::new_open_group_conv(info.id, initial_message.clone(), peers.clone())
+        };
 
         // First message of the conversation that should be saved
         // when the conversation is opened
@@ -159,21 +165,22 @@ where
             )
         });
 
-        self.e2e_client.send(peer_id, rq).await?;
+        for peer_id in &peers {
+            self.e2e_client.send(*peer_id, rq.clone()).await?;
+        }
 
-        self.storage.create_conversation(&info, peer_id)?;
+        self.storage
+            .create_group_conversation(&info, peers.iter())?;
 
         // Save the initial message if there was one
         if let Some(msg) = first_msg {
             self.storage.save_message(&msg)?;
         }
 
-        let peer = self
+        let conv = self
             .storage
-            .peer(&peer_id)?
-            .unwrap_or(Peer::default(peer_id));
-
-        let conv = Conversation::from_info(info, vec![peer]);
+            .get_conversation(&info.id)?
+            .expect("conversation should exist");
 
         Ok(conv)
     }
@@ -188,7 +195,7 @@ where
         let chat_msg = ChatMessage::new_content_reply(conversation_id, content, reply_to)
             .with_sender_id(self.account_id);
 
-        let mut msg_dto = Message::from_message_unchecked(chat_msg.clone());
+        let mut msg_dto = Message::from_message_unchecked(&chat_msg);
 
         self.storage.save_message(&msg_dto)?;
 
@@ -270,6 +277,30 @@ where
             ChatMessage::new_edit_content(conv_id, msg_id, new_content),
         )
         .await?;
+
+        Ok(())
+    }
+
+    pub async fn add_peer_to_conversation(&mut self, conv_id: Uuid, peer_id: Uuid) -> Result<()> {
+        let peers = self
+            .storage
+            .get_conversation_peers(&conv_id)?
+            .ok_or(Error::ConversationNotFound(conv_id))?
+            .iter()
+            .map(|p| p.id)
+            .collect();
+
+        self.e2e_client
+            .send(
+                peer_id,
+                ChatMessage::new_open_group_conv(conv_id, None, peers),
+            )
+            .await?;
+
+        self.dispatch_in_conversation(conv_id, ChatMessage::new_add_peer_to_conv(conv_id, peer_id))
+            .await?;
+
+        self.storage.add_peer_to_conversation(&conv_id, &peer_id)?;
 
         Ok(())
     }
@@ -370,8 +401,11 @@ async fn handle_new_conversation<S: StorageBackend>(
     conversation_id: Uuid,
     msg: ChatMessageKind,
 ) -> Result<()> {
-    let initial_msg = match msg {
-        ChatMessageKind::Ctrl(ControlMessage::OpenConv { initial_message }) => initial_message,
+    let (initial_msg, other_peers) = match msg {
+        ChatMessageKind::Ctrl(ControlMessage::OpenConv {
+            initial_message,
+            other_peers,
+        }) => (initial_message, other_peers),
         _ => {
             warn!(
                 "discarding invalid message for new conversation (peer_id={}, conv_id={})",
@@ -381,6 +415,16 @@ async fn handle_new_conversation<S: StorageBackend>(
             return Ok(());
         }
     };
+
+    // Resolve unknown peers if necessary
+    for id in other_peers {
+        let res = e2e_client.get_profile_by_id(id).await;
+        match res {
+            Ok(_) => (),
+            Err(crate::e2e::client::Error::UserNotFound) => warn!("could not resolve peer {}", id),
+            Err(err) => return Err(err.into()),
+        }
+    }
 
     // Create the conversation
     let conv = ConversationInfo {
@@ -467,6 +511,17 @@ async fn handle_control_message<S: StorageBackend>(
                 "discarding OpenConv message in existing conversation {} (from peer {})",
                 conversation_id, sender_id
             );
+        }
+        ControlMessage::AddPeerToConv { id } => {
+            storage.add_peer_to_conversation(&conversation_id, &id)?;
+            emit(
+                event_tx,
+                ChatEvent::PeerAddedToConversation {
+                    conversation_id,
+                    peer_id: id,
+                },
+            )
+            .await?;
         }
         ControlMessage::DeleteMsg { id } => {
             let msg = match storage.get_message(&conversation_id, &id)? {
