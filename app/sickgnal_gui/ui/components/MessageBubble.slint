@@ -74,20 +74,80 @@ component RMessageBubble inherits BubbleBase {
     radius-right: 0px;
 }
 
-export component MessageBubble inherits HorizontalLayout {
+export component MessageBubble inherits Rectangle {
+    in property <string> id;
     in property <string> text;
     in property <string> time;
     in property <string> status;
     in property <bool> is-me;
 
-    if (root.is-me): RMessageBubble {
-        text: root.text;
-        time: root.time;
-        status: root.status;
+    callback edit_requested(/* msg_id */ string);
+    callback delete_requested(/* msg_id */ string);
+
+    hover := TouchArea {
+        mouse-cursor: default;
     }
-    if (!root.is-me): LMessageBubble {
-        text: root.text;
-        time: root.time;
-        status: root.status;
+
+    HorizontalLayout {
+        if (root.is-me): HorizontalLayout {
+            alignment: end;
+            spacing: 4px;
+
+            // Action buttons (visible on hover, only for own messages)
+            if (hover.has-hover): HorizontalLayout {
+                alignment: center;
+                spacing: 2px;
+                padding-right: 4px;
+
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 12px;
+                    background: edit-touch.has-hover ? Theme.surface-hover : transparent;
+
+                    edit-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.edit_requested(root.id); }
+                    }
+                    Text {
+                        text: "✎";
+                        font-size: 12px;
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 12px;
+                    background: del-touch.has-hover ? Theme.surface-hover : transparent;
+
+                    del-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.delete_requested(root.id); }
+                    }
+                    Text {
+                        text: "✕";
+                        font-size: 12px;
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            RMessageBubble {
+                text: root.text;
+                time: root.time;
+                status: root.status;
+            }
+        }
+        if (!root.is-me): LMessageBubble {
+            text: root.text;
+            time: root.time;
+            status: root.status;
+        }
     }
 }

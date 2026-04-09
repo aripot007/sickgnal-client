@@ -356,6 +356,122 @@ fn setup_chat_callbacks(
             // TODO: implement a dialog/input for peer username
         });
     }
+
+    // start_edit — populate editing state from Slint
+    {
+        let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_start_edit(move |msg_id, text| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            ui.global::<Chat>().set_is_editing(true);
+            ui.global::<Chat>().set_editing_message_id(msg_id);
+            ui.global::<Chat>().set_editing_text(text);
+        });
+    }
+
+    // cancel_edit
+    {
+        let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_cancel_edit(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            ui.global::<Chat>().set_is_editing(false);
+            ui.global::<Chat>().set_editing_message_id("".into());
+            ui.global::<Chat>().set_editing_text("".into());
+        });
+    }
+
+    // edit_message — call SDK to edit, then update Slint model
+    {
+        let sdk = sdk.clone();
+        let conv_ids = conv_ids.clone();
+        let ui_weak = ui_weak.clone();
+        let rt = rt.clone();
+        ui.global::<Chat>().on_edit_message(move |msg_id, new_text| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+
+            let active = ui.global::<Chat>().get_active_chat_id();
+            let ids = conv_ids.lock().unwrap();
+            let Some(&conv_uuid) = ids.get(active as usize) else { return };
+            drop(ids);
+
+            let msg_uuid = match Uuid::parse_str(msg_id.as_str()) {
+                Ok(u) => u,
+                Err(_) => return,
+            };
+
+            let sdk = sdk.clone();
+            let ui_weak = ui_weak.clone();
+            let new_text = new_text.to_string();
+            rt.spawn(async move {
+                match sdk.edit_message(conv_uuid, msg_uuid, new_text.clone()).await {
+                    Ok(()) => {
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            // Update the message in the Slint model
+                            let chats = ui.global::<Chat>().get_chats();
+                            let active = ui.global::<Chat>().get_active_chat_id();
+                            if let Some(mut conv) = chats.row_data(active as usize) {
+                                update_message_text(&mut conv, msg_uuid, &new_text);
+                                chats.set_row_data(active as usize, conv);
+                            }
+                            // Clear editing state
+                            ui.global::<Chat>().set_is_editing(false);
+                            ui.global::<Chat>().set_editing_message_id("".into());
+                            ui.global::<Chat>().set_editing_text("".into());
+                        });
+                    }
+                    Err(e) => {
+                        error!("Failed to edit message: {e}");
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            show_error(&ui, &format!("Failed to edit message: {e}"));
+                        });
+                    }
+                }
+            });
+        });
+    }
+
+    // delete_message — call SDK to delete, then update Slint model
+    {
+        let sdk = sdk.clone();
+        let conv_ids = conv_ids.clone();
+        let ui_weak = ui_weak.clone();
+        let rt = rt.clone();
+        ui.global::<Chat>().on_delete_message(move |msg_id| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+
+            let active = ui.global::<Chat>().get_active_chat_id();
+            let ids = conv_ids.lock().unwrap();
+            let Some(&conv_uuid) = ids.get(active as usize) else { return };
+            drop(ids);
+
+            let msg_uuid = match Uuid::parse_str(msg_id.as_str()) {
+                Ok(u) => u,
+                Err(_) => return,
+            };
+
+            let sdk = sdk.clone();
+            let ui_weak = ui_weak.clone();
+            rt.spawn(async move {
+                match sdk.delete_message(conv_uuid, msg_uuid).await {
+                    Ok(()) => {
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            let chats = ui.global::<Chat>().get_chats();
+                            let active = ui.global::<Chat>().get_active_chat_id();
+                            if let Some(mut conv) = chats.row_data(active as usize) {
+                                update_message_text(&mut conv, msg_uuid, "[deleted]");
+                                chats.set_row_data(active as usize, conv);
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        error!("Failed to delete message: {e}");
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            show_error(&ui, &format!("Failed to delete message: {e}"));
+                        });
+                    }
+                }
+            });
+        });
+    }
 }
 
 // ─── SDK event handler ─────────────────────────────────────────────────────
