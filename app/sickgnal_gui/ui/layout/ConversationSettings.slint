@@ -1,0 +1,236 @@
+import {
+    VerticalBox,
+    HorizontalBox,
+    ScrollView,
+    LineEdit,
+} from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Chat } from "../models/Chat.slint";
+import { PeerData } from "../models/Peer.slint";
+import { Button } from "../components/Button.slint";
+
+component PeerItem inherits Rectangle {
+    in property <string> peer_name;
+    in property <string> peer_id;
+    in property <string> peer_fingerprint;
+
+    private property <bool> show_fp: false;
+
+    background: touch.has-hover ? Theme.surface-hover : transparent;
+    border-radius: 8px;
+    height: root.show_fp ? 70px : 44px;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.show_fp = !root.show_fp;
+        }
+    }
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 4px;
+
+        HorizontalLayout {
+            spacing: 8px;
+
+            // Avatar circle
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                border-radius: 14px;
+                background: Theme.primary;
+
+                Text {
+                    text: {
+                        // First letter of name
+                        root.peer_name != "" ? root.peer_name : "?"
+                    }
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: Theme.on-primary;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            VerticalLayout {
+                spacing: 2px;
+                alignment: center;
+                Text {
+                    text: root.peer_name;
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: Theme.text-main;
+                }
+            }
+
+            Rectangle { }
+
+            Text {
+                text: root.peer_id;
+                font-size: 11px;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+            }
+        }
+
+        if root.show_fp: Text {
+            text: "Fingerprint: " + root.peer_fingerprint;
+            font-size: 11px;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+    }
+}
+
+export component ConversationSettings inherits VerticalBox {
+    padding: 0;
+    spacing: 0;
+
+    // Header
+    Rectangle {
+        height: 50px;
+        background: Theme.background-light;
+        border-color: Theme.background-dark;
+
+        HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            spacing: 10px;
+            alignment: start;
+
+            Rectangle {
+                width: 32px;
+                height: 32px;
+                border-radius: 6px;
+                background: back-touch.has-hover ? Theme.surface-hover : transparent;
+
+                back-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        Chat.close_conversation_settings();
+                    }
+                }
+
+                Text {
+                    text: "←";
+                    font-size: 18px;
+                    color: Theme.text-main;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            Text {
+                text: "Conversation Info";
+                font-size: 18px;
+                font-weight: 600;
+                color: Theme.text-main;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    ScrollView {
+        VerticalBox {
+            padding: 20px;
+            spacing: 16px;
+
+            // Conversation name section
+            Rectangle {
+                background: Theme.surface;
+                border-radius: 10px;
+
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 10px;
+
+                    Text {
+                        text: "Name";
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: Theme.text-muted;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 10px;
+
+                        Text {
+                            text: Chat.current.name;
+                            font-size: 16px;
+                            color: Theme.text-main;
+                            vertical-alignment: center;
+                        }
+
+                        Rectangle { }
+
+                        Button {
+                            text: "Rename";
+                            btn_width: 70px;
+                            clicked => {
+                                Chat.rename_conversation("");
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Members section
+            Rectangle {
+                background: Theme.surface;
+                border-radius: 10px;
+
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 8px;
+
+                    Text {
+                        text: "Members (" + Chat.current_peers.length + ")";
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: Theme.text-muted;
+                    }
+
+                    for peer in Chat.current_peers: PeerItem {
+                        peer_name: peer.name;
+                        peer_id: peer.id;
+                        peer_fingerprint: peer.fingerprint;
+                    }
+
+                    // Add member placeholder
+                    Rectangle {
+                        height: 40px;
+                        border-radius: 8px;
+                        background: add-touch.has-hover ? Theme.surface-hover : transparent;
+
+                        add-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                Chat.add_member();
+                            }
+                        }
+
+                        HorizontalLayout {
+                            padding: 10px;
+                            spacing: 8px;
+
+                            Text {
+                                text: "+";
+                                font-size: 16px;
+                                color: Theme.primary;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: "Add member";
+                                font-size: 14px;
+                                color: Theme.primary;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

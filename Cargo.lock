@@ -4969,6 +4969,7 @@ name = "sickgnal_cli"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "clap",
  "sickgnal_core",
  "sickgnal_sdk",
  "slint",
@@ -5061,6 +5062,7 @@ name = "sickgnal_tui"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "clap",
  "crossterm",
  "ratatui",
  "sickgnal_core",

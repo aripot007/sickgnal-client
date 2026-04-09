@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
+use clap::Parser;
 use slint::{Model, ModelRc, VecModel};
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -13,10 +15,19 @@ use sickgnal_sdk::client::Sdk;
 use sickgnal_sdk::dto::ConversationEntry;
 slint::include_modules!();
 
+#[derive(Parser)]
+#[command(name = "sickgnal", about = "Sickgnal GUI client")]
+struct Args {
+    /// Directory for account storage
+    #[arg(long, default_value = "./storage")]
+    data_dir: PathBuf,
+}
+
 fn main() {
     tracing_subscriber::fmt::init();
 
-    let dir = PathBuf::from("./storage");
+    let args = Args::parse();
+    let dir = args.data_dir;
 
     let rt = Arc::new(tokio::runtime::Runtime::new().expect("Failed to create tokio runtime"));
 
@@ -198,8 +209,10 @@ fn spawn_sdk(
         while let Some(event) = event_rx.recv().await {
             let ui_weak = ui_weak.clone();
             let conv_ids = conv_ids.clone();
+            let sdk = sdk.clone();
+            let rt_handle = tokio::runtime::Handle::current();
             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                handle_sdk_event(&ui, event, my_id, &conv_ids);
+                handle_sdk_event(&ui, event, my_id, &conv_ids, &sdk, &rt_handle);
             });
         }
         warn!("SDK event channel closed");
@@ -249,6 +262,13 @@ fn setup_chat_callbacks(
             let chats = ui.global::<Chat>().get_chats();
             if let Some(mut conv) = chats.row_data(index as usize) {
                 conv.messages = ModelRc::new(VecModel::from(slint_msgs));
+
+                // Mark last message as read to clear unread count
+                if let Some(last_msg) = msgs.last() {
+                    let _ = sdk.mark_as_read(conv_uuid, last_msg.id);
+                }
+                conv.unread_count = 0;
+
                 chats.set_row_data(index as usize, conv);
             }
         });
@@ -339,11 +359,328 @@ fn setup_chat_callbacks(
         });
     }
 
-    // create_new_conversation
+    // create_new_conversation — opens the dialog
     {
+        let ui_weak = ui_weak.clone();
         ui.global::<Chat>().on_create_new_conversation(move || {
-            info!("Create new conversation requested");
-            // TODO: implement a dialog/input for peer username
+            let Some(ui) = ui_weak.upgrade() else { return };
+            ui.global::<Chat>().set_show_new_conversation_dialog(true);
+            ui.global::<Chat>().set_new_conversation_error("".into());
+        });
+    }
+
+    // cancel_new_conversation — closes the dialog
+    {
+        let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_cancel_new_conversation(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            ui.global::<Chat>().set_show_new_conversation_dialog(false);
+            ui.global::<Chat>().set_new_conversation_error("".into());
+        });
+    }
+
+    // confirm_new_conversation — resolve username, create conversation, close dialog
+    {
+        let sdk = sdk.clone();
+        let conv_ids = conv_ids.clone();
+        let ui_weak = ui_weak.clone();
+        let rt = rt.clone();
+        ui.global::<Chat>()
+            .on_confirm_new_conversation(move |username| {
+                let mut sdk = sdk.clone();
+                let conv_ids = conv_ids.clone();
+                let ui_weak = ui_weak.clone();
+                let username = username.to_string();
+                rt.spawn(async move {
+                    // Resolve username to UUID
+                    let profile = match sdk.get_profile_by_username(username).await {
+                        Ok(p) => p,
+                        Err(e) => {
+                            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                                ui.global::<Chat>().set_new_conversation_error(
+                                    format!("User not found: {e}").into(),
+                                );
+                            });
+                            return;
+                        }
+                    };
+
+                    // Create conversation
+                    let conv = match sdk.start_conversation(profile.id, None).await {
+                        Ok(c) => c,
+                        Err(e) => {
+                            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                                ui.global::<Chat>()
+                                    .set_new_conversation_error(format!("Error: {e}").into());
+                            });
+                            return;
+                        }
+                    };
+
+                    let conv_uuid = conv.id;
+                    let entry = ConversationEntry {
+                        conversation: conv,
+                        unread_messages_count: 0,
+                        last_message: None,
+                    };
+
+                    // Update UI on the Slint event loop
+                    let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                        let slint_conv = entry_to_slint(&entry, my_id);
+
+                        // Add to conv_ids mapping
+                        conv_ids.lock().unwrap().push(conv_uuid);
+
+                        // Add to Slint model
+                        let chats = ui.global::<Chat>().get_chats();
+                        let new_index = chats.row_count();
+                        if let Some(model) = chats.as_any().downcast_ref::<VecModel<Conversation>>()
+                        {
+                            model.push(slint_conv);
+                        }
+
+                        // Switch to the new conversation
+                        ui.global::<Chat>().set_active_chat_id(new_index as i32);
+
+                        // Close dialog
+                        ui.global::<Chat>().set_show_new_conversation_dialog(false);
+                        ui.global::<Chat>().set_new_conversation_error("".into());
+                    });
+                });
+            });
+    }
+
+    // start_edit — populate editing state from Slint
+    {
+        let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_start_edit(move |msg_id, text| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            ui.global::<Chat>().set_is_editing(true);
+            ui.global::<Chat>().set_editing_message_id(msg_id);
+            ui.global::<Chat>().set_editing_text(text);
+        });
+    }
+
+    // cancel_edit
+    {
+        let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_cancel_edit(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            ui.global::<Chat>().set_is_editing(false);
+            ui.global::<Chat>().set_editing_message_id("".into());
+            ui.global::<Chat>().set_editing_text("".into());
+        });
+    }
+
+    // edit_message — call SDK to edit, then update Slint model
+    {
+        let sdk = sdk.clone();
+        let conv_ids = conv_ids.clone();
+        let ui_weak = ui_weak.clone();
+        let rt = rt.clone();
+        ui.global::<Chat>()
+            .on_edit_message(move |msg_id, new_text| {
+                let Some(ui) = ui_weak.upgrade() else { return };
+
+                let active = ui.global::<Chat>().get_active_chat_id();
+                let ids = conv_ids.lock().unwrap();
+                let Some(&conv_uuid) = ids.get(active as usize) else {
+                    return;
+                };
+                drop(ids);
+
+                let msg_uuid = match Uuid::parse_str(msg_id.as_str()) {
+                    Ok(u) => u,
+                    Err(_) => return,
+                };
+
+                let sdk = sdk.clone();
+                let ui_weak = ui_weak.clone();
+                let new_text = new_text.to_string();
+                rt.spawn(async move {
+                    match sdk
+                        .edit_message(conv_uuid, msg_uuid, new_text.clone())
+                        .await
+                    {
+                        Ok(()) => {
+                            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                                // Update the message in the Slint model
+                                let chats = ui.global::<Chat>().get_chats();
+                                let active = ui.global::<Chat>().get_active_chat_id();
+                                if let Some(mut conv) = chats.row_data(active as usize) {
+                                    update_message_text(&mut conv, msg_uuid, &new_text);
+                                    chats.set_row_data(active as usize, conv);
+                                }
+                                // Clear editing state
+                                ui.global::<Chat>().set_is_editing(false);
+                                ui.global::<Chat>().set_editing_message_id("".into());
+                                ui.global::<Chat>().set_editing_text("".into());
+                            });
+                        }
+                        Err(e) => {
+                            error!("Failed to edit message: {e}");
+                            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                                show_error(&ui, &format!("Failed to edit message: {e}"));
+                            });
+                        }
+                    }
+                });
+            });
+    }
+
+    // delete_message — call SDK to delete, then update Slint model
+    {
+        let sdk = sdk.clone();
+        let conv_ids = conv_ids.clone();
+        let ui_weak = ui_weak.clone();
+        let rt = rt.clone();
+        ui.global::<Chat>().on_delete_message(move |msg_id| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+
+            let active = ui.global::<Chat>().get_active_chat_id();
+            let ids = conv_ids.lock().unwrap();
+            let Some(&conv_uuid) = ids.get(active as usize) else {
+                return;
+            };
+            drop(ids);
+
+            let msg_uuid = match Uuid::parse_str(msg_id.as_str()) {
+                Ok(u) => u,
+                Err(_) => return,
+            };
+
+            let sdk = sdk.clone();
+            let ui_weak = ui_weak.clone();
+            rt.spawn(async move {
+                match sdk.delete_message(conv_uuid, msg_uuid).await {
+                    Ok(()) => {
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            let chats = ui.global::<Chat>().get_chats();
+                            let active = ui.global::<Chat>().get_active_chat_id();
+                            if let Some(mut conv) = chats.row_data(active as usize) {
+                                update_message_text(&mut conv, msg_uuid, "[deleted]");
+                                chats.set_row_data(active as usize, conv);
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        error!("Failed to delete message: {e}");
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            show_error(&ui, &format!("Failed to delete message: {e}"));
+                        });
+                    }
+                }
+            });
+        });
+    }
+
+    // open_conversation_settings — populate peers and show settings view
+    {
+        let sdk = sdk.clone();
+        let conv_ids = conv_ids.clone();
+        let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_open_conversation_settings(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let active = ui.global::<Chat>().get_active_chat_id();
+
+            let ids = conv_ids.lock().unwrap();
+            let Some(&conv_uuid) = ids.get(active as usize) else {
+                return;
+            };
+            drop(ids);
+
+            // Find the conversation entry to get peers
+            let chats = ui.global::<Chat>().get_chats();
+            if let Some(conv) = chats.row_data(active as usize) {
+                // We need to get peer info. The Slint Conversation doesn't store peers,
+                // so we look them up from the SDK's get_conversation.
+                let peers_data: Vec<PeerData> =
+                    if let Ok(Some(full_conv)) = sdk.get_conversation(conv_uuid) {
+                        full_conv
+                            .peers
+                            .iter()
+                            .map(|p| {
+                                let fp = sdk.get_peer_fingerprint(p.id);
+                                // Format fingerprint in groups of 4
+                                let fp_formatted: String = fp
+                                    .as_bytes()
+                                    .chunks(4)
+                                    .map(|c| std::str::from_utf8(c).unwrap_or(""))
+                                    .collect::<Vec<_>>()
+                                    .join(" ");
+                                PeerData {
+                                    id: p.id.to_string()[..8].into(),
+                                    name: p.name().into(),
+                                    fingerprint: fp_formatted.into(),
+                                }
+                            })
+                            .collect()
+                    } else {
+                        vec![]
+                    };
+
+                let model = VecModel::from(peers_data);
+                ui.global::<Chat>().set_current_peers(ModelRc::new(model));
+            }
+
+            ui.global::<Chat>().set_show_conversation_settings(true);
+        });
+    }
+
+    // close_conversation_settings
+    {
+        let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_close_conversation_settings(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            ui.global::<Chat>().set_show_conversation_settings(false);
+        });
+    }
+
+    // rename_conversation — placeholder
+    {
+        ui.global::<Chat>().on_rename_conversation(move |_name| {
+            info!("Rename conversation: not implemented yet");
+        });
+    }
+
+    // add_member — placeholder
+    {
+        ui.global::<Chat>().on_add_member(move || {
+            info!("Add member: not implemented yet");
+        });
+    }
+
+    // typing — send typing indicator with 3-second cooldown
+    {
+        let sdk = sdk.clone();
+        let conv_ids = conv_ids.clone();
+        let ui_weak = ui_weak.clone();
+        let rt = rt.clone();
+        let last_typing: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
+        ui.global::<Chat>().on_typing(move || {
+            let now = Instant::now();
+            let mut last = last_typing.lock().unwrap();
+            let should_send = last
+                .map(|t| now.duration_since(t).as_secs() >= 3)
+                .unwrap_or(true);
+
+            if should_send {
+                *last = Some(now);
+                drop(last);
+
+                let Some(ui) = ui_weak.upgrade() else { return };
+                let active = ui.global::<Chat>().get_active_chat_id();
+                let ids = conv_ids.lock().unwrap();
+                let Some(&conv_uuid) = ids.get(active as usize) else {
+                    return;
+                };
+                drop(ids);
+
+                let sdk = sdk.clone();
+                rt.spawn(async move {
+                    let _ = sdk.send_typing_indicator(conv_uuid).await;
+                });
+            }
         });
     }
 }
@@ -355,6 +692,8 @@ fn handle_sdk_event(
     event: ChatEvent,
     my_id: Uuid,
     conv_ids: &Arc<Mutex<Vec<Uuid>>>,
+    sdk: &Sdk,
+    rt: &tokio::runtime::Handle,
 ) {
     match event {
         ChatEvent::MessageReceived {
@@ -367,13 +706,20 @@ fn handle_sdk_event(
             for i in 0..chats.row_count() {
                 if let Some(mut conv) = chats.row_data(i) {
                     if conv.id == conversation_id.to_string().as_str() {
+                        let msg_id = msg.id;
                         let slint_msg = message_to_slint(&msg, my_id);
                         append_message_to_conv(&mut conv, slint_msg);
 
                         conv.last_message = msg.content.clone().into();
                         conv.last_message_time = msg.issued_at.format("%H:%M").to_string().into();
 
-                        if i as i32 != active {
+                        if i as i32 == active {
+                            // Conversation is open — mark as read immediately
+                            let sdk = sdk.clone();
+                            rt.spawn(async move {
+                                let _ = sdk.mark_as_read(conversation_id, msg_id).await;
+                            });
+                        } else {
                             conv.unread_count += 1;
                         }
                         chats.set_row_data(i, conv);

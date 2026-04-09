@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use sickgnal_core::chat::client::ChatEvent as SdkEvent;
@@ -20,6 +22,7 @@ pub enum Screen {
     Auth,
     Conversations,
     Chat,
+    ConversationInfo,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,6 +75,20 @@ pub struct App {
     pub scroll_offset: u16,
     pub my_user_id: Option<Uuid>,
 
+    // Message selection / editing / deletion
+    pub selected_message: Option<usize>,
+    pub editing_message_id: Option<Uuid>,
+    pub original_message_text: String,
+    pub confirm_delete: Option<Uuid>,
+
+    // Conversation info state
+    pub info_selected_peer: usize,
+    pub info_show_fingerprint: bool,
+
+    // Typing indicators
+    pub last_typing_sent: Option<Instant>,
+    pub typing_indicators: HashMap<Uuid, (String, Instant)>,
+
     // SDK bridge
     pub sdk: Option<SyncBridge>,
     pub event_rx: Option<mpsc::Receiver<SdkEvent>>,
@@ -81,9 +98,9 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(data_dir: PathBuf) -> Self {
         let profile_manager =
-            ProfileManager::new(PathBuf::from("./tui_storage")).expect("create profile manager");
+            ProfileManager::new(data_dir.clone()).expect("create profile manager");
         let profiles = profile_manager.list_profiles().unwrap_or_default();
 
         // If no profiles exist, go straight to auth (sign-up).
@@ -124,6 +141,17 @@ impl App {
             message_input: String::new(),
             scroll_offset: 0,
             my_user_id: None,
+
+            selected_message: None,
+            editing_message_id: None,
+            original_message_text: String::new(),
+            confirm_delete: None,
+
+            info_selected_peer: 0,
+            info_show_fingerprint: false,
+
+            last_typing_sent: None,
+            typing_indicators: HashMap::new(),
 
             sdk: None,
             event_rx: None,
@@ -171,6 +199,7 @@ impl App {
             Screen::Auth => self.handle_auth_key(key),
             Screen::Conversations => self.handle_conversations_key(key),
             Screen::Chat => self.handle_chat_key(key),
+            Screen::ConversationInfo => self.handle_conversation_info_key(key),
         }
     }
 
@@ -500,11 +529,12 @@ impl App {
             KeyCode::Enter => {
                 if !self.conversations.is_empty() {
                     let entry = &self.conversations[self.selected_conversation];
-                    self.current_conversation = Some(entry.conversation.id);
+                    let conv_id = entry.conversation.id;
+                    self.current_conversation = Some(conv_id);
 
                     // Load messages
                     if let Some(ref sdk) = self.sdk {
-                        match sdk.get_messages(entry.conversation.id) {
+                        match sdk.get_messages(conv_id) {
                             Ok(msgs) => self.messages = msgs,
                             Err(e) => {
                                 error!("Failed to load messages: {e}");
@@ -513,8 +543,18 @@ impl App {
                         }
                     }
 
+                    // Mark last message as read to clear unread count
+                    if let Some(last_msg) = self.messages.last() {
+                        if let Some(ref sdk) = self.sdk {
+                            let _ = sdk.mark_as_read(conv_id, last_msg.id);
+                        }
+                    }
+                    // Clear unread count in the entry
+                    self.conversations[self.selected_conversation].unread_messages_count = 0;
+
                     self.message_input.clear();
                     self.scroll_offset = 0;
+                    self.selected_message = None;
                     self.screen = Screen::Chat;
                 }
             }
@@ -606,6 +646,117 @@ impl App {
     // ─── Chat key handling ──────────────────────────────────────────────
 
     fn handle_chat_key(&mut self, key: KeyEvent) {
+        // ── Delete confirmation mode ──
+        if let Some(msg_id) = self.confirm_delete {
+            match key.code {
+                KeyCode::Char('y') => {
+                    if let (Some(conv_id), Some(sdk)) = (self.current_conversation, &mut self.sdk) {
+                        if let Err(e) = sdk.delete_message(conv_id, msg_id) {
+                            error!("Failed to delete message: {e}");
+                            self.status_message = Some(format!("Delete failed: {e}"));
+                        } else if let Some(msg) = self.messages.iter_mut().find(|m| m.id == msg_id)
+                        {
+                            msg.content = "[deleted]".to_string();
+                        }
+                    }
+                    self.confirm_delete = None;
+                    self.selected_message = None;
+                }
+                KeyCode::Char('n') | KeyCode::Esc => {
+                    self.confirm_delete = None;
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // ── Editing mode ──
+        if self.editing_message_id.is_some() {
+            match key.code {
+                KeyCode::Enter => {
+                    if let Some(msg_id) = self.editing_message_id.take() {
+                        let new_text = self.message_input.clone();
+                        if let (Some(conv_id), Some(sdk)) = (self.current_conversation, &self.sdk) {
+                            if let Err(e) = sdk.edit_message(conv_id, msg_id, new_text.clone()) {
+                                error!("Failed to edit message: {e}");
+                                self.status_message = Some(format!("Edit failed: {e}"));
+                            } else if let Some(msg) =
+                                self.messages.iter_mut().find(|m| m.id == msg_id)
+                            {
+                                msg.content = new_text;
+                            }
+                        }
+                        self.message_input.clear();
+                        self.original_message_text.clear();
+                    }
+                }
+                KeyCode::Esc => {
+                    self.editing_message_id = None;
+                    self.message_input.clear();
+                    self.original_message_text.clear();
+                }
+                KeyCode::Char(c) => {
+                    self.message_input.push(c);
+                }
+                KeyCode::Backspace => {
+                    self.message_input.pop();
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // ── Message selection mode ──
+        if let Some(sel) = self.selected_message {
+            match key.code {
+                KeyCode::Up => {
+                    if sel > 0 {
+                        self.selected_message = Some(sel - 1);
+                    }
+                }
+                KeyCode::Down => {
+                    if sel + 1 < self.messages.len() {
+                        self.selected_message = Some(sel + 1);
+                    } else {
+                        // Past the last message → exit selection mode
+                        self.selected_message = None;
+                    }
+                }
+                KeyCode::Esc => {
+                    self.selected_message = None;
+                }
+                KeyCode::Char('e') => {
+                    if let Some(msg) = self.messages.get(sel) {
+                        if Some(msg.sender_id) == self.my_user_id {
+                            self.editing_message_id = Some(msg.id);
+                            self.original_message_text = msg.content.clone();
+                            self.message_input = msg.content.clone();
+                            self.selected_message = None;
+                        } else {
+                            self.status_message = Some("Can only edit your own messages".into());
+                        }
+                    }
+                }
+                KeyCode::Char('d') => {
+                    if let Some(msg) = self.messages.get(sel) {
+                        if Some(msg.sender_id) == self.my_user_id {
+                            self.confirm_delete = Some(msg.id);
+                        } else {
+                            self.status_message = Some("Can only delete your own messages".into());
+                        }
+                    }
+                }
+                KeyCode::Char(c) => {
+                    // Any other char exits selection and starts typing
+                    self.selected_message = None;
+                    self.message_input.push(c);
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // ── Normal input mode ──
         match key.code {
             KeyCode::Esc => {
                 // Refresh conversations list before going back
@@ -620,6 +771,7 @@ impl App {
                 self.screen = Screen::Conversations;
                 self.current_conversation = None;
                 self.messages.clear();
+                self.selected_message = None;
             }
             KeyCode::Enter => {
                 if !self.message_input.is_empty() {
@@ -641,16 +793,73 @@ impl App {
                 }
             }
             KeyCode::Char(c) => {
-                self.message_input.push(c);
+                // 'i' with empty input opens conversation info
+                if c == 'i' && self.message_input.is_empty() {
+                    self.info_selected_peer = 0;
+                    self.info_show_fingerprint = false;
+                    self.screen = Screen::ConversationInfo;
+                } else {
+                    self.message_input.push(c);
+                    // Send typing indicator with 3-second cooldown
+                    self.maybe_send_typing_indicator();
+                }
             }
             KeyCode::Backspace => {
                 self.message_input.pop();
             }
             KeyCode::Up => {
-                self.scroll_offset = self.scroll_offset.saturating_add(1);
+                // Enter message selection mode at the last message
+                if !self.messages.is_empty() {
+                    self.selected_message = Some(self.messages.len() - 1);
+                }
             }
             KeyCode::Down => {
-                self.scroll_offset = self.scroll_offset.saturating_sub(1);
+                // No-op in input mode (already at bottom)
+            }
+            _ => {}
+        }
+    }
+
+    /// Send a typing indicator if the 3-second cooldown has expired.
+    fn maybe_send_typing_indicator(&mut self) {
+        let now = Instant::now();
+        let should_send = self
+            .last_typing_sent
+            .map(|t| now.duration_since(t).as_secs() >= 3)
+            .unwrap_or(true);
+
+        if should_send {
+            if let (Some(conv_id), Some(sdk)) = (self.current_conversation, &self.sdk) {
+                let _ = sdk.send_typing_indicator(conv_id);
+            }
+            self.last_typing_sent = Some(now);
+        }
+    }
+
+    fn handle_conversation_info_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.screen = Screen::Chat;
+            }
+            KeyCode::Up => {
+                self.info_selected_peer = self.info_selected_peer.saturating_sub(1);
+                self.info_show_fingerprint = false;
+            }
+            KeyCode::Down => {
+                if let Some(entry) = self
+                    .current_conversation
+                    .and_then(|cid| self.conversations.iter().find(|e| e.conversation.id == cid))
+                {
+                    let max = entry.conversation.peers.len().saturating_sub(1);
+                    if self.info_selected_peer < max {
+                        self.info_selected_peer += 1;
+                        self.info_show_fingerprint = false;
+                    }
+                }
+            }
+            KeyCode::Enter => {
+                // Toggle fingerprint display for the selected peer
+                self.info_show_fingerprint = !self.info_show_fingerprint;
             }
             _ => {}
         }
@@ -672,6 +881,11 @@ impl App {
         for event in events {
             self.handle_sdk_event(event);
         }
+
+        // Clean up expired typing indicators (older than 5 seconds)
+        let now = Instant::now();
+        self.typing_indicators
+            .retain(|_, (_, timestamp)| now.duration_since(*timestamp).as_secs() < 5);
     }
 
     fn handle_sdk_event(&mut self, event: SdkEvent) {
@@ -680,8 +894,15 @@ impl App {
                 conversation_id,
                 msg,
             } => {
+                let msg_id = msg.id;
+
                 if self.current_conversation == Some(conversation_id) {
                     self.messages.push(msg);
+
+                    // Mark as read immediately since the conversation is open
+                    if let Some(ref sdk) = self.sdk {
+                        let _ = sdk.mark_as_read(conversation_id, msg_id);
+                    }
                 }
 
                 if let Some(entry) = self
@@ -746,10 +967,20 @@ impl App {
                 }
             }
             SdkEvent::TypingIndicator {
-                conversation_id: _,
-                peer_id: _,
+                conversation_id,
+                peer_id,
             } => {
-                // TODO: show typing indicator in UI
+                // Look up peer name
+                let peer_name = self
+                    .conversations
+                    .iter()
+                    .find(|e| e.conversation.id == conversation_id)
+                    .and_then(|e| e.conversation.peers.iter().find(|p| p.id == peer_id))
+                    .map(|p| p.name())
+                    .unwrap_or_else(|| "Someone".into());
+
+                self.typing_indicators
+                    .insert(conversation_id, (peer_name, Instant::now()));
             }
             SdkEvent::ConnectionStateChanged(state) => {
                 self.status_message = Some(format!("Connection: {:?}", state));

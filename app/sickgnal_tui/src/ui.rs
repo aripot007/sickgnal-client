@@ -9,5 +9,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         Screen::Auth => screens::auth::draw(f, app),
         Screen::Conversations => screens::conversations::draw(f, app),
         Screen::Chat => screens::chat::draw(f, app),
+        Screen::ConversationInfo => screens::conversation_info::draw(f, app),
     }
 }

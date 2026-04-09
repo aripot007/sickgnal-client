@@ -9,6 +9,7 @@ import { MessageBubble } from "../components/MessageBubble.slint";
 import { Chat } from "../models/Chat.slint";
 import { Conversation } from "../models/Conversation.slint";
 import { Button } from "../components/Button.slint";
+import { ConversationSettings } from "ConversationSettings.slint";
 
 export component ConversationLayout inherits VerticalBox {
     private property <bool> show-typing: false;
@@ -47,16 +48,51 @@ export component ConversationLayout inherits VerticalBox {
         height: 50px;
         background: Theme.background-light;
         border-color: Theme.background-dark;
-        Text {
-            text: Chat.current.name;
-            font-size: 18px;
-            font-weight: 600;
-            color: Theme.text-main;
-            horizontal-alignment: left;
+
+        HorizontalLayout {
+            padding-left: 15px;
+            padding-right: 10px;
+
+            Text {
+                text: Chat.current.name;
+                font-size: 18px;
+                font-weight: 600;
+                color: Theme.text-main;
+                horizontal-alignment: left;
+                vertical-alignment: center;
+            }
+
+            Rectangle { }
+
+            if Chat.has-active-conversation(): Rectangle {
+                width: 32px;
+                height: 32px;
+                border-radius: 6px;
+                background: info-touch.has-hover ? Theme.surface-hover : transparent;
+
+                info-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        Chat.open_conversation_settings();
+                    }
+                }
+
+                Text {
+                    text: "ⓘ";
+                    font-size: 18px;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
         }
     }
 
-    ScrollView {
+    // Conversation settings view (replaces messages when open)
+    if Chat.show_conversation_settings: ConversationSettings { }
+
+    // Messages view (hidden when settings is open)
+    if !Chat.show_conversation_settings: ScrollView {
         VerticalBox {
             padding: 15px;
             alignment: start;
@@ -73,15 +109,22 @@ export component ConversationLayout inherits VerticalBox {
                 }
             }
             for msg in Chat.get-current-conversation().messages: MessageBubble {
+                id: msg.id;
                 text: msg.text;
                 time: msg.time;
                 status: msg.status;
                 is-me: msg.is_me;
+                edit_requested(msg_id) => {
+                    Chat.start_edit(msg_id, msg.text);
+                }
+                delete_requested(msg_id) => {
+                    Chat.delete_message(msg_id);
+                }
             }
         }
     }
 
-    if root.show-typing: HorizontalBox {
+    if root.show-typing && !Chat.show_conversation_settings: HorizontalBox {
         alignment: start;
         spacing: 6px;
         padding: 2px;
@@ -93,7 +136,7 @@ export component ConversationLayout inherits VerticalBox {
         }
     }
 
-    Rectangle {
+    if !Chat.show_conversation_settings: Rectangle {
         height: 70px;
         background: Theme.background-light;
         border-color: Theme.background-dark;
@@ -101,17 +144,35 @@ export component ConversationLayout inherits VerticalBox {
             padding: 15px;
             spacing: 10px;
             input := LineEdit {
-                placeholder-text: "Écrire un message...";
+                placeholder-text: Chat.is_editing ? "Edit message..." : "Écrire un message...";
+                text: Chat.editing_text;
                 enabled: Chat.active_chat_id >= 0;
+                edited => {
+                    Chat.typing();
+                }
+            }
+
+            if Chat.is_editing: Button {
+                text: "Cancel";
+                btn_width: 60px;
+                clicked => {
+                    Chat.cancel_edit();
+                    input.text = "";
+                }
             }
 
             Button {
-                text: "Envoyer";
+                text: Chat.is_editing ? "Save" : "Envoyer";
                 enabled: Chat.active_chat_id >= 0 && input.text != "";
                 btn_width: 70px;
                 clicked => {
-                    Chat.send_message(input.text);
-                    input.text = "";
+                    if (Chat.is_editing) {
+                        Chat.edit_message(Chat.editing_message_id, input.text);
+                        input.text = "";
+                    } else {
+                        Chat.send_message(input.text);
+                        input.text = "";
+                    }
                 }
             }
         }
