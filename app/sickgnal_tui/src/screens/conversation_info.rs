@@ -13,7 +13,7 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     let chunks = Layout::vertical([
         Constraint::Length(5), // Title area
-        Constraint::Min(1),   // Peer list
+        Constraint::Min(1),    // Peer list
         Constraint::Length(5), // Fingerprint area
     ])
     .split(area);
@@ -25,29 +25,26 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     // ── Title area ──
     let (title, member_count) = entry
-        .map(|e| {
-            (
-                e.conversation.title.clone(),
-                e.conversation.peers.len(),
-            )
-        })
+        .map(|e| (e.conversation.title.clone(), e.conversation.peers.len()))
         .unwrap_or_else(|| ("Unknown".into(), 0));
 
     let title_widget = Paragraph::new(vec![
-        Line::from(vec![
-            Span::styled(
-                "  Conversation Info",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
+        Line::from(vec![Span::styled(
+            "  Conversation Info",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  Name: ", Style::default().fg(Color::DarkGray)),
             Span::styled(&title, Style::default().fg(Color::White)),
             Span::styled(
-                format!("  ({} member{})", member_count, if member_count != 1 { "s" } else { "" }),
+                format!(
+                    "  ({} member{})",
+                    member_count,
+                    if member_count != 1 { "s" } else { "" }
+                ),
                 Style::default().fg(Color::DarkGray),
             ),
         ]),
@@ -115,12 +112,10 @@ pub fn draw(f: &mut Frame, app: &App) {
                 .collect();
 
             vec![
-                Line::from(vec![
-                    Span::styled(
-                        format!("  Fingerprint for {}: ", peer.name()),
-                        Style::default().fg(Color::DarkGray),
-                    ),
-                ]),
+                Line::from(vec![Span::styled(
+                    format!("  Fingerprint for {}: ", peer.name()),
+                    Style::default().fg(Color::DarkGray),
+                )]),
                 Line::from(vec![Span::styled(
                     format!("  {}", grouped.join(" ")),
                     Style::default().fg(Color::Yellow),

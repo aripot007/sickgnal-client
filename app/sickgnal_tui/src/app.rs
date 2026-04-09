@@ -538,8 +538,7 @@ impl App {
                             Ok(msgs) => self.messages = msgs,
                             Err(e) => {
                                 error!("Failed to load messages: {e}");
-                                self.status_message =
-                                    Some(format!("Failed to load messages: {e}"));
+                                self.status_message = Some(format!("Failed to load messages: {e}"));
                             }
                         }
                     }
@@ -651,14 +650,11 @@ impl App {
         if let Some(msg_id) = self.confirm_delete {
             match key.code {
                 KeyCode::Char('y') => {
-                    if let (Some(conv_id), Some(sdk)) =
-                        (self.current_conversation, &mut self.sdk)
-                    {
+                    if let (Some(conv_id), Some(sdk)) = (self.current_conversation, &mut self.sdk) {
                         if let Err(e) = sdk.delete_message(conv_id, msg_id) {
                             error!("Failed to delete message: {e}");
                             self.status_message = Some(format!("Delete failed: {e}"));
-                        } else if let Some(msg) =
-                            self.messages.iter_mut().find(|m| m.id == msg_id)
+                        } else if let Some(msg) = self.messages.iter_mut().find(|m| m.id == msg_id)
                         {
                             msg.content = "[deleted]".to_string();
                         }
@@ -680,9 +676,7 @@ impl App {
                 KeyCode::Enter => {
                     if let Some(msg_id) = self.editing_message_id.take() {
                         let new_text = self.message_input.clone();
-                        if let (Some(conv_id), Some(sdk)) =
-                            (self.current_conversation, &self.sdk)
-                        {
+                        if let (Some(conv_id), Some(sdk)) = (self.current_conversation, &self.sdk) {
                             if let Err(e) = sdk.edit_message(conv_id, msg_id, new_text.clone()) {
                                 error!("Failed to edit message: {e}");
                                 self.status_message = Some(format!("Edit failed: {e}"));
@@ -739,8 +733,7 @@ impl App {
                             self.message_input = msg.content.clone();
                             self.selected_message = None;
                         } else {
-                            self.status_message =
-                                Some("Can only edit your own messages".into());
+                            self.status_message = Some("Can only edit your own messages".into());
                         }
                     }
                 }
@@ -749,8 +742,7 @@ impl App {
                         if Some(msg.sender_id) == self.my_user_id {
                             self.confirm_delete = Some(msg.id);
                         } else {
-                            self.status_message =
-                                Some("Can only delete your own messages".into());
+                            self.status_message = Some("Can only delete your own messages".into());
                         }
                     }
                 }

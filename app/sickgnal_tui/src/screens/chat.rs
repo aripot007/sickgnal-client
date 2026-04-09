@@ -232,7 +232,11 @@ pub fn draw(f: &mut Frame, app: &App) {
             " e: edit | d: delete | Esc: cancel | ↑↓: navigate ",
         )
     } else {
-        ("> ", app.message_input.clone(), " Esc: back | Enter: send | ↑: select message ")
+        (
+            "> ",
+            app.message_input.clone(),
+            " Esc: back | Enter: send | ↑: select message ",
+        )
     };
 
     let input = Paragraph::new(Line::from(vec![
