@@ -7,13 +7,16 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use sickgnal_core::chat::dto::Conversation;
+use sickgnal_core::chat::message::Content;
 use sickgnal_core::chat::storage::Message;
-use sickgnal_core::chat::{client::ChatEvent, dto::Conversation};
+use sickgnal_core::chat::{client::ChatEvent};
 use sickgnal_core::e2e::message::UserProfile;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use super::{Result, Sdk};
+use crate::dto::ConversationEntry;
 use crate::tls::TlsConfig;
 
 /// Thin synchronous wrapper around [`Sdk`].
@@ -55,17 +58,17 @@ impl SyncBridge {
 
     // ─── Conversations ──────────────────────────────────────────────────
 
-    pub fn list_conversations(&self) -> Result<Vec<Conversation>> {
+    pub fn list_conversations(&self) -> Result<Vec<ConversationEntry>> {
         self.sdk.list_conversations()
     }
 
     pub fn start_conversation(
         &mut self,
-        username: String,
-        initial_message: Option<String>,
+        user_id: Uuid,
+        initial_message: Option<Content>,
     ) -> Result<Conversation> {
         self.rt
-            .block_on(self.sdk.start_conversation(username, initial_message))
+            .block_on(self.sdk.start_conversation(user_id, initial_message))
     }
 
     pub fn delete_conversation(&mut self, conversation_id: Uuid) -> Result<()> {
@@ -128,19 +131,14 @@ impl SyncBridge {
             .block_on(self.sdk.delete_message(conversation_id, message_id))
     }
 
-    pub fn send_read_receipt(&self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
+    pub fn mark_as_read(&self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
         self.rt
-            .block_on(self.sdk.send_read_receipt(conversation_id, message_id))
+            .block_on(self.sdk.mark_as_read(conversation_id, message_id))
     }
 
     pub fn send_typing_indicator(&self, conversation_id: Uuid) -> Result<()> {
         self.rt
             .block_on(self.sdk.send_typing_indicator(conversation_id))
-    }
-
-    pub fn send_delivery_receipt(&self, conversation_id: Uuid, message_id: Uuid) -> Result<()> {
-        self.rt
-            .block_on(self.sdk.send_delivery_receipt(conversation_id, message_id))
     }
 
     // ─── Verification ────────────────────────────────────────────────
