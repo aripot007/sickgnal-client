@@ -4,3 +4,4 @@ tui_storage
 *.db
 *.db-shm
 *.db-wal
+log.txt

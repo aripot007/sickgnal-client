@@ -14,6 +14,7 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{Terminal, prelude::CrosstermBackend};
+use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
 #[command(name = "sickgnal-tui", about = "Sickgnal TUI client")]
@@ -41,6 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let file_appender = tracing_appender::rolling::never(dir, filename);
         let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
         tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
             .with_writer(non_blocking)
             .with_ansi(false)
             .init();
