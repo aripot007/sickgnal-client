@@ -66,7 +66,6 @@ pub struct App {
     pub selected_conversation: usize,
     pub new_conversation_mode: bool,
     pub new_conversation_username: String,
-    pub status_message: Option<String>,
 
     // Chat state
     pub current_conversation: Option<Uuid>,
@@ -88,6 +87,11 @@ pub struct App {
     // Typing indicators
     pub last_typing_sent: Option<Instant>,
     pub typing_indicators: HashMap<Uuid, (String, Instant)>,
+
+    // Toast notification
+    pub toast_message: Option<String>,
+    pub toast_is_error: bool,
+    pub toast_time: Option<Instant>,
 
     // SDK bridge
     pub sdk: Option<SyncBridge>,
@@ -134,7 +138,6 @@ impl App {
             selected_conversation: 0,
             new_conversation_mode: false,
             new_conversation_username: String::new(),
-            status_message: None,
 
             current_conversation: None,
             messages: Vec::new(),
@@ -153,11 +156,32 @@ impl App {
             last_typing_sent: None,
             typing_indicators: HashMap::new(),
 
+            toast_message: None,
+            toast_is_error: false,
+            toast_time: None,
+
             sdk: None,
             event_rx: None,
 
             data_dir: PathBuf::new(),
         }
+    }
+
+    /// Show a toast notification.
+    pub fn show_toast(&mut self, msg: impl Into<String>, is_error: bool) {
+        self.toast_message = Some(msg.into());
+        self.toast_is_error = is_error;
+        self.toast_time = Some(Instant::now());
+    }
+
+    /// Show a red error toast.
+    pub fn show_error_toast(&mut self, msg: impl Into<String>) {
+        self.show_toast(msg, true);
+    }
+
+    /// Show a green info toast.
+    pub fn show_info_toast(&mut self, msg: impl Into<String>) {
+        self.show_toast(msg, false);
     }
 
     /// Select a profile and transition to the auth screen.
@@ -482,7 +506,7 @@ impl App {
                 self.sdk = Some(bridge);
                 self.auth_loading = false;
                 self.screen = Screen::Conversations;
-                self.status_message = Some("Connected".into());
+                self.show_info_toast("Connected");
 
                 // Refresh profiles list so profile selection is up to date
                 self.profiles = self.profile_manager.list_profiles().unwrap_or_default();
@@ -538,7 +562,7 @@ impl App {
                             Ok(msgs) => self.messages = msgs,
                             Err(e) => {
                                 error!("Failed to load messages: {e}");
-                                self.status_message = Some(format!("Failed to load messages: {e}"));
+                                self.show_error_toast(format!("Failed to load messages: {e}"));
                             }
                         }
                     }
@@ -566,7 +590,7 @@ impl App {
                     if let Some(ref mut sdk) = self.sdk {
                         if let Err(e) = sdk.delete_conversation(conv_id) {
                             error!("Failed to delete conversation: {e}");
-                            self.status_message = Some(format!("Delete failed: {e}"));
+                            self.show_error_toast(format!("Delete failed: {e}"));
                         }
                     }
                     self.conversations.remove(self.selected_conversation);
@@ -586,19 +610,16 @@ impl App {
             KeyCode::Esc => {
                 self.new_conversation_mode = false;
                 self.new_conversation_username.clear();
-                self.status_message = None;
             }
             KeyCode::Char(c) => {
                 self.new_conversation_username.push(c);
-                self.status_message = None;
             }
             KeyCode::Backspace => {
                 self.new_conversation_username.pop();
-                self.status_message = None;
             }
             KeyCode::Enter => {
                 if self.new_conversation_username.is_empty() {
-                    self.status_message = Some("Username cannot be empty".into());
+                    self.show_error_toast("Username cannot be empty");
                     return;
                 }
 
@@ -608,7 +629,7 @@ impl App {
                         match sdk.get_profile_by_username(self.new_conversation_username.clone()) {
                             Ok(p) => p,
                             Err(e) => {
-                                self.status_message = Some(format!("User not found: {e}"));
+                                self.show_error_toast(format!("User not found: {e}"));
                                 return;
                             }
                         };
@@ -634,7 +655,7 @@ impl App {
                             self.screen = Screen::Chat;
                         }
                         Err(e) => {
-                            self.status_message = Some(format!("Error: {e}"));
+                            self.show_error_toast(format!("Error: {e}"));
                         }
                     }
                 }
@@ -653,7 +674,7 @@ impl App {
                     if let (Some(conv_id), Some(sdk)) = (self.current_conversation, &mut self.sdk) {
                         if let Err(e) = sdk.delete_message(conv_id, msg_id) {
                             error!("Failed to delete message: {e}");
-                            self.status_message = Some(format!("Delete failed: {e}"));
+                            self.show_error_toast(format!("Delete failed: {e}"));
                         } else if let Some(msg) = self.messages.iter_mut().find(|m| m.id == msg_id)
                         {
                             msg.content = "[deleted]".to_string();
@@ -681,7 +702,7 @@ impl App {
                         {
                             if let Err(e) = sdk.edit_message(conv_id, msg_id, new_text.clone()) {
                                 error!("Failed to edit message: {e}");
-                                self.status_message = Some(format!("Edit failed: {e}"));
+                                self.show_error_toast(format!("Edit failed: {e}"));
                             } else if let Some(msg) =
                                 self.messages.iter_mut().find(|m| m.id == msg_id)
                             {
@@ -735,7 +756,7 @@ impl App {
                             self.message_input = msg.content.clone();
                             self.selected_message = None;
                         } else {
-                            self.status_message = Some("Can only edit your own messages".into());
+                            self.show_error_toast("Can only edit your own messages");
                         }
                     }
                 }
@@ -744,7 +765,7 @@ impl App {
                         if Some(msg.sender_id) == self.my_user_id {
                             self.confirm_delete = Some(msg.id);
                         } else {
-                            self.status_message = Some("Can only delete your own messages".into());
+                            self.show_error_toast("Can only delete your own messages");
                         }
                     }
                 }
@@ -788,7 +809,7 @@ impl App {
                             }
                             Err(e) => {
                                 error!("Failed to send message: {e}");
-                                self.status_message = Some(format!("Send failed: {e}"));
+                                self.show_error_toast(format!("Send failed: {e}"));
                             }
                         }
                     }
@@ -985,7 +1006,7 @@ impl App {
                     .insert(conversation_id, (peer_name, Instant::now()));
             }
             SdkEvent::ConnectionStateChanged(state) => {
-                self.status_message = Some(format!("Connection: {:?}", state));
+                self.show_info_toast(format!("Connection: {:?}", state));
             }
         }
     }
