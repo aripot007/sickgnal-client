@@ -91,6 +91,7 @@ impl MockMessageStream {
         new_sessions: Vec<E2EMessage>,
         initial_msgs_in_new_sessions: usize,
         new_messages: Vec<E2EMessage>,
+        chat_msgs_in_new_messages: usize,
     ) {
         debug!(
             available_keys = available_keys.len(),
@@ -136,7 +137,7 @@ impl MockMessageStream {
 
         if new_messages_len > 0 {
             // Client will send a delivered acknowledgement for each message
-            for _ in 0..new_messages_len {
+            for _ in 0..chat_msgs_in_new_messages {
                 self.push_incoming_untagged(E2EMessage::Ok);
             }
             self.push_incoming_untagged(E2EMessage::MessagesList {

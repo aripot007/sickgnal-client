@@ -1,6 +1,6 @@
 mod common;
 
-use std::sync::Once;
+use std::{sync::Once, time::Duration};
 
 use sickgnal_core::{
     chat::{
@@ -13,12 +13,14 @@ use sickgnal_core::{
         peer::Peer,
     },
 };
-use tokio::{sync::mpsc, task::JoinSet};
+use tokio::{sync::mpsc, task::JoinSet, time};
 use tracing::{debug, debug_span};
 use tracing_subscriber::{EnvFilter, fmt};
 use x25519_dalek::PublicKey;
 
 use crate::common::mock_message_stream::MockMessageStream;
+
+const WAIT_TIMEOUT: Duration = Duration::from_millis(1000);
 
 fn init_tracing() {
     static INIT: Once = Once::new();
@@ -76,7 +78,7 @@ async fn new_session() {
 
     alice_fixture
         .message_stream
-        .push_start_flow(available_keys, false, vec![], 0, vec![]);
+        .push_start_flow(available_keys, false, vec![], 0, vec![], 0);
 
     let (mut alice, chat_worker, tx_worker, rx_worker) =
         alice.start().await.expect("alice client should start");
@@ -221,6 +223,7 @@ async fn new_session() {
         vec![open_conv],
         1,
         vec![msg_1, msg_2],
+        2,
     );
 
     let (mut bob, chat_worker, tx_worker, rx_worker) =
@@ -303,16 +306,28 @@ async fn new_session() {
 
     assert_eq!(msgs.len(), 2);
 
-    let evt = bob_rx.recv().await.expect("could not receive event");
+    let evt = time::timeout(WAIT_TIMEOUT, bob_rx.recv())
+        .await
+        .expect("timed out waiting for event")
+        .expect("could not receive event");
     assert!(matches!(evt, ChatEvent::ConversationCreatedByPeer(_)));
 
-    let evt = bob_rx.recv().await.expect("could not receive event");
+    let evt = time::timeout(WAIT_TIMEOUT, bob_rx.recv())
+        .await
+        .expect("timed out waiting for event")
+        .expect("could not receive event");
     assert!(matches!(evt, ChatEvent::MessageReceived { .. }));
 
-    let evt = bob_rx.recv().await.expect("could not receive event");
+    let evt = time::timeout(WAIT_TIMEOUT, bob_rx.recv())
+        .await
+        .expect("timed out waiting for event")
+        .expect("could not receive event");
     assert!(matches!(evt, ChatEvent::MessageReceived { .. }));
 
-    let evt = bob_rx.recv().await.expect("could not receive event");
+    let evt = time::timeout(WAIT_TIMEOUT, bob_rx.recv())
+        .await
+        .expect("timed out waiting for event")
+        .expect("could not receive event");
     assert!(matches!(evt, ChatEvent::MessageReceived { .. }));
 
     // Transform the messages and forward them to Bob
@@ -367,8 +382,9 @@ async fn new_session() {
         available_keys,
         false,
         vec![],
-        0, // No message in the open_conv
+        0,
         vec![open_conv, msg_1, msg_2],
+        2, // 2 chat messages only, no message in the open_conv
     );
 
     let (_alice, chat_worker, tx_worker, rx_worker) =
@@ -403,15 +419,24 @@ async fn new_session() {
 
     assert_eq!(2, unread.len());
 
-    let evt = alice_rx.recv().await.expect("could not receive event");
+    let evt = time::timeout(WAIT_TIMEOUT, alice_rx.recv())
+        .await
+        .expect("timed out waiting for event")
+        .expect("could not receive event");
     assert!(matches!(evt, ChatEvent::ConversationCreatedByPeer(_)));
 
-    let evt = alice_rx.recv().await.expect("could not receive event");
+    let evt = time::timeout(WAIT_TIMEOUT, alice_rx.recv())
+        .await
+        .expect("timed out waiting for event")
+        .expect("could not receive event");
     assert!(matches!(evt, ChatEvent::MessageReceived { .. }));
 
-    let evt = alice_rx.recv().await.expect("could not receive event");
+    let evt = time::timeout(WAIT_TIMEOUT, alice_rx.recv())
+        .await
+        .expect("timed out waiting for event")
+        .expect("could not receive event");
     assert!(matches!(evt, ChatEvent::MessageReceived { .. }));
 
-    let evt = alice_rx.recv().await.expect("could not receive event");
-    assert!(matches!(evt, ChatEvent::MessageReceived { .. }));
+    debug!("stopping alice");
+    alice_workers.abort_all();
 }
