@@ -17,6 +17,7 @@ use crate::{
 #[derive(Debug)]
 pub enum ServerHello {
     ServerHello(ServerHelloPayload),
+    #[allow(unused, reason = "HelloRetryRequest is not supported yet")]
     HelloRetryRequest(ServerHelloPayload),
 }
 
@@ -24,7 +25,7 @@ pub enum ServerHello {
 #[derive(Debug, Clone)]
 pub struct ServerHelloPayload {
     // legacy_version = 0x0303;    /* TLS v1.2 */
-    random: ServerRandom,
+    _random: ServerRandom,
 
     // Should be an empty vector (0x00) since thats what we send
     // legacy_session_id_echo<0..32>;
@@ -98,7 +99,7 @@ impl Decode for ServerHello {
         }
 
         let payload = ServerHelloPayload {
-            random,
+            _random: random,
             cipher_suite,
             extensions,
         };
@@ -154,18 +155,6 @@ impl Debug for ServerRandom {
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) enum ServerExtension {
-    SupportedVersions(ProtocolVersion),
-    Cookie(Vec<u8>),
-
-    /// KeyShare extension in a HelloRetryRequest message
-    KeyShareHelloRetryRequest(NamedGroup),
-
-    /// KeyShare extension in a ServerHello message
-    KeyShareServerHello(KeyShareEntry),
-}
-
 /// The 2 types of key_share extension we can receive, depending if the
 /// message is a ServerHello or a HelloRetryRequest
 #[derive(Debug, Clone)]
@@ -174,6 +163,10 @@ pub(crate) enum ServerKeyShare {
     Entry(KeyShareEntry),
 
     /// KeyShare extension for a HelloRetryRequest, contains the selected [`NamedGroup`]
+    #[allow(
+        unused,
+        reason = "HelloRetryRequests are not supported yet, but we still need to parse the payload to get the correct error"
+    )]
     SelectedGroup(NamedGroup),
 }
 

@@ -53,8 +53,9 @@ pub(crate) fn encode_length_prefixed_vector<T: Encode>(
     dest[start..header_end].copy_from_slice(&vec_len.to_be_bytes()[(4 - header_len)..]);
 }
 
-#[derive(Debug, Clone, Copy)]
 /// Represents the size of the length field for a length-prefixed vector
+#[derive(Debug, Clone, Copy)]
+#[allow(unused)]
 pub enum LengthSize {
     U8,
     U16,

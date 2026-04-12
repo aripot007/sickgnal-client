@@ -39,7 +39,13 @@ codec_enum! {
 
 #[derive(Debug)]
 pub enum Handshake {
-    ClientHello(ClientHello),
+    ClientHello(
+        #[allow(
+            unused,
+            reason = "client hello will be read when implementing HelloRetryRequest"
+        )]
+        ClientHello,
+    ),
     ServerHello(ServerHello),
     EncryptedExtensions,
     Certificate(CertificateMessage),
@@ -50,22 +56,6 @@ pub enum Handshake {
 
     /// We don't use session sickets, so we just ignore the message for now
     NewSessionTicket,
-}
-
-impl Handshake {
-    /// Get the msg_type for this handshake
-    pub fn handshake_type(&self) -> HandshakeType {
-        match self {
-            Handshake::ClientHello(_) => HandshakeType::ClientHello,
-            Handshake::ServerHello(_) => HandshakeType::ServerHello,
-            Handshake::EncryptedExtensions => HandshakeType::EncryptedExtensions,
-            Handshake::Certificate(..) => HandshakeType::Certificate,
-            Handshake::CertificateVerify(..) => HandshakeType::CertificateVerify,
-            Handshake::Finished(..) => HandshakeType::Finished,
-            Handshake::NewSessionTicket => HandshakeType::NewSessionTicket,
-            Handshake::KeyUpdate(_) => HandshakeType::KeyUpdate,
-        }
-    }
 }
 
 impl Decode for Handshake {
@@ -80,7 +70,7 @@ impl Decode for Handshake {
         let mut buf = Reader::new(&payload);
 
         let handshake = match msg_type {
-            // We shouldn't have to decrypt ClientHello messages
+            // We shouldn't have to decode ClientHello messages
             HandshakeType::ClientHello => return Err(InvalidMessage::UnexpectedMessage),
             HandshakeType::ServerHello => Handshake::ServerHello(ServerHello::decode(&mut buf)?),
 
