@@ -3,7 +3,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
-use tracing::{error, warn};
+use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
         storage::SharedStorageBackend,
     },
     e2e::{
-        client::{E2EClient, Error, PREKEY_AMOUNT},
+        client::{E2EClient, Error},
         kdf::kdf,
         keys::SymetricKey,
         message::{
@@ -60,6 +60,9 @@ where
 
 /// The step of syncrhonization
 enum SynchronizationStep {
+    /// Sync prekeys once first
+    InitialSyncPrekeys,
+
     /// There are initial messages we need to sync on the server
     InitialMessages,
 
@@ -88,7 +91,7 @@ where
         Self {
             batch_size: 100,
             e2e_client: client,
-            step: SynchronizationStep::InitialMessages,
+            step: SynchronizationStep::InitialSyncPrekeys,
             messages: Vec::new(),
             undecipherable_messages: HashMap::new(),
             session_keys: HashMap::new(),
@@ -109,9 +112,6 @@ where
     /// }
     /// ```
     pub async fn next(&mut self) -> Result<Option<ChatMessage>, Error> {
-        // Start by syncrhonizing the prekeys
-        self.e2e_client.sync_prekeys(PREKEY_AMOUNT, false).await?;
-
         loop {
             // Return already decrypted messages if available
             if let Some(m) = self.messages.pop() {
@@ -120,6 +120,12 @@ where
 
             // Otherwise, fetch the next batch of messages from the server and/or advance a step
             match self.step {
+                SynchronizationStep::InitialSyncPrekeys => {
+                    trace!("syncing prekeys");
+                    self.e2e_client.sync_prekeys(false).await?;
+                    self.step = SynchronizationStep::InitialMessages
+                }
+
                 SynchronizationStep::InitialMessages => self.sync_initial_messages().await?,
                 SynchronizationStep::Messages => self.sync_conversation_messages().await?,
 
@@ -128,8 +134,13 @@ where
             };
         }
 
+        // Sync prekeys one last time
+        trace!("final prekey sync");
+        self.e2e_client.sync_prekeys(false).await?;
+
         // Resolve unknown peers
         let peers = self.e2e_client.state.storage.get_unknown_peers()?;
+        debug!("resolving {} unknown peers", peers.len());
 
         for mut peer in peers {
             let rq = E2EMessage::UserProfileById {
@@ -146,6 +157,8 @@ where
                 }
                 Err(err) => return Err(err),
             };
+
+            trace!("Peer {} : {:?}", peer.id, profile);
 
             peer.username = Some(profile.username);
             self.e2e_client.state.storage.save_peer(&peer)?;

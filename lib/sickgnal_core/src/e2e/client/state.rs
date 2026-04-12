@@ -9,6 +9,7 @@ use chacha20poly1305::{
 };
 use rand::{CryptoRng, Rng, RngCore, rngs::StdRng};
 use tokio::sync::oneshot;
+use tracing::{debug, trace};
 use uuid::Uuid;
 use x25519_dalek::PublicKey;
 
@@ -405,6 +406,11 @@ where
         sender_name: String,
         kex_data: &KeyExchangeData,
     ) -> Result<PayloadMessage> {
+        trace!(
+            "handling new session with {} (id={})",
+            sender_name, sender_id
+        );
+
         // TODO: Handle pre-existing sessions with same and different public keys
         let sender_fingerprint = kex_data.identity_key.fingerprint();
 
@@ -414,6 +420,7 @@ where
             let key = self.storage.pop_ephemeral_key(id)?;
 
             if key.is_none() {
+                trace!("no prekey {}", id);
                 return Err(Error::NoSuchPrekey(*id));
             }
 
@@ -482,12 +489,16 @@ where
 
         let payload = PayloadMessage::try_from_bytes(&bytes)?;
 
+        trace!("decrypted payload : {:?}", payload);
+
         // Save the keys and session information
         let peer = Peer {
             id: sender_id,
             username: Some(sender_name),
             fingerprint: Some(Vec::from(sender_fingerprint)),
         };
+
+        debug!("saving new session with {} (id={})", peer.name(), peer.id);
 
         self.storage.save_peer(&peer)?;
 

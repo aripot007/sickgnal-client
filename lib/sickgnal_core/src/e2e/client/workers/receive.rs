@@ -16,7 +16,7 @@ use crate::{
     },
 };
 use tokio::sync::mpsc;
-use tracing::{error, info, warn};
+use tracing::{error, info, trace, trace_span, warn};
 use uuid::Uuid;
 
 struct ReceiveWorker<R, S>
@@ -104,6 +104,8 @@ where
             if packet.request_id != 0 {
                 // Dispatch the packet to the corresponding channel
 
+                trace!("forwarding tagged packet with id {}", packet.request_id);
+
                 let waiting_channel = {
                     let mut state = self.state.lock().unwrap();
                     state.waiting_requests.remove(&packet.request_id)
@@ -143,6 +145,12 @@ where
     ///
     /// Only returns irrecoverable errors that should stop the worker
     async fn process_message(&mut self, message: E2EMessage) -> Result<()> {
+        let process_span = trace_span!("process_e2e_msg", msg = ?message);
+
+        let _enter = process_span.enter();
+
+        trace!("started packet processing");
+
         match message {
             // Handle conversation opening
             E2EMessage::ConversationOpen {
@@ -164,10 +172,16 @@ where
             }
 
             // Silently drop OK messages
-            E2EMessage::Ok => Ok(()),
+            E2EMessage::Ok => {
+                trace!("dropping Ok");
+                Ok(())
+            }
 
             // Exit on error
-            E2EMessage::Error { code } => Err(Error::ProtocolError(code)),
+            E2EMessage::Error { code } => {
+                trace!("returning error {:?}", code);
+                Err(Error::ProtocolError(code))
+            }
 
             // Drop unexpected messages with log
             m => {

@@ -15,7 +15,7 @@ fn mock_message_stream_roundtrip() {
 
 #[test]
 fn existing_account_fixture_initializes_storage() {
-    let fixture = common::fixtures::init_existing_account_fixture("alice");
+    let fixture = common::fixtures::init_existing_account_fixture("alice", 5);
 
     let mut storage = fixture
         .storage

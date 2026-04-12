@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{
     chat::message::ChatMessage,
     e2e::message::{E2EMessage, Nonce},
@@ -46,7 +48,7 @@ impl From<aead::Error> for Error {
 // region:    Struct definitions
 
 /// Message ciphertext and associated Nonce to decrypt it
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct EncryptedPayload {
     /// Nonce used for message encryption
     #[serde(with = "base64nonce")]
@@ -182,3 +184,25 @@ impl From<E2EMessage> for PayloadMessage {
         Self::E2EMessage(value)
     }
 }
+
+// region:    Debug implementation
+
+impl Debug for EncryptedPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let alternate = f.alternate();
+
+        let mut dbg = f.debug_struct("EncryptedPayload");
+
+        dbg.field("key_id", &self.key_id);
+
+        if alternate {
+            dbg.field("nonce", &self.nonce)
+                .field("ciphertext", &self.ciphertext)
+                .finish()
+        } else {
+            dbg.finish_non_exhaustive()
+        }
+    }
+}
+
+// endregion: Debug implementation

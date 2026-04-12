@@ -19,6 +19,7 @@ pub const NONCE_BYTES: usize = 24;
 pub type Nonce = [u8; NONCE_BYTES];
 
 /// An E2E packet containing a message
+#[derive(Debug)]
 pub struct E2EPacket {
     pub request_id: u16,
     pub message: E2EMessage,

@@ -28,13 +28,28 @@ where
     M: E2EMessageStream,
 {
     /// Create a new ChatClient and registers a new account on the server
+    #[inline]
     pub async fn create_account(
         username: String,
         storage: S,
         msg_stream: M,
         event_tx: mpsc::Sender<ChatEvent>,
     ) -> Result<Self> {
-        let e2e_client = E2EClient::create_account(username, storage.clone(), msg_stream).await?;
+        Self::create_account_with_prekeys(username, storage, msg_stream, event_tx, None).await
+    }
+
+    /// Create a new ChatClient and registers a new account on the server, with an optional
+    /// number of prekeys to upload
+    pub async fn create_account_with_prekeys(
+        username: String,
+        storage: S,
+        msg_stream: M,
+        event_tx: mpsc::Sender<ChatEvent>,
+        prekeys_amount: Option<usize>,
+    ) -> Result<Self> {
+        let e2e_client =
+            E2EClient::create_account(username, storage.clone(), msg_stream, prekeys_amount)
+                .await?;
 
         Ok(Self {
             e2e_client,
@@ -44,13 +59,26 @@ where
     }
 
     /// Load an existing account from storage.
+    #[inline]
     pub fn load(
         account: Account,
         storage: S,
         msg_stream: M,
         event_tx: mpsc::Sender<ChatEvent>,
     ) -> Result<Self> {
-        let e2e_client = E2EClient::load(account, storage.clone(), msg_stream)?;
+        Self::load_with_prekeys(account, storage, msg_stream, event_tx, None)
+    }
+
+    /// Load an existing account from storage, with an optional amount of prekeys
+    /// to upload
+    pub fn load_with_prekeys(
+        account: Account,
+        storage: S,
+        msg_stream: M,
+        event_tx: mpsc::Sender<ChatEvent>,
+        prekeys_amount: Option<usize>,
+    ) -> Result<Self> {
+        let e2e_client = E2EClient::load(account, storage.clone(), msg_stream, prekeys_amount)?;
         Ok(Self {
             e2e_client,
             storage,

@@ -1,5 +1,5 @@
 use tokio::sync::mpsc;
-use tracing::{error, info};
+use tracing::{error, info, trace};
 
 use crate::e2e::{message::E2EPacket, message_stream::E2EMessageWriter};
 
@@ -19,6 +19,8 @@ where
             // Sending channel closed, stop the worker
             None => break,
         };
+
+        trace!("sending packet : {:?}", msg);
 
         if let Err(e) = writer.send(msg).await {
             error!("Error sending message : {}", e);

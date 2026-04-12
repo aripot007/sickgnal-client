@@ -3,6 +3,7 @@
 pub mod storage_backend;
 
 use base64::{DecodeSliceError, Engine, engine::general_purpose};
+use ed25519_dalek::{Signature, Signer};
 use rand::{CryptoRng, RngCore};
 
 use sha2::{Digest, Sha256};
@@ -65,6 +66,10 @@ impl IdentityKeyPair {
             x25519: x25519_dalek::PublicKey::from(&self.x25519_secret),
             ed25519: self.ed25519_key.verifying_key(),
         }
+    }
+
+    pub fn sign(&self, msg: &[u8]) -> Signature {
+        self.ed25519_key.sign(msg)
     }
 }
 

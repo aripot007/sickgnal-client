@@ -14,6 +14,7 @@ use rand::{
 };
 use sha2::{Digest, Sha512};
 use tokio::sync::mpsc;
+use tracing::trace;
 use uuid::Uuid;
 use x25519_dalek::PublicKey;
 
@@ -38,7 +39,7 @@ use crate::{
 // region:    Struct definition
 
 /// Number of prekeys to store on the server
-pub(super) const PREKEY_AMOUNT: usize = 100;
+pub(super) const DEFAULT_PREKEY_AMOUNT: usize = 100;
 
 /// An account on the relay server
 #[derive(Debug, Clone)]
@@ -64,6 +65,9 @@ where
     /// taking into account the client state instead of using the stream directly
     msg_stream: MsgStream,
 
+    /// Minimum number of prekeys we should store on the server
+    min_prekeys: usize,
+
     pub(super) state: E2EClientState<Storage>,
 }
 
@@ -78,8 +82,13 @@ where
 
     /// Load a client with an existing account
     ///
-    /// The client must then be synchronized with the server with
-    pub fn load(account: Account, mut storage: Storage, msg_stream: MsgStream) -> Result<Self> {
+    /// The client must then be synchronized with the server wit
+    pub fn load(
+        account: Account,
+        mut storage: Storage,
+        msg_stream: MsgStream,
+        min_prekeys: Option<usize>,
+    ) -> Result<Self> {
         let sessions = storage
             .load_all_sessions()?
             .into_iter()
@@ -90,7 +99,11 @@ where
 
         let state = E2EClientState::new(account, storage, rng, sessions);
 
-        Ok(Self { msg_stream, state })
+        Ok(Self {
+            msg_stream,
+            state,
+            min_prekeys: min_prekeys.unwrap_or(DEFAULT_PREKEY_AMOUNT),
+        })
     }
 
     /// Create a new client and register an account with the given username
@@ -101,6 +114,7 @@ where
         username: String,
         mut storage: Storage,
         mut msg_stream: MsgStream,
+        min_prekeys: Option<usize>,
     ) -> Result<Self> {
         let mut rng =
             StdRng::from_rng(OsRng).expect("Could not initialize random number generator");
@@ -139,10 +153,16 @@ where
 
         let state = E2EClientState::new(account, storage, rng, HashMap::new());
 
-        let mut client = Self { msg_stream, state };
+        let min_prekeys = min_prekeys.unwrap_or(DEFAULT_PREKEY_AMOUNT);
+
+        let mut client = Self {
+            msg_stream,
+            state,
+            min_prekeys,
+        };
 
         // Upload prekeys
-        client.upload_prekeys(PREKEY_AMOUNT, true, true).await?;
+        client.upload_prekeys(min_prekeys, true, true).await?;
 
         Ok(client)
     }
@@ -220,17 +240,10 @@ where
 
     /// Synchronize the prekeys with the ones uploaded on the server.
     ///
-    /// This removes unknown keys from the server, and uploads new prekeys if there are less
-    /// than `min_prekeys` available on the server (up to the server limit).
-    ///
     /// If `rotate_midterm_key` is true, this also rotates the midterm key.
     ///
     /// Returns the number of available ephemeral prekeys on the server.
-    pub(super) async fn sync_prekeys(
-        &mut self,
-        min_prekeys: usize,
-        rotate_midterm_key: bool,
-    ) -> Result<usize> {
+    pub(super) async fn sync_prekeys(&mut self, rotate_midterm_key: bool) -> Result<usize> {
         // Get the status of the prekeys
         let resp = self
             .send_authenticated_e2e(E2EMessage::PreKeyStatusRequest { token: "".into() })
@@ -265,8 +278,8 @@ where
 
         // Upload new prekeys and optionally the midterm key
         let mut to_upload = 0;
-        if nb_available < min_prekeys {
-            to_upload = (min_prekeys - nb_available).clamp(0, limit as usize);
+        if nb_available < self.min_prekeys {
+            to_upload = (self.min_prekeys - nb_available).clamp(0, limit as usize);
         }
 
         if to_upload > 0 || rotate_midterm_key {
@@ -297,11 +310,14 @@ where
     ///
     /// [`send_e2e`]: Self::send_e2e
     pub(super) async fn send_e2e_raw(&mut self, msg: E2EMessage) -> Result<E2EMessage> {
+        trace!("sending {:?}", msg);
         self.msg_stream.send_untagged(msg).await?;
-        self.msg_stream
-            .receive_untagged()
-            .await
-            .map_err(Error::from)
+
+        let res = self.msg_stream.receive_untagged().await?;
+
+        trace!("response : {:?}", res);
+
+        Ok(res)
     }
 
     /// Send a [`E2EMessage`] that needs authentication and wait for the response
