@@ -1,4 +1,4 @@
-use crate::{error::InvalidMessage, reader::Reader, u24::U24};
+use crate::{error::InvalidMessage, reader::Reader};
 
 /// A trait for encoding something
 pub trait Encode: Sized {

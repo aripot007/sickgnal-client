@@ -2,7 +2,6 @@ use std::fmt::Debug;
 
 use rand::{RngCore, rngs::OsRng};
 use rustls_pki_types::DnsName;
-use tracing::trace;
 
 use crate::{
     codec::{Encode, LengthSize, encode_length_prefixed_vector},
