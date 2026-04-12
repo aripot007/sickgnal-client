@@ -126,8 +126,9 @@ impl Connection {
 
     /// Returns `true` if the client should call [`Self::read_tls`] as soon as possible
     pub fn wants_read(&self) -> bool {
-        // FIXME: there should be other cases where we want to read
-        self.receiver.data_buffer.is_empty() && self.receiver.input_buffer.is_empty()
+        self.receiver.data_buffer.is_empty()
+            && self.receiver.input_buffer.is_empty()
+            && self.state.as_ref().is_ok_and(|s| s.wants_read())
     }
 
     // Returns `true` if the client should call [`Self::write_tls`] as soon as possible
