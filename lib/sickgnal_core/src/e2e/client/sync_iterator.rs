@@ -47,7 +47,7 @@ where
     step: SynchronizationStep,
 
     /// Available messages
-    messages: Vec<ChatMessage>,
+    messages: VecDeque<ChatMessage>,
 
     /// Messages received for which we don't have the key yet
     ///
@@ -92,7 +92,7 @@ where
             batch_size: 100,
             e2e_client: client,
             step: SynchronizationStep::InitialSyncPrekeys,
-            messages: Vec::new(),
+            messages: VecDeque::new(),
             undecipherable_messages: HashMap::new(),
             session_keys: HashMap::new(),
         }
@@ -114,7 +114,7 @@ where
     pub async fn next(&mut self) -> Result<Option<ChatMessage>, Error> {
         loop {
             // Return already decrypted messages if available
-            if let Some(m) = self.messages.pop() {
+            if let Some(m) = self.messages.pop_front() {
                 return Ok(Some(m));
             }
 
@@ -306,7 +306,7 @@ where
 
         m.sender_id = sender_id;
 
-        self.messages.push(m);
+        self.messages.push_back(m);
     }
 
     /// Process a [`ConversationMessage`] message
@@ -355,7 +355,7 @@ where
             match ciphertext.decrypt(&aead) {
                 Ok(PayloadMessage::ChatMessage(mut m)) => {
                     m.sender_id = sender_id;
-                    self.messages.push(m)
+                    self.messages.push_back(m)
                 }
 
                 // Handle key rotation
