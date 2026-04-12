@@ -45,6 +45,8 @@ pub enum Handshake {
     Certificate(CertificateMessage),
     CertificateVerify(CertificateVerify),
     Finished(Finished),
+    /// KeyUpdate message, contains true if an update was requested, false otherwise.
+    KeyUpdate(bool),
 
     /// We don't use session sickets, so we just ignore the message for now
     NewSessionTicket,
@@ -61,6 +63,7 @@ impl Handshake {
             Handshake::CertificateVerify(..) => HandshakeType::CertificateVerify,
             Handshake::Finished(..) => HandshakeType::Finished,
             Handshake::NewSessionTicket => HandshakeType::NewSessionTicket,
+            Handshake::KeyUpdate(_) => HandshakeType::KeyUpdate,
         }
     }
 }
@@ -109,11 +112,27 @@ impl Decode for Handshake {
                 Handshake::NewSessionTicket
             }
 
-            // Not supported yet
-            HandshakeType::EndOfEarlyData => todo!(),
-            HandshakeType::CertificateRequest => todo!(),
-            HandshakeType::KeyUpdate => todo!(),
-            HandshakeType::MessageHash => todo!(),
+            // We don't support early data or client authentication, we shouldn't receive these messages
+            // Since we don't retry on HelloRetryRequest, we shouldn't receive a MessageHash either.
+            HandshakeType::EndOfEarlyData
+            | HandshakeType::CertificateRequest
+            | HandshakeType::MessageHash => {
+                return Err(InvalidMessage::UnexpectedMessage);
+            }
+
+            HandshakeType::KeyUpdate => {
+                let update_requested = buf
+                    .take_byte()
+                    .ok_or(InvalidMessage::TooShortFor("key_update_request"))?;
+
+                let update_requested = match update_requested {
+                    0 => false,
+                    1 => true,
+                    _ => return Err(InvalidMessage::IllegalParameter),
+                };
+
+                Handshake::KeyUpdate(update_requested)
+            }
 
             _ => return Err(InvalidMessage::InvalidHandshakeType),
         };

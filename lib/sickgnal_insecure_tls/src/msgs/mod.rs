@@ -68,6 +68,27 @@ impl Message {
         Message::HandshakeData(bytes)
     }
 
+    /// Create a KeyUpdate message
+    ///
+    /// Returns a [`Message::HandshakeData`] that can be used for the transcript hash
+    pub fn key_update(request_update: bool) -> Self {
+        // directly encode as handshake data
+        let mut bytes = Vec::with_capacity(HANDSHAKE_HEADER_SIZE + 1);
+
+        // Handshake header
+        HandshakeType::KeyUpdate.encode(&mut bytes); // msg_type
+        U24(1).encode(&mut bytes); // length
+
+        let request_update = match request_update {
+            true => 0x01,
+            false => 0x00,
+        };
+
+        bytes.push(request_update);
+
+        Message::HandshakeData(bytes)
+    }
+
     /// Get the [`ContentTypeName`] of this message
     #[inline]
     pub fn content_type(&self) -> ContentTypeName {

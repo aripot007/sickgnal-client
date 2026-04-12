@@ -33,12 +33,31 @@ impl Sender {
         self.encryption_state.set_new_traffic_secret(secret);
     }
 
+    /// Update the traffic secret and compute the new key, and send a KeyUpdate message
+    pub fn perform_key_update(&mut self) {
+        // send the KeyUpdate message
+
+        let key_update_payload = match Message::key_update(false) {
+            Message::Handshake { raw_bytes, .. } | Message::HandshakeData(raw_bytes) => raw_bytes,
+            _ => panic!("Message::key_update should return a handshake message"),
+        };
+
+        self.encryption_state.encrypt(
+            &key_update_payload,
+            ContentType::Handshake,
+            &mut self.output_buffer,
+        );
+
+        // Update the keys
+        self.encryption_state.perform_key_update();
+    }
+
     pub fn send(&mut self, msg: Message) {
         trace!("Sending message {:?}", msg);
 
         // Rekey if necessary
         if self.encryption_state.needs_rekey() {
-            self.rekey();
+            self.perform_key_update();
         }
 
         let mut payload = match msg.encoded_length_hint() {
@@ -64,10 +83,5 @@ impl Sender {
             self.encryption_state
                 .encrypt(fragment, typ, &mut self.output_buffer);
         }
-    }
-
-    /// Update the key and send a KeyUpdate message
-    fn rekey(&mut self) {
-        todo!()
     }
 }

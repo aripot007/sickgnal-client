@@ -1,7 +1,9 @@
+use aes_gcm::{AeadCore, KeySizeUser};
 use hkdf::Hkdf;
 use sha2::{Digest, Sha256};
 
 use crate::macros::codec_enum;
+use typenum::Unsigned;
 
 pub mod ciphersuite;
 pub mod keyshare;
@@ -17,7 +19,6 @@ pub mod keyshare;
 /// [RFC8446]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.1
 ///
 /// Takes the [`Hkdf`] with the already-computed PRK instead of the `secret` argument from the RFC
-#[inline]
 pub fn derive_secret(hkdf: &Hkdf<Sha256>, label: &str, transcript_hash: Option<&[u8]>) -> Vec<u8> {
     let context = match transcript_hash {
         Some(h) => h,
@@ -25,6 +26,17 @@ pub fn derive_secret(hkdf: &Hkdf<Sha256>, label: &str, transcript_hash: Option<&
     };
 
     hkdf_expand_label(hkdf, label, context, Sha256::output_size() as u16)
+}
+
+/// Derive a new (key, iv) pair from a hkdf seeded with a traffic secret
+pub fn derive_traffic_keys<A>(hk: &Hkdf<Sha256>) -> (Vec<u8>, Vec<u8>)
+where
+    A: AeadCore + KeySizeUser,
+{
+    let key = hkdf_expand_label(&hk, "key", b"", <A as KeySizeUser>::KeySize::U16);
+    let iv = hkdf_expand_label(&hk, "iv", b"", <A as AeadCore>::NonceSize::U16);
+
+    return (key, iv);
 }
 
 /// The Derive-Secret function as defined in [RFC8446#section7.1](https://datatracker.ietf.org/doc/html/rfc8446#section-7.1)

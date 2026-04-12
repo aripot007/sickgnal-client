@@ -1,15 +1,16 @@
 use std::fmt::Debug;
 use std::iter::zip;
 
+use aes_gcm::AeadInPlace;
 use aes_gcm::aes::cipher::Unsigned;
 use aes_gcm::{AeadCore, Aes128Gcm, KeyInit};
-use aes_gcm::{AeadInPlace, KeySizeUser};
 use hkdf::Hkdf;
 use sha2::Sha256;
+use sha2::digest::OutputSizeUser;
 use tracing::trace;
 
 use crate::codec::Encode;
-use crate::crypto::hkdf_expand_label;
+use crate::crypto::{derive_traffic_keys, hkdf_expand_label};
 use crate::hex_display::HexDisplayExt;
 use crate::msgs::ProtocolVersion;
 use crate::record_layer::ContentType;
@@ -44,10 +45,12 @@ impl EncryptionState {
         *self = EncryptionState::Enabled(InnerState::new(secret))
     }
 
-    /// Return `true` if encryption is enabled
-    #[inline]
-    pub fn enabled(&self) -> bool {
-        matches!(self, Self::Enabled(..))
+    /// Update the traffic secret and compute the new keys
+    pub fn perform_key_update(&mut self) {
+        match self {
+            EncryptionState::Disabled => (),
+            EncryptionState::Enabled(inner_state) => inner_state.perform_key_update(),
+        }
     }
 
     /// Do we need a rekey before sending more data ?
@@ -99,13 +102,14 @@ impl EncryptionState {
 
 /// Inner encryption state
 struct InnerState {
+    /// Hkdf seeded with the current traffic secret
+    traffic_secret_hkdf: Hkdf<Sha256>,
     aead: Aes128Gcm,
     sequence_number: u64,
     iv: Vec<u8>,
 }
 
 impl InnerState {
-    const KEY_SIZE: usize = <Aes128Gcm as KeySizeUser>::KeySize::USIZE;
     const NONCE_SIZE: usize = <Aes128Gcm as AeadCore>::NonceSize::USIZE;
 
     /// Create a new decryption state from a secret
@@ -117,16 +121,34 @@ impl InnerState {
         let hk =
             Hkdf::<Sha256>::from_prk(secret).expect("secret should have a valid length for a PRK");
 
-        let key = hkdf_expand_label(&hk, "key", b"", Self::KEY_SIZE as u16);
-        let iv = hkdf_expand_label(&hk, "iv", b"", Self::NONCE_SIZE as u16);
-
+        let (key, iv) = derive_traffic_keys::<Aes128Gcm>(&hk);
         let aead = Aes128Gcm::new_from_slice(&key).expect("dervied key should have a valid length");
-
         Self {
+            traffic_secret_hkdf: hk,
             aead,
             sequence_number: 0,
             iv,
         }
+    }
+
+    /// Update the traffic_secret and derive new encryption keys
+    pub fn perform_key_update(&mut self) {
+        let next_secret = hkdf_expand_label(
+            &self.traffic_secret_hkdf,
+            "traffic upd",
+            b"",
+            <Sha256 as OutputSizeUser>::OutputSize::U16,
+        );
+
+        self.traffic_secret_hkdf = Hkdf::<Sha256>::from_prk(&next_secret)
+            .expect("secret should have a valid length for a PRK");
+
+        let (key, iv) = derive_traffic_keys::<Aes128Gcm>(&self.traffic_secret_hkdf);
+        let aead = Aes128Gcm::new_from_slice(&key).expect("dervied key should have a valid length");
+
+        self.aead = aead;
+        self.iv = iv;
+        self.sequence_number = 0;
     }
 
     #[inline]

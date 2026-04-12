@@ -11,7 +11,7 @@ use crate::{
 pub(super) struct ConnectedState {}
 
 impl ConnectedState {
-    pub fn handle(self, input: ReceiveEvent, _output: &mut Output) -> Result<State, Error> {
+    pub fn handle(self, input: ReceiveEvent, output: &mut Output) -> Result<State, Error> {
         let hs = match input {
             ReceiveEvent::Handshake { handshake, .. } => handshake,
             ReceiveEvent::ChangeCipherSpec => return Err(InvalidMessage::UnexpectedMessage.into()),
@@ -20,6 +20,13 @@ impl ConnectedState {
 
         match hs {
             Handshake::NewSessionTicket => (),
+            Handshake::KeyUpdate(update_requested) => {
+                output.receiver.perform_key_update();
+
+                if update_requested {
+                    output.sender.perform_key_update();
+                }
+            }
             _ => return Err(InvalidMessage::UnexpectedMessage.into()),
         }
 

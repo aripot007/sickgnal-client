@@ -52,6 +52,11 @@ impl Receiver {
         self.decryption_state.set_new_traffic_secret(secret);
     }
 
+    /// Update the traffic secret and compute the new key
+    pub fn perform_key_update(&mut self) {
+        self.decryption_state.perform_key_update();
+    }
+
     /// Process the packets we received in `input_buffer`
     pub fn process_new_packets(
         &mut self,

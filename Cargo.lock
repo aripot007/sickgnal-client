@@ -5041,6 +5041,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "typenum",
  "x25519-dalek",
 ]
 
