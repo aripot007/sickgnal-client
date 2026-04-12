@@ -17,6 +17,7 @@ use tokio::time;
 use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
+#[allow(unused)]
 pub struct MockMessageStreamInner {
     next_request_id: u16,
     incoming_count: usize,
@@ -32,6 +33,7 @@ pub struct MockMessageStreamInner {
     prepared_on_next_request: VecDeque<PreparedResponse>,
 }
 
+#[allow(unused)]
 enum PreparedResponse {
     MirrorRequestId(E2EMessage),
     Untagged(E2EMessage),
@@ -72,6 +74,7 @@ pub struct MockMessageWriter {
     inner: Arc<Mutex<MockMessageStreamInner>>,
 }
 
+#[allow(unused)]
 impl MockMessageStream {
     pub fn new() -> Self {
         Self::default()

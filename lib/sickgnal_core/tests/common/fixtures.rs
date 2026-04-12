@@ -79,11 +79,3 @@ pub fn init_existing_account_fixture(
         ephemeral_keys,
     }
 }
-
-pub fn make_account(username: impl Into<String>) -> Account {
-    Account {
-        username: username.into(),
-        id: Uuid::new_v4(),
-        token: "mock-token".to_string(),
-    }
-}
