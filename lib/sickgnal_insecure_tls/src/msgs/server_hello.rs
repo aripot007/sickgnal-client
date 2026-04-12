@@ -244,8 +244,12 @@ impl ServerExtensions {
                 self.cookie = Some(bytes)
             }
 
-            // TODO: Handle server_name extension
-            // ExtensionTypeName::ServerName => todo!(),
+            ExtensionTypeName::ServerName => {
+                // the "extension_data" field of a server_name extension in the server hello should be empty
+                if !buf.is_empty() {
+                    return Err(InvalidMessage::IllegalParameter);
+                }
+            }
             _ => return Err(InvalidMessage::UnsupportedExtension),
         };
 
