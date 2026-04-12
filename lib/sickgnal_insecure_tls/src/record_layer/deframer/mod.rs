@@ -43,7 +43,7 @@ impl<'a> Iterator for Deframer<'a> {
             Err(err) => {
                 let err = match err {
                     // If we can't read a full header, we just can't return a message for now
-                    ParsingError::TooShortForHeader | ParsingError::TooShortForPayload => {
+                    ParsingError::TooShortForHeader => {
                         return None;
                     }
 
@@ -123,10 +123,6 @@ enum ParsingError {
     /// When we can't read enough bytes for the header
     #[error("buffer too short for header")]
     TooShortForHeader,
-
-    /// When we can't read enough bytes for the header
-    #[error("buffer too short for payload")]
-    TooShortForPayload,
 
     /// When the content type is invalid
     #[error("invalid content type")]
