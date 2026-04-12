@@ -35,13 +35,6 @@ impl Encode for KeyShareEntry {
             }
         }
     }
-
-    fn encoded_length_hint(&self) -> Option<usize> {
-        let payload_len = match self {
-            KeyShareEntry::X25519(_) => size_of::<u16>() + 32,
-        };
-        Some(NamedGroup::LENGTH_HINT.unwrap() + payload_len)
-    }
 }
 
 impl Decode for KeyShareEntry {

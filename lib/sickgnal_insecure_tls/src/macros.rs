@@ -128,17 +128,9 @@ macro_rules! codec_enum {
 
         // Encoding / decoding
         impl crate::codec::Encode for $struct_name {
-
-            const LENGTH_HINT: Option<usize> = Some(::std::mem::size_of::<$utype>());
-
             #[inline]
             fn encode(&self, dest: &mut ::std::vec::Vec<u8>) {
                 self.0.encode(dest)
-            }
-
-            #[inline]
-            fn encoded_length_hint(&self) -> ::core::option::Option<usize> {
-                Some(::std::mem::size_of::<$utype>())
             }
         }
 

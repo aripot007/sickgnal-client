@@ -2,19 +2,8 @@ use crate::{error::InvalidMessage, reader::Reader};
 
 /// A trait for encoding something
 pub trait Encode: Sized {
-    /// The encoded length in bytes, if it is known at compile time
-    const LENGTH_HINT: Option<usize> = None;
-
     /// Encode self by appending it to the `dest` buffer
     fn encode(&self, dest: &mut Vec<u8>);
-
-    /// Returns the encoded length in bytes, if it is known before
-    /// encoding.
-    ///
-    /// Returns [`Codec::LENGTH_HINT`] by default
-    fn encoded_length_hint(&self) -> Option<usize> {
-        Self::LENGTH_HINT
-    }
 }
 
 /// A trait to decode something
@@ -76,11 +65,6 @@ impl Encode for u8 {
     fn encode(&self, dest: &mut Vec<u8>) {
         dest.push(*self);
     }
-
-    #[inline]
-    fn encoded_length_hint(&self) -> Option<usize> {
-        Some(1)
-    }
 }
 
 impl Decode for u8 {
@@ -93,11 +77,6 @@ impl Decode for u8 {
 impl Encode for u16 {
     fn encode(&self, dest: &mut Vec<u8>) {
         dest.extend(self.to_be_bytes());
-    }
-
-    #[inline]
-    fn encoded_length_hint(&self) -> Option<usize> {
-        Some(2)
     }
 }
 

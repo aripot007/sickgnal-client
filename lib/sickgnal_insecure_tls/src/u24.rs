@@ -17,11 +17,6 @@ impl Encode for U24 {
         let bytes = self.0.to_be_bytes();
         dest.extend_from_slice(&bytes[1..]);
     }
-
-    #[inline]
-    fn encoded_length_hint(&self) -> Option<usize> {
-        Some(3)
-    }
 }
 
 impl Decode for U24 {
