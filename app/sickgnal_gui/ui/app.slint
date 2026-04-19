@@ -26,27 +26,33 @@ export { PeerData } from "models/Peer.slint";
 export { ProfileSelect, ProfileData } from "models/Profile.slint";
 
 export component AppWindow inherits Window {
-
     title: "Rust Messenger";
     min-width: 800px;
     min-height: 500px;
-
     background: Theme.background;
 
-    VerticalBox {
+    HorizontalLayout {
+        alignment: center;
         padding: 0;
         spacing: 0;
 
-        if (Status.has_error): ErrorBanner { }
+        VerticalLayout {
+            alignment: center;
+            padding: 0;
+            spacing: 0;
 
-        // Profile selection screen (shown before auth when profiles exist)
-        if (ProfileSelect.show_profile_select && !Auth.is-logged-in): ProfileSelectLayout { }
+            if (Status.has_error): ErrorBanner { }
 
-        // Auth screen (sign-in or sign-up for a specific profile / new account)
-        if (!ProfileSelect.show_profile_select && !Auth.is-logged-in): LogLayout { }
+            // Profile selection screen (shown before auth when profiles exist)
+            if (ProfileSelect.show_profile_select && !Auth.is-logged-in): ProfileSelectLayout { }
 
-        if (Auth.is-logged-in): MainLayout { }
+            // Auth screen (sign-in or sign-up for a specific profile / new account)
+            if (!ProfileSelect.show_profile_select && !Auth.is-logged-in): LogLayout { }
+
+        }
     }
+    
+    if (Auth.is-logged-in): MainLayout { }
 
     // Overlay dialogs (rendered on top of everything)
     if (Chat.show_new_conversation_dialog): NewConversationDialog { }

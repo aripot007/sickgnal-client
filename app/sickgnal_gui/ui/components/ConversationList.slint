@@ -24,7 +24,8 @@ export component ConversationList inherits Rectangle {
             ImageButton {
                 image: @image-url("../assets/add.png");
                 clicked => {
-                    // New conversation
+                    debug("show_new_conversation_dialog to true ");
+                    Chat.show_new_conversation_dialog = true;
                 }
             }
         }

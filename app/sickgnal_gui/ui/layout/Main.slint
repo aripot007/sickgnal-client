@@ -8,12 +8,10 @@ import { ImageButton } from "../components/ImageButton.slint";
 
 export component MainLayout inherits HorizontalBox {
     in-out property <string> current_page: "chat";
-    width: 100%;
-    height: 100%;
 
     Rectangle {
         height: 100%;
-        width: 15%;
+        width: 20%;
         min-width: 250px;
         background: Theme.background-light;
         VerticalBox {

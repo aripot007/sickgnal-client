@@ -55,7 +55,9 @@ export component NewConversationDialog inherits Rectangle {
                     text: "Cancel";
                     btn_width: 80px;
                     clicked => {
+                        debug("call to cancel_new_conversation");
                         Chat.cancel_new_conversation();
+                        debug("show_new_conversation_dialog =", Chat.show_new_conversation_dialog);
                     }
                 }
 
@@ -64,6 +66,7 @@ export component NewConversationDialog inherits Rectangle {
                     btn_width: 80px;
                     enabled: username-input.text != "";
                     clicked => {
+                        debug("call to confirm_new_conversation");
                         Chat.confirm_new_conversation(username-input.text);
                     }
                 }
