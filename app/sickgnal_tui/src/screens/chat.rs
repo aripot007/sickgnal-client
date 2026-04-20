@@ -392,11 +392,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         // Handle scroll positioning
         if let Some(sel) = app.selected_message {
             // In selection mode: center viewport on selected message
-            let sel_start_line = app
-                .message_line_offsets
-                .get(sel)
-                .copied()
-                .unwrap_or(0);
+            let sel_start_line = app.message_line_offsets.get(sel).copied().unwrap_or(0);
             let half = visible_height / 2;
             let target = sel_start_line.saturating_sub(half);
             app.scroll_offset = target.min(max_offset);

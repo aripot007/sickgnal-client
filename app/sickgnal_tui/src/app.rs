@@ -133,11 +133,11 @@ pub struct App {
     pub current_conversation: Option<Uuid>,
     pub messages: Vec<Message>,
     pub message_input: String,
-    pub input_cursor: usize, // byte offset into message_input
-    pub scroll_offset: u16,  // visual line offset from top (used by Paragraph::scroll)
-    pub scroll_pinned_to_bottom: bool, // if true, draw() will snap scroll to bottom
-    pub messages_area_height: u16,     // visible height in lines, updated by draw()
-    pub total_visual_lines: u16,       // total wrapped lines, updated by draw()
+    pub input_cursor: usize,            // byte offset into message_input
+    pub scroll_offset: u16,             // visual line offset from top (used by Paragraph::scroll)
+    pub scroll_pinned_to_bottom: bool,  // if true, draw() will snap scroll to bottom
+    pub messages_area_height: u16,      // visible height in lines, updated by draw()
+    pub total_visual_lines: u16,        // total wrapped lines, updated by draw()
     pub message_line_offsets: Vec<u16>, // start visual line of each message, updated by draw()
     pub my_user_id: Option<Uuid>,
 
@@ -1193,7 +1193,9 @@ impl App {
             }
             KeyCode::PageDown => {
                 let page = self.messages_area_height.max(1);
-                let max_offset = self.total_visual_lines.saturating_sub(self.messages_area_height);
+                let max_offset = self
+                    .total_visual_lines
+                    .saturating_sub(self.messages_area_height);
                 self.scroll_offset = (self.scroll_offset + page).min(max_offset);
                 if self.scroll_offset >= max_offset {
                     self.scroll_pinned_to_bottom = true;
