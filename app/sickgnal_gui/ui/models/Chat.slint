@@ -4,6 +4,7 @@ import { PeerData } from "Peer.slint";
 export global Chat {
     in-out property <[Conversation]> chats: [];
     in-out property <int> active_chat_id: -1;
+    in-out property <bool> is_loading: true;
 
     // Editing state
     in-out property <bool> is_editing: false;
@@ -24,12 +25,26 @@ export global Chat {
     callback delete_conversation(int);
     callback send_message(string);
     callback create_new_conversation();
-    callback confirm_new_conversation(/* username */ string);
+    callback confirm_new_conversation();
     callback cancel_new_conversation();
+    callback add_user_to_new_conversation(/* username */ string);
+    callback remove_user_from_new_conversation(/* index */ int);
+
+    // Context menu on conversation item
+    in-out property <bool> show_context_menu: false;
+    in-out property <int> context_menu_index: -1;
+    in-out property <length> context_menu_x: 0;
+    in-out property <length> context_menu_y: 0;
 
     // New conversation dialog state
     in-out property <bool> show_new_conversation_dialog: false;
+    in-out property <bool> show_new_conv_or_group_dialog: false;
+    in-out property <bool> new_conversation_is_group: false;
     in-out property <string> new_conversation_error: "";
+    in-out property <[string]> new_conversation_users: [];
+
+    // New conversation "+" sub-menu
+    in-out property <bool> show_new_conv_menu: false;
 
     callback edit_message(/* msg_id */ string, /* new_text */ string);
     callback delete_message(/* msg_id */ string);
@@ -53,6 +68,14 @@ export global Chat {
     in-out property <string> reply_to_preview: "";
     callback start_reply(/* msg_id */ string, /* preview_text */ string);
     callback cancel_reply();
+
+    // Message context menu (global overlay)
+    in-out property <bool> show_message_menu: false;
+    in-out property <string> message_menu_id: "";
+    in-out property <string> message_menu_text: "";
+    in-out property <bool> message_menu_is_me: false;
+    in-out property <length> message_menu_x: 0;
+    in-out property <length> message_menu_y: 0;
 
     // Add member dialog state
     in-out property <bool> show_add_member_dialog: false;

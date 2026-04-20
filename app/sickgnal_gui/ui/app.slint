@@ -1,7 +1,6 @@
 import {
     Button,
     VerticalBox,
-    LineEdit,
     ScrollView,
     HorizontalBox,
 } from "std-widgets.slint";
@@ -15,6 +14,10 @@ import { Chat } from "models/Chat.slint";
 import { ProfileSelectLayout } from "layout/ProfileSelect.slint";
 import { ProfileSelect, ProfileData } from "models/Profile.slint";
 import { AddMemberDialog } from "components/AddMemberDialog.slint";
+import { MessageMenu } from "components/MessageMenu.slint";
+import { I18n } from "models/I18n.slint";
+import { ThemeSwitcher } from "components/ThemeSwitcher.slint";
+import { NewConvOrGroupDialog } from "components/NewConvOrGroupDialog.slint";
 
 // Export models for Rust access
 export { Chat } from "models/Chat.slint";
@@ -24,31 +27,126 @@ export { Auth } from "layout/Log.slint";
 export { Status } from "models/Status.slint";
 export { PeerData } from "models/Peer.slint";
 export { ProfileSelect, ProfileData } from "models/Profile.slint";
+export { I18n } from "models/I18n.slint";
 
 export component AppWindow inherits Window {
-
-    title: "Rust Messenger";
+    title: "Sickgnal";
     min-width: 800px;
     min-height: 500px;
+    background: Theme.background-dark;
 
-    background: Theme.background;
-
-    VerticalBox {
+    HorizontalLayout {
+        alignment: center;
         padding: 0;
         spacing: 0;
 
-        if (Status.has_error): ErrorBanner { }
+        VerticalLayout {
+            alignment: center;
+            padding: 0;
+            spacing: 0;
 
-        // Profile selection screen (shown before auth when profiles exist)
-        if (ProfileSelect.show_profile_select && !Auth.is-logged-in): ProfileSelectLayout { }
+            if (Status.has_error): ErrorBanner { }
 
-        // Auth screen (sign-in or sign-up for a specific profile / new account)
-        if (!ProfileSelect.show_profile_select && !Auth.is-logged-in): LogLayout { }
+            // Profile selection screen (shown before auth when profiles exist)
+            if (ProfileSelect.show_profile_select && !Auth.is-logged-in): ProfileSelectLayout { }
 
-        if (Auth.is-logged-in): MainLayout { }
+            // Auth screen (sign-in or sign-up for a specific profile / new account)
+            if (!ProfileSelect.show_profile_select && !Auth.is-logged-in): LogLayout { }
+
+        }
+    }
+    
+    if (Auth.is-logged-in): MainLayout { }
+
+    // Language toggle (visible on all screens, top-right corner)
+    if (!Auth.is-logged-in): Rectangle {
+        x: 0px; 
+        y: 10px;
+        height: 70px;
+        border-radius: 6px;
+
+        HorizontalLayout {
+            height: 50px; 
+            padding-left: 10px;
+            padding-right: 10px;
+            spacing: 5px;
+
+            // --- Left Side: Theme Switcher & Language Toggle Grouped ---
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    // Adjusted width to fit both elements comfortably
+                    width: 75px; 
+                    height: 36px;
+
+                    lang-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            I18n.is-french = !I18n.is-french;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 6px;
+                        alignment: center;
+
+                        ThemeSwitcher { 
+                            // Switches between light/dark [cite: 1, 7]
+                        }
+
+                        Text {
+                            text: I18n.is-french ? "FR" : "EN";
+                            font-size: 18px;
+                            font-weight: 700;
+                            color: Theme.text-main; 
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+
+            // Spacer: This pushes the logout button to the far right since the name Rect is removed
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            // --- Right Side: Logout Button ---
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 6px;
+                    
+                    // Hover effect: 15% opacity to full red
+                    background: logout-touch.has-hover ? #ff0000 : #ff000022;
+
+                    logout-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            Auth.logout();
+                        }
+                    }
+
+                    Text {
+                        text: "⏻";
+                        font-size: 18px;
+                        // Switches to white on hover for contrast against the solid red background
+                        color: logout-touch.has-hover ? white : #ff0000;
+                        
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    
+                    animate background { duration: 150ms; }
+                }
+            }
+        }
     }
 
     // Overlay dialogs (rendered on top of everything)
     if (Chat.show_new_conversation_dialog): NewConversationDialog { }
+    if Chat.show_new_conv_or_group_dialog : NewConvOrGroupDialog { }
     if (Chat.show_add_member_dialog): AddMemberDialog { }
+    if (Chat.show_message_menu): MessageMenu { }
 }

@@ -2,12 +2,13 @@ import {
     VerticalBox,
     HorizontalBox,
     ScrollView,
-    LineEdit,
 } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Chat } from "../models/Chat.slint";
 import { PeerData } from "../models/Peer.slint";
 import { Button } from "../components/Button.slint";
+import { I18n } from "../models/I18n.slint";
+import { ChatInput } from "../components/ChatInput.slint";
 
 component PeerItem inherits Rectangle {
     in property <string> peer_name;
@@ -76,7 +77,7 @@ component PeerItem inherits Rectangle {
         }
 
         if root.show_fp: Text {
-            text: "Fingerprint: " + root.peer_fingerprint;
+            text: I18n.fingerprint-prefix + root.peer_fingerprint;
             font-size: 11px;
             color: Theme.text-muted;
             wrap: word-wrap;
@@ -85,6 +86,9 @@ component PeerItem inherits Rectangle {
 }
 
 export component ConversationSettings inherits VerticalBox {
+    private property <bool> is-renaming: false;
+    private property <string> rename-value: "";
+
     padding: 0;
     spacing: 0;
 
@@ -100,30 +104,33 @@ export component ConversationSettings inherits VerticalBox {
             spacing: 10px;
             alignment: start;
 
-            Rectangle {
-                width: 32px;
-                height: 32px;
-                border-radius: 6px;
-                background: back-touch.has-hover ? Theme.surface-hover : transparent;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 6px;
+                    background: back-touch.has-hover ? Theme.surface-hover : transparent;
 
-                back-touch := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => {
-                        Chat.close_conversation_settings();
+                    back-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            Chat.close_conversation_settings();
+                        }
                     }
-                }
 
-                Text {
-                    text: "←";
-                    font-size: 18px;
-                    color: Theme.text-main;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                    Text {
+                        text: "←";
+                        font-size: 18px;
+                        color: Theme.text-main;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
                 }
             }
 
             Text {
-                text: "Conversation Info";
+                text: I18n.conversation-info;
                 font-size: 18px;
                 font-weight: 600;
                 color: Theme.text-main;
@@ -133,27 +140,29 @@ export component ConversationSettings inherits VerticalBox {
     }
 
     ScrollView {
-        VerticalBox {
+        VerticalLayout {
             padding: 20px;
             spacing: 16px;
+            alignment: start;
 
             // Conversation name section
             Rectangle {
                 background: Theme.surface;
                 border-radius: 10px;
+                vertical-stretch: 0;
 
                 VerticalLayout {
                     padding: 16px;
                     spacing: 10px;
 
                     Text {
-                        text: "Name";
+                        text: I18n.name-label;
                         font-size: 12px;
                         font-weight: 600;
                         color: Theme.text-muted;
                     }
 
-                    HorizontalLayout {
+                    if !root.is-renaming: HorizontalLayout {
                         spacing: 10px;
 
                         Text {
@@ -161,15 +170,54 @@ export component ConversationSettings inherits VerticalBox {
                             font-size: 16px;
                             color: Theme.text-main;
                             vertical-alignment: center;
+                            horizontal-alignment: left;
+                            horizontal-stretch: 0;
                         }
 
-                        Rectangle { }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                        }
 
                         Button {
-                            text: "Rename";
+                            text: I18n.rename;
                             btn_width: 70px;
                             clicked => {
-                                Chat.rename_conversation("");
+                                root.rename-value = Chat.current.name;
+                                root.is-renaming = true;
+                            }
+                        }
+                    }
+
+                    if root.is-renaming: HorizontalLayout {
+                        spacing: 8px;
+
+                        rename-input := ChatInput {
+                            text: root.rename-value;
+                            placeholder-text: I18n.new-name-placeholder;
+                            send => {
+                                Chat.rename_conversation(self.text);
+                                root.is-renaming = false;
+                            }
+                            edited => {
+                                root.rename-value = self.text;
+                            }
+                        }
+
+                        Button {
+                            text: I18n.save;
+                            btn_width: 60px;
+                            enabled: root.rename-value != "";
+                            clicked => {
+                                Chat.rename_conversation(root.rename-value);
+                                root.is-renaming = false;
+                            }
+                        }
+
+                        Button {
+                            text: I18n.cancel;
+                            btn_width: 60px;
+                            clicked => {
+                                root.is-renaming = false;
                             }
                         }
                     }
@@ -180,13 +228,14 @@ export component ConversationSettings inherits VerticalBox {
             Rectangle {
                 background: Theme.surface;
                 border-radius: 10px;
+                vertical-stretch: 0;
 
                 VerticalLayout {
                     padding: 16px;
                     spacing: 8px;
 
                     Text {
-                        text: "Members (" + Chat.current_peers.length + ")";
+                        text: I18n.members-prefix + Chat.current_peers.length + ")";
                         font-size: 12px;
                         font-weight: 600;
                         color: Theme.text-muted;
@@ -198,7 +247,7 @@ export component ConversationSettings inherits VerticalBox {
                         peer_fingerprint: peer.fingerprint;
                     }
 
-                    // Add member placeholder
+                    // Add member button
                     Rectangle {
                         height: 40px;
                         border-radius: 8px;
@@ -222,7 +271,7 @@ export component ConversationSettings inherits VerticalBox {
                                 vertical-alignment: center;
                             }
                             Text {
-                                text: "Add member";
+                                text: I18n.add-member;
                                 font-size: 14px;
                                 color: Theme.primary;
                                 vertical-alignment: center;

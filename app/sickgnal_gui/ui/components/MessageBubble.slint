@@ -1,5 +1,7 @@
 import { Theme } from "../theme.slint";
 import { StatusIcon } from "StatusIcon.slint";
+import { Chat } from "../models/Chat.slint";
+import { I18n } from "../models/I18n.slint";
 
 component BubbleBase inherits HorizontalLayout {
     in property <string> text;
@@ -14,6 +16,8 @@ component BubbleBase inherits HorizontalLayout {
     in property <length> radius-right;
     in property <length> radius-left;
 
+    callback menu-requested(/* abs-x */ length, /* abs-y */ length);
+
     alignment: root.bubble-alignment;
     padding-left: root.pad-left;
     padding-right: root.pad-right;
@@ -23,6 +27,20 @@ component BubbleBase inherits HorizontalLayout {
         border-radius: Theme.border-radius;
         border-bottom-right-radius: root.radius-right;
         border-bottom-left-radius: root.radius-left;
+
+        // Hover + right-click area covering the bubble background
+        // Rendered first (lowest Z), so the menu button on top can receive clicks
+        bubble-hover := TouchArea {
+            mouse-cursor: default;
+            pointer-event(event) => {
+                if (event.button == PointerEventButton.right && event.kind == PointerEventKind.down) {
+                    root.menu-requested(
+                        self.absolute-position.x + self.mouse-x,
+                        self.absolute-position.y + self.mouse-y
+                    );
+                }
+            }
+        }
 
         VerticalLayout {
             padding: 10px;
@@ -80,6 +98,36 @@ component BubbleBase inherits HorizontalLayout {
                 }
             }
         }
+
+        // Menu button — top-right, rendered LAST (highest Z) so it gets clicks
+        Rectangle {
+            x: parent.width - self.width - 4px;
+            y: 4px;
+            width: 26px;
+            height: 26px;
+            border-radius: 13px;
+            background: menu-btn-touch.has-hover ? #00000035 :
+                         bubble-hover.has-hover ? #00000018 : transparent;
+            opacity: bubble-hover.has-hover || menu-btn-touch.has-hover ? 1.0 : 0.0;
+
+            menu-btn-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    root.menu-requested(
+                        self.absolute-position.x + 13px,
+                        self.absolute-position.y + 26px
+                    );
+                }
+            }
+
+            Text {
+                text: "▾";
+                font-size: 14px;
+                color: root.text-color;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
     }
 }
 
@@ -111,120 +159,32 @@ export component MessageBubble inherits Rectangle {
     in property <bool> is-me;
     in property <string> reply_to_text;
 
-    callback edit_requested(/* msg_id */ string);
-    callback delete_requested(/* msg_id */ string);
-    callback reply_requested(/* msg_id */ string, /* preview */ string);
-
-    hover := TouchArea {
-        mouse-cursor: default;
+    function open-menu(abs-x: length, abs-y: length) {
+        Chat.message_menu_id = root.id;
+        Chat.message_menu_text = root.text;
+        Chat.message_menu_is_me = root.is-me;
+        Chat.message_menu_x = abs-x;
+        Chat.message_menu_y = abs-y;
+        Chat.show_message_menu = true;
     }
 
     HorizontalLayout {
-        if (root.is-me): HorizontalLayout {
-            alignment: end;
-            spacing: 4px;
-
-            // Action buttons (visible on hover, only for own messages)
-            if (hover.has-hover): HorizontalLayout {
-                alignment: center;
-                spacing: 2px;
-                padding-right: 4px;
-
-                // Reply button
-                Rectangle {
-                    width: 24px;
-                    height: 24px;
-                    border-radius: 12px;
-                    background: reply-touch-r.has-hover ? Theme.surface-hover : transparent;
-
-                    reply-touch-r := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.reply_requested(root.id, root.text); }
-                    }
-                    Text {
-                        text: "↩";
-                        font-size: 12px;
-                        color: Theme.text-muted;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-
-                Rectangle {
-                    width: 24px;
-                    height: 24px;
-                    border-radius: 12px;
-                    background: edit-touch.has-hover ? Theme.surface-hover : transparent;
-
-                    edit-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.edit_requested(root.id); }
-                    }
-                    Text {
-                        text: "✎";
-                        font-size: 12px;
-                        color: Theme.text-muted;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-
-                Rectangle {
-                    width: 24px;
-                    height: 24px;
-                    border-radius: 12px;
-                    background: del-touch.has-hover ? Theme.surface-hover : transparent;
-
-                    del-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.delete_requested(root.id); }
-                    }
-                    Text {
-                        text: "✕";
-                        font-size: 12px;
-                        color: Theme.text-muted;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                }
-            }
-
-            RMessageBubble {
-                text: root.text;
-                time: root.time;
-                status: root.status;
-                reply_to_text: root.reply_to_text;
+        if (root.is-me): RMessageBubble {
+            text: root.text;
+            time: root.time;
+            status: root.status;
+            reply_to_text: root.reply_to_text;
+            menu-requested(x, y) => {
+                root.open-menu(x, y);
             }
         }
-        if (!root.is-me): HorizontalLayout {
-            alignment: start;
-            spacing: 4px;
-
-            LMessageBubble {
-                text: root.text;
-                time: root.time;
-                status: root.status;
-                reply_to_text: root.reply_to_text;
-            }
-
-            // Reply button for peer messages (on hover)
-            if (hover.has-hover): Rectangle {
-                width: 24px;
-                height: 24px;
-                border-radius: 12px;
-                background: reply-touch-l.has-hover ? Theme.surface-hover : transparent;
-
-                reply-touch-l := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => { root.reply_requested(root.id, root.text); }
-                }
-                Text {
-                    text: "↩";
-                    font-size: 12px;
-                    color: Theme.text-muted;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
+        if (!root.is-me): LMessageBubble {
+            text: root.text;
+            time: root.time;
+            status: root.status;
+            reply_to_text: root.reply_to_text;
+            menu-requested(x, y) => {
+                root.open-menu(x, y);
             }
         }
     }

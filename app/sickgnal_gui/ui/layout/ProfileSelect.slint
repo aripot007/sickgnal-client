@@ -1,11 +1,14 @@
-import { VerticalBox, HorizontalBox, LineEdit } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { ProfileSelect, ProfileData } from "../models/Profile.slint";
 import { Button } from "../components/Button.slint";
 import { Auth } from "Log.slint";
+import { I18n } from "../models/I18n.slint";
+import { ChatInput } from "../components/ChatInput.slint";
 
 component ProfileCard inherits Rectangle {
     in property <string> username;
+    in property <string> initial;
     in property <bool> is_selected;
     in property <bool> is_new_card: false;
 
@@ -40,7 +43,7 @@ component ProfileCard inherits Rectangle {
                 background: root.is_new_card ? Theme.success : Theme.primary;
 
                 Text {
-                    text: root.is_new_card ? "+" : root.username;
+                    text: root.is_new_card ? "+" : root.initial;
                     font-size: root.is_new_card ? 24px : 20px;
                     font-weight: 700;
                     color: Theme.on-primary;
@@ -51,7 +54,7 @@ component ProfileCard inherits Rectangle {
         }
 
         Text {
-            text: root.is_new_card ? "New Account" : root.username;
+            text: root.is_new_card ? I18n.new-account : root.username;
             font-size: 13px;
             font-weight: 500;
             color: root.is_selected
@@ -75,7 +78,7 @@ export component ProfileSelectLayout inherits VerticalBox {
 
         // Title
         Text {
-            text: "Who's using sickgnal?";
+            text: I18n.who-is-using;
             font-size: Theme.font-size-title;
             font-weight: 700;
             color: Theme.text-main;
@@ -98,6 +101,7 @@ export component ProfileSelectLayout inherits VerticalBox {
 
             for profile[index] in ProfileSelect.profiles: ProfileCard {
                 username: profile.username;
+                initial: profile.initial;
                 is_selected: ProfileSelect.selected_profile == index;
                 clicked => {
                     ProfileSelect.select_profile(index);
@@ -121,7 +125,7 @@ export component ProfileSelectLayout inherits VerticalBox {
             alignment: center;
 
             Text {
-                text: "Enter password for " + ProfileSelect.profiles[ProfileSelect.selected_profile].username;
+                text: I18n.enter-password-for + ProfileSelect.profiles[ProfileSelect.selected_profile].username;
                 font-size: 14px;
                 color: Theme.text-muted;
                 horizontal-alignment: center;
@@ -131,18 +135,18 @@ export component ProfileSelectLayout inherits VerticalBox {
                 alignment: center;
                 spacing: 10px;
 
-                passwd-input := LineEdit {
-                    placeholder-text: "Password";
+                passwd-input := ChatInput {
+                    placeholder-text: I18n.password-placeholder;
                     input-type: password;
                     width: 250px;
                     enabled: !ProfileSelect.is_loading;
-                    accepted => {
+                    send => {
                         ProfileSelect.submit_password(self.text);
                     }
                 }
 
                 Button {
-                    text: ProfileSelect.is_loading ? "..." : "Sign In";
+                    text: ProfileSelect.is_loading ? "..." : I18n.sign-in;
                     btn_width: 80px;
                     enabled: passwd-input.text != "" && !ProfileSelect.is_loading;
                     clicked => {
@@ -151,7 +155,7 @@ export component ProfileSelectLayout inherits VerticalBox {
                 }
 
                 Button {
-                    text: "Cancel";
+                    text: I18n.cancel;
                     btn_width: 70px;
                     enabled: !ProfileSelect.is_loading;
                     clicked => {
@@ -170,7 +174,7 @@ export component ProfileSelectLayout inherits VerticalBox {
 
         // Help text (shown when no profile is selected)
         if !ProfileSelect.password_mode && !ProfileSelect.is_loading: Text {
-            text: "Select a profile to sign in, or create a new account.";
+            text: I18n.select-profile-help;
             font-size: 13px;
             color: Theme.text-muted;
             horizontal-alignment: center;

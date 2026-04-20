@@ -2,50 +2,114 @@ import { VerticalBox, HorizontalBox, Button } from "std-widgets.slint";
 import { ThemeSwitcher } from "../components/ThemeSwitcher.slint";
 import { Theme } from "../theme.slint";
 import { ConversationList } from "../components/ConversationList.slint";
-import { ConfigLayout } from "Configuration.slint";
 import { ConversationLayout } from "Conversation.slint";
-import { ImageButton } from "../components/ImageButton.slint";
+import { Auth } from "Log.slint";
+import { I18n } from "../models/I18n.slint";
+import { ProfileSelect } from "../models/Profile.slint";
 
 export component MainLayout inherits HorizontalBox {
-    in-out property <string> current_page: "chat";
-    width: 100%;
-    height: 100%;
-
     Rectangle {
         height: 100%;
-        width: 15%;
+        width: 20%;
         min-width: 250px;
         background: Theme.background-light;
         VerticalBox {
             HorizontalLayout {
-                alignment: space-between;
-                ThemeSwitcher { }
+                height: 30px;
+                
+                spacing: 5px;
 
-                ImageButton {
-                    image: root.current_page == "settings" ? @image-url("../assets/conversation.png") : @image-url("../assets/settings.png");
-                    clicked => {
-                        root.current_page = root.current_page == "settings" ? "chat" : "settings";
+                VerticalLayout {
+                    alignment: center;
+                    ThemeSwitcher { }
+                }
+
+                // Language toggle FR/EN
+
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        background: lang-touch.has-hover ? Theme.surface-hover : transparent;
+
+                        lang-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                I18n.is-french = !I18n.is-french;
+                            }
+                        }
+
+                        Text {
+                            text: I18n.is-french ? "FR" : "EN";
+                            font-size: 20px;
+                            font-weight: 700;
+                            color: Theme.text-main;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
+                Text {
+                    text: ProfileSelect.profiles[ProfileSelect.selected_profile].name;
+                    visible: ProfileSelect.selected_profile != -1;
+                    overflow: elide;
+                    font-size: 20px;
+                    min-width: 0; 
+                    font-weight: 700;
+                    color: Theme.text-main;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
+                // Logout button
+
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 32px;
+                        height: 32px;
+                        border-radius: 6px;
+                        
+                        // Fond : Très léger au repos (15% d'opacité), Rouge pur au survol
+                        background: logout-touch.has-hover ? #ff0000 : #ff000022;
+
+                        logout-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                Auth.logout();
+                            }
+                        }
+
+                        Text {
+                            text: "⏻";
+                            font-size: 18px;
+                            // Icône : Rouge au repos, Blanc au survol pour contraster avec le fond rouge
+                            color: logout-touch.has-hover ? white : #ff0000;
+                            
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        
+                        // Optionnel : Ajoute une transition douce pour l'effet "hover"
+                        animate background { duration: 150ms; }
                     }
                 }
             }
 
-            if root.current_page == "chat": ConversationList { }
-            if root.current_page == "settings": HorizontalBox {
-                padding: 0;
-                padding-top: 12px;
-                Text {
-                    text: "Paramètres";
-                    font-size: 18px;
-                    font-weight: 700;
-                    color: Theme.text-main;
-                    horizontal-alignment: left;
-                }
-            }
+            ConversationList { }
         }
     }
 
     Rectangle {
-        if (root.current_page == "chat"): ConversationLayout { }
-        if (root.current_page == "settings"): ConfigLayout { }
+        background: Theme.background-dark;
+        ConversationLayout { }
     }
 }

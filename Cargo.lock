@@ -4986,22 +4986,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
-name = "sickgnal_cli"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "sickgnal_core",
- "sickgnal_sdk",
- "slint",
- "slint-build",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "sickgnal_core"
 version = "0.1.0"
 dependencies = [
@@ -5024,6 +5008,22 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "x25519-dalek",
+]
+
+[[package]]
+name = "sickgnal_gui"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "sickgnal_core",
+ "sickgnal_sdk",
+ "slint",
+ "slint-build",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

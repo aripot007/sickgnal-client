@@ -1,0 +1,79 @@
+import {
+    VerticalBox,
+    ScrollView,
+    HorizontalBox,
+} from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { I18n } from "../models/I18n.slint";
+
+export component ChatInput inherits Rectangle {
+    in-out property <string> text <=> input.text;
+    in property <string> placeholder-text: I18n.write-message;
+    in property <bool> enabled: true;
+    in property <InputType> input-type;
+
+    callback send();
+    callback edited();
+
+    // Height adapts to the text content, clamped between min and max
+    private property <length> content-height: input.preferred-height + 16px;
+    private property <length> max-input-height: 150px;
+    height: clamp(root.content-height, 40px, root.max-input-height);
+
+    background: Theme.surface;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.primary : Theme.border;
+
+    scroll := ScrollView {
+        x: 10px;
+        y: 0;
+        width: parent.width - 20px;
+        height: parent.height;
+        viewport-height: max(input.preferred-height + 16px, parent.height);
+
+        VerticalLayout {
+            alignment: center;
+            padding-top: 8px;
+            padding-bottom: 8px;
+
+            input := TextInput {
+                width: scroll.width - 12px;
+                input-type: input-type;
+                single-line: false;
+                wrap: word-wrap;
+                font-size: 14px;
+                color: root.enabled ? Theme.text-main : Theme.text-muted;
+                enabled: root.enabled;
+
+                edited => {
+                    root.edited();
+                    // Auto-scroll to bottom when content overflows
+                    if (input.preferred-height + 16px > scroll.height) {
+                        scroll.viewport-y = -(input.preferred-height + 16px - scroll.height);
+                    }
+                }
+
+                key-pressed(event) => {
+                    // Enter without Shift => send
+                    if (event.text == "\n" && !event.modifiers.shift) {
+                        root.send();
+                        return accept;
+                    }
+                    return reject;
+                }
+            }
+        }
+    }
+
+    // Placeholder text
+    if (input.text == ""): Text {
+        x: 10px;
+        y: 0;
+        height: parent.height;
+        text: root.placeholder-text;
+        font-size: 14px;
+        color: Theme.text-muted;
+        vertical-alignment: center;
+    }
+}
