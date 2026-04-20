@@ -165,7 +165,8 @@ fn setup_profile_select_auth(
     ui.global::<ProfileSelect>().set_show_profile_select(true);
 
     // Indicate that profiles exist (for back button on signup)
-    ui.global::<Auth>().set_has_existing_profiles(!profiles.is_empty());
+    ui.global::<Auth>()
+        .set_has_existing_profiles(!profiles.is_empty());
 
     // Peupler la liste de profils dans l'UI
     let slint_profiles: Vec<ProfileData> = profiles
@@ -173,7 +174,14 @@ fn setup_profile_select_auth(
         .map(|p| ProfileData {
             name: p.name.clone().into(),
             username: p.username.clone().into(),
-            initial: p.username.chars().next().unwrap_or('?').to_uppercase().to_string().into(),
+            initial: p
+                .username
+                .chars()
+                .next()
+                .unwrap_or('?')
+                .to_uppercase()
+                .to_string()
+                .into(),
         })
         .collect();
     ui.global::<ProfileSelect>()

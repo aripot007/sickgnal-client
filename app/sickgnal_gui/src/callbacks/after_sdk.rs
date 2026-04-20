@@ -147,105 +147,103 @@ fn setup_conversation_callbacks(
         let conv_ids = conv_ids.clone();
         let ui_weak = ui_weak.clone();
         let rt = rt.clone();
-        ui.global::<Chat>()
-            .on_confirm_new_conversation(move || {
-                let mut sdk = sdk.clone();
-                let conv_ids = conv_ids.clone();
-                let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_confirm_new_conversation(move || {
+            let mut sdk = sdk.clone();
+            let conv_ids = conv_ids.clone();
+            let ui_weak = ui_weak.clone();
 
-                // Read the usernames list from the UI property
-                let usernames: Vec<String> = {
-                    let Some(ui) = ui_weak.upgrade() else { return };
-                    let users = ui.global::<Chat>().get_new_conversation_users();
-                    (0..users.row_count())
-                        .filter_map(|i| users.row_data(i).map(|s| s.to_string()))
-                        .collect()
-                };
+            // Read the usernames list from the UI property
+            let usernames: Vec<String> = {
+                let Some(ui) = ui_weak.upgrade() else { return };
+                let users = ui.global::<Chat>().get_new_conversation_users();
+                (0..users.row_count())
+                    .filter_map(|i| users.row_data(i).map(|s| s.to_string()))
+                    .collect()
+            };
 
-                if usernames.is_empty() {
-                    let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                        ui.global::<Chat>().set_new_conversation_error(
-                            "Add at least one user".into(),
-                        );
-                    });
-                    return;
-                }
+            if usernames.is_empty() {
+                let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                    ui.global::<Chat>()
+                        .set_new_conversation_error("Add at least one user".into());
+                });
+                return;
+            }
 
-                rt.spawn(async move {
-                    // Resolve all usernames to UUIDs
-                    let mut peer_ids = Vec::new();
-                    for username in &usernames {
-                        let profile = match sdk.get_profile_by_username(username.clone()).await {
-                            Ok(p) => p,
-                            Err(e) => {
-                                let err_msg =
-                                    format!("User not found: '{}': {e}", username);
-                                let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                                    ui.global::<Chat>()
-                                        .set_new_conversation_error(err_msg.into());
-                                });
-                                return;
-                            }
-                        };
-
-                        if profile.id == my_id {
-                            let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                                ui.global::<Chat>().set_new_conversation_error(
-                                    "Cannot create a conversation with yourself".into(),
-                                );
-                            });
-                            return;
-                        }
-
-                        peer_ids.push(profile.id);
-                    }
-
-                    // Create conversation: 1 peer = 1:1, 2+ peers = group
-                    let conv = if peer_ids.len() == 1 {
-                        sdk.start_conversation(peer_ids[0], None).await
-                    } else {
-                        sdk.start_group_conversation(peer_ids, None).await
-                    };
-
-                    let conv = match conv {
-                        Ok(c) => c,
+            rt.spawn(async move {
+                // Resolve all usernames to UUIDs
+                let mut peer_ids = Vec::new();
+                for username in &usernames {
+                    let profile = match sdk.get_profile_by_username(username.clone()).await {
+                        Ok(p) => p,
                         Err(e) => {
+                            let err_msg = format!("User not found: '{}': {e}", username);
                             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                                 ui.global::<Chat>()
-                                    .set_new_conversation_error(format!("Error: {e}").into());
+                                    .set_new_conversation_error(err_msg.into());
                             });
                             return;
                         }
                     };
 
-                    let conv_uuid = conv.id;
-                    let entry = ConversationEntry {
-                        conversation: conv,
-                        unread_messages_count: 0,
-                        last_message: None,
-                    };
+                    if profile.id == my_id {
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui.global::<Chat>().set_new_conversation_error(
+                                "Cannot create a conversation with yourself".into(),
+                            );
+                        });
+                        return;
+                    }
 
-                    let _ = ui_weak.upgrade_in_event_loop(move |ui| {
-                        let slint_conv = entry_to_slint(&entry, my_id);
-                        conv_ids.lock().unwrap().push(conv_uuid);
+                    peer_ids.push(profile.id);
+                }
 
-                        let chats = ui.global::<Chat>().get_chats();
-                        let new_index = chats.row_count();
-                        if let Some(model) = chats.as_any().downcast_ref::<VecModel<Conversation>>()
-                        {
-                            model.push(slint_conv);
-                        }
+                // Create conversation: 1 peer = 1:1, 2+ peers = group
+                let conv = if peer_ids.len() == 1 {
+                    sdk.start_conversation(peer_ids[0], None).await
+                } else {
+                    sdk.start_group_conversation(peer_ids, None).await
+                };
 
-                        ui.global::<Chat>().set_active_chat_id(new_index as i32);
-                        ui.global::<Chat>().set_show_new_conversation_dialog(false);
-                        ui.global::<Chat>().set_new_conversation_error("".into());
-                        ui.global::<Chat>().set_new_conversation_is_group(false);
-                        ui.global::<Chat>().set_new_conversation_users(
-                            slint::ModelRc::new(slint::VecModel::<slint::SharedString>::default()),
-                        );
-                    });
+                let conv = match conv {
+                    Ok(c) => c,
+                    Err(e) => {
+                        let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            ui.global::<Chat>()
+                                .set_new_conversation_error(format!("Error: {e}").into());
+                        });
+                        return;
+                    }
+                };
+
+                let conv_uuid = conv.id;
+                let entry = ConversationEntry {
+                    conversation: conv,
+                    unread_messages_count: 0,
+                    last_message: None,
+                };
+
+                let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                    let slint_conv = entry_to_slint(&entry, my_id);
+                    conv_ids.lock().unwrap().push(conv_uuid);
+
+                    let chats = ui.global::<Chat>().get_chats();
+                    let new_index = chats.row_count();
+                    if let Some(model) = chats.as_any().downcast_ref::<VecModel<Conversation>>() {
+                        model.push(slint_conv);
+                    }
+
+                    ui.global::<Chat>().set_active_chat_id(new_index as i32);
+                    ui.global::<Chat>().set_show_new_conversation_dialog(false);
+                    ui.global::<Chat>().set_new_conversation_error("".into());
+                    ui.global::<Chat>().set_new_conversation_is_group(false);
+                    ui.global::<Chat>()
+                        .set_new_conversation_users(slint::ModelRc::new(slint::VecModel::<
+                            slint::SharedString,
+                        >::default(
+                        )));
                 });
             });
+        });
     }
 
     // open_conversation_settings
