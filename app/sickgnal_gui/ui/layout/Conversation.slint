@@ -10,6 +10,72 @@ import { Chat } from "../models/Chat.slint";
 import { Conversation } from "../models/Conversation.slint";
 import { Button } from "../components/Button.slint";
 import { ConversationSettings } from "ConversationSettings.slint";
+import { I18n } from "../models/I18n.slint";
+
+component ChatInput inherits Rectangle {
+    in-out property <string> text <=> input.text;
+    in property <string> placeholder-text: I18n.write-message;
+    in property <bool> enabled: true;
+
+    callback send();
+    callback edited();
+
+    // Height adapts to the text content, clamped between min and max
+    private property <length> content-height: input.preferred-height + 16px;
+    private property <length> max-input-height: 150px;
+    height: clamp(root.content-height, 40px, root.max-input-height);
+
+    background: Theme.surface;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.primary : Theme.border;
+
+    scroll := ScrollView {
+        x: 10px;
+        y: 8px;
+        width: parent.width - 20px;
+        height: parent.height - 16px;
+        viewport-height: input.preferred-height;
+
+        input := TextInput {
+            // Reserve 12px for the scrollbar track
+            width: scroll.width - 12px;
+            single-line: false;
+            wrap: word-wrap;
+            font-size: 14px;
+            color: root.enabled ? Theme.text-main : Theme.text-muted;
+            enabled: root.enabled;
+
+            edited => {
+                root.edited();
+                // Auto-scroll to bottom when content overflows
+                if (input.preferred-height > scroll.height) {
+                    scroll.viewport-y = -(input.preferred-height - scroll.height);
+                }
+            }
+
+            key-pressed(event) => {
+                // Enter without Shift => send
+                if (event.text == "\n" && !event.modifiers.shift) {
+                    root.send();
+                    return accept;
+                }
+                return reject;
+            }
+        }
+    }
+
+    // Placeholder text
+    if (input.text == ""): Text {
+        x: 10px;
+        y: 0;
+        height: parent.height;
+        text: root.placeholder-text;
+        font-size: 14px;
+        color: Theme.text-muted;
+        vertical-alignment: center;
+    }
+}
 
 export component ConversationLayout inherits VerticalBox {
     private property <bool> show-typing: false;
@@ -101,7 +167,7 @@ export component ConversationLayout inherits VerticalBox {
                 VerticalBox {
                     alignment: center;
                     Text {
-                        text: "Select a conversation";
+                        text: I18n.select-conversation;
                         font-size: 16px;
                         color: Theme.text-muted;
                         horizontal-alignment: center;
@@ -115,15 +181,6 @@ export component ConversationLayout inherits VerticalBox {
                 status: msg.status;
                 is-me: msg.is_me;
                 reply_to_text: msg.reply_to_text;
-                edit_requested(msg_id) => {
-                    Chat.start_edit(msg_id, msg.text);
-                }
-                delete_requested(msg_id) => {
-                    Chat.delete_message(msg_id);
-                }
-                reply_requested(msg_id, preview) => {
-                    Chat.start_reply(msg_id, preview);
-                }
             }
         }
     }
@@ -133,7 +190,7 @@ export component ConversationLayout inherits VerticalBox {
         spacing: 6px;
         padding: 2px;
         Text {
-            text: Chat.current.name + " is typing...";
+            text: Chat.get-current-conversation().typing-user-name + I18n.is-typing-suffix;
             font-size: 13px;
             color: Theme.text-muted;
             vertical-alignment: center;
@@ -160,7 +217,7 @@ export component ConversationLayout inherits VerticalBox {
             VerticalLayout {
                 alignment: center;
                 Text {
-                    text: "Replying to:";
+                    text: I18n.replying-to;
                     font-size: 11px;
                     font-weight: 600;
                     color: Theme.primary;
@@ -200,41 +257,58 @@ export component ConversationLayout inherits VerticalBox {
     }
 
     if !Chat.show_conversation_settings: Rectangle {
-        height: 70px;
         background: Theme.background-light;
         border-color: Theme.background-dark;
-        HorizontalBox {
-            padding: 15px;
+        HorizontalLayout {
+            padding: 10px;
             spacing: 10px;
-            input := LineEdit {
-                placeholder-text: Chat.is_editing ? "Edit message..." : Chat.is_replying ? "Type your reply..." : "Write a message...";
+
+            input := ChatInput {
+                horizontal-stretch: 1;
+                placeholder-text: Chat.is_editing ? I18n.edit-message-placeholder : Chat.is_replying ? I18n.type-reply : I18n.write-message;
                 text: Chat.editing_text;
                 enabled: Chat.active_chat_id >= 0;
                 edited => {
                     Chat.typing();
                 }
-            }
-
-            if Chat.is_editing: Button {
-                text: "Cancel";
-                btn_width: 60px;
-                clicked => {
-                    Chat.cancel_edit();
-                    input.text = "";
+                send => {
+                    if (input.text != "") {
+                        if (Chat.is_editing) {
+                            Chat.edit_message(Chat.editing_message_id, input.text);
+                            input.text = "";
+                        } else {
+                            Chat.send_message(input.text);
+                            input.text = "";
+                        }
+                    }
                 }
             }
 
-            Button {
-                text: Chat.is_editing ? "Save" : "Send";
-                enabled: Chat.active_chat_id >= 0 && input.text != "";
-                btn_width: 70px;
-                clicked => {
-                    if (Chat.is_editing) {
-                        Chat.edit_message(Chat.editing_message_id, input.text);
+            VerticalLayout {
+                alignment: end;
+                spacing: 8px;
+
+                if Chat.is_editing: Button {
+                    text: I18n.cancel;
+                    btn_width: 60px;
+                    clicked => {
+                        Chat.cancel_edit();
                         input.text = "";
-                    } else {
-                        Chat.send_message(input.text);
-                        input.text = "";
+                    }
+                }
+
+                Button {
+                    text: Chat.is_editing ? I18n.save : I18n.send;
+                    enabled: Chat.active_chat_id >= 0 && input.text != "";
+                    btn_width: 70px;
+                    clicked => {
+                        if (Chat.is_editing) {
+                            Chat.edit_message(Chat.editing_message_id, input.text);
+                            input.text = "";
+                        } else {
+                            Chat.send_message(input.text);
+                            input.text = "";
+                        }
                     }
                 }
             }

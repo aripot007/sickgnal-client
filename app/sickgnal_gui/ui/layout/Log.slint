@@ -1,4 +1,6 @@
 import { VerticalBox, LineEdit, Button } from "std-widgets.slint";
+import { I18n } from "../models/I18n.slint";
+import { Theme } from "../theme.slint";
 
 export global Auth {
     in-out property <string> username: "";
@@ -9,12 +11,16 @@ export global Auth {
     in-out property <bool> already-existing-username: false;
     in-out property <bool> different-password: false;
     in-out property <string> tls-warning: "";
+    callback logout();
+    // Back to profile select (only relevant when profiles exist)
+    in-out property <bool> has-existing-profiles: false;
+    callback back-to-profiles();
 }
 
 component SignIn inherits VerticalBox {
     Text {
         font-size: 16px;
-        text: "Utilisateur trouvé : '" + Auth.username + "'. Connectez-vous !";
+        text: I18n.user-found-prefix + Auth.username + I18n.user-found-suffix;
         color: green;
     }
 
@@ -27,7 +33,7 @@ component SignIn inherits VerticalBox {
     }
 
     passwd := LineEdit {
-        placeholder-text: "Password";
+        placeholder-text: I18n.password-placeholder;
         enabled: !Auth.incorrect-password;
         input-type: password;
         height: 30px;
@@ -36,12 +42,12 @@ component SignIn inherits VerticalBox {
 
     if (Auth.incorrect-password) : Text {
         font-size: 16px;
-        text: "Mot de passe incorrect";
+        text: I18n.incorrect-password;
         color: red;
     }
 
     Button {
-        text: "Connexion";
+        text: I18n.sign-in;
         primary: true;
         enabled: !Auth.incorrect-password;
         height: 30px;
@@ -72,26 +78,26 @@ component SignUp inherits VerticalBox {
     // --- INTERFACE ---
     Text {
         font-size: 16px;
-        text: "Aucun compte trouvé. Inscrivez-vous !";
+        text: I18n.no-account-found;
         color: orange;
         horizontal-alignment: center;
     }
 
     user := LineEdit {
-        placeholder-text: "Nom d'utilisateur";
+        placeholder-text: I18n.username-placeholder;
         enabled: !Auth.already-existing-username && !Auth.different-password;
         height: 35px;
     }
 
     passwd := LineEdit {
-        placeholder-text: "Mot de passe";
+        placeholder-text: I18n.password-placeholder;
         input-type: password;
         enabled: !Auth.already-existing-username && !Auth.different-password;
         height: 35px;
     }
 
     confirm-password := LineEdit {
-        placeholder-text: "Confirmer le mot de passe";
+        placeholder-text: I18n.confirm-password-placeholder;
         input-type: password;
         enabled: !Auth.already-existing-username && !Auth.different-password;
         height: 35px;
@@ -100,21 +106,21 @@ component SignUp inherits VerticalBox {
 
     // --- AFFICHAGE DES ERREURS ---
     if (Auth.already-existing-username) : Text {
-        text: "Cet utilisateur existe déjà !";
+        text: I18n.username-exists;
         color: red;
         font-size: 14px;
         horizontal-alignment: center;
     }
 
     if (Auth.different-password) : Text {
-        text: "Les mots de passe ne correspondent pas";
+        text: I18n.passwords-dont-match;
         color: red;
         font-size: 14px;
         horizontal-alignment: center;
     }
 
     Button {
-        text: "Créer mon compte";
+        text: I18n.create-account;
         primary: true;
         height: 35px;
         enabled: !Auth.already-existing-username && !Auth.different-password;
@@ -139,4 +145,33 @@ export component LogLayout inherits VerticalBox {
 
     if (Auth.username != ""): SignIn { }
     if (Auth.username == ""): SignUp { }
+
+    // Back button — only visible on signup when profiles already exist
+    if (Auth.username == "" && Auth.has-existing-profiles): Rectangle {
+        height: 40px;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 80px;
+                height: 32px;
+                border-radius: 6px;
+                background: back-touch.has-hover ? Theme.surface-hover : transparent;
+
+                back-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        Auth.back-to-profiles();
+                    }
+                }
+
+                Text {
+                    text: "← " + I18n.back;
+                    font-size: 14px;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
 }

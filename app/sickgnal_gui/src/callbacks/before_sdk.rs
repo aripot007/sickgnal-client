@@ -10,7 +10,7 @@ pub fn setup_callbacks_before_sdk(ui: &AppWindow) {
     {
         let ui_weak = ui.as_weak();
         ui.global::<Chat>()
-            .on_confirm_new_conversation(move |_username| {
+            .on_confirm_new_conversation(move || {
                 let Some(ui) = ui_weak.upgrade() else { return };
                 ui.global::<Chat>()
                     .set_new_conversation_error("Connexion en cours, veuillez patienter...".into());

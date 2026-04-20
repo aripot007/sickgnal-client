@@ -15,6 +15,8 @@ import { Chat } from "models/Chat.slint";
 import { ProfileSelectLayout } from "layout/ProfileSelect.slint";
 import { ProfileSelect, ProfileData } from "models/Profile.slint";
 import { AddMemberDialog } from "components/AddMemberDialog.slint";
+import { MessageMenu } from "components/MessageMenu.slint";
+import { I18n } from "models/I18n.slint";
 
 // Export models for Rust access
 export { Chat } from "models/Chat.slint";
@@ -24,9 +26,10 @@ export { Auth } from "layout/Log.slint";
 export { Status } from "models/Status.slint";
 export { PeerData } from "models/Peer.slint";
 export { ProfileSelect, ProfileData } from "models/Profile.slint";
+export { I18n } from "models/I18n.slint";
 
 export component AppWindow inherits Window {
-    title: "Rust Messenger";
+    title: "Sickgnal";
     min-width: 800px;
     min-height: 500px;
     background: Theme.background;
@@ -54,7 +57,36 @@ export component AppWindow inherits Window {
     
     if (Auth.is-logged-in): MainLayout { }
 
+    // Language toggle (visible on all screens, top-right corner)
+    if (!Auth.is-logged-in): Rectangle {
+        x: parent.width - 50px;
+        y: 10px;
+        width: 36px;
+        height: 28px;
+        border-radius: 6px;
+        background: lang-touch-login.has-hover ? Theme.surface-hover : Theme.surface;
+        border-width: 1px;
+        border-color: Theme.border;
+
+        lang-touch-login := TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                I18n.is-french = !I18n.is-french;
+            }
+        }
+
+        Text {
+            text: I18n.is-french ? "FR" : "EN";
+            font-size: 11px;
+            font-weight: 700;
+            color: Theme.text-main;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
     // Overlay dialogs (rendered on top of everything)
     if (Chat.show_new_conversation_dialog): NewConversationDialog { }
     if (Chat.show_add_member_dialog): AddMemberDialog { }
+    if (Chat.show_message_menu): MessageMenu { }
 }

@@ -164,12 +164,16 @@ fn setup_profile_select_auth(
 ) {
     ui.global::<ProfileSelect>().set_show_profile_select(true);
 
+    // Indicate that profiles exist (for back button on signup)
+    ui.global::<Auth>().set_has_existing_profiles(!profiles.is_empty());
+
     // Peupler la liste de profils dans l'UI
     let slint_profiles: Vec<ProfileData> = profiles
         .iter()
         .map(|p| ProfileData {
             name: p.name.clone().into(),
             username: p.username.clone().into(),
+            initial: p.username.chars().next().unwrap_or('?').to_uppercase().to_string().into(),
         })
         .collect();
     ui.global::<ProfileSelect>()
@@ -330,6 +334,18 @@ fn setup_profile_select_auth(
                     ui.global::<Auth>().set_is_logged_in(true);
                     ui.window().set_maximized(true);
                 });
+        });
+    }
+
+    // back_to_profiles — retour à l'écran de sélection de profil
+    {
+        let ui_weak = ui.as_weak();
+        ui.global::<Auth>().on_back_to_profiles(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            ui.global::<ProfileSelect>().set_show_profile_select(true);
+            ui.global::<ProfileSelect>().set_password_mode(false);
+            ui.global::<ProfileSelect>().set_selected_profile(-1);
+            ui.global::<ProfileSelect>().set_profile_error("".into());
         });
     }
 }

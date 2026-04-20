@@ -1,7 +1,54 @@
-import { LineEdit } from "std-widgets.slint";
+import { LineEdit, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Chat } from "../models/Chat.slint";
 import { Button } from "Button.slint";
+import { I18n } from "../models/I18n.slint";
+
+component UserChip inherits Rectangle {
+    in property <string> username;
+    in property <int> index;
+
+    height: 30px;
+    border-radius: 15px;
+    background: Theme.primary;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 4px;
+        spacing: 4px;
+        alignment: center;
+
+        Text {
+            text: root.username;
+            font-size: 12px;
+            font-weight: 500;
+            color: Theme.on-primary;
+            vertical-alignment: center;
+        }
+
+        Rectangle {
+            width: 22px;
+            height: 22px;
+            border-radius: 11px;
+            background: remove-touch.has-hover ? #ffffff40 : transparent;
+
+            remove-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    Chat.remove_user_from_new_conversation(root.index);
+                }
+            }
+
+            Text {
+                text: "x";
+                font-size: 12px;
+                color: Theme.on-primary;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
 
 export component NewConversationDialog inherits Rectangle {
     // Full-screen semi-transparent backdrop
@@ -16,8 +63,10 @@ export component NewConversationDialog inherits Rectangle {
     Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        width: 400px;
-        height: 220px;
+        width: 420px;
+        height: Chat.new_conversation_is_group
+            ? (Chat.new_conversation_users.length > 0 ? 320px : 240px)
+            : 220px;
         background: Theme.surface;
         border-radius: 12px;
         drop-shadow-blur: 20px;
@@ -25,49 +74,139 @@ export component NewConversationDialog inherits Rectangle {
 
         VerticalLayout {
             padding: 24px;
-            spacing: 16px;
+            spacing: 12px;
 
             Text {
-                text: "New Conversation";
+                text: Chat.new_conversation_is_group ? I18n.new-group : I18n.new-conversation;
                 font-size: Theme.font-size-title;
                 font-weight: 700;
                 color: Theme.text-main;
                 horizontal-alignment: center;
             }
 
-            username-input := LineEdit {
-                placeholder-text: "Enter username...";
-                font-size: 14px;
-            }
+            // === Mode 1:1 : single username input ===
+            if !Chat.new_conversation_is_group: VerticalLayout {
+                spacing: 12px;
 
-            if Chat.new_conversation_error != "": Text {
-                text: Chat.new_conversation_error;
-                color: #cc3333;
-                font-size: 12px;
-                horizontal-alignment: center;
-            }
-
-            HorizontalLayout {
-                alignment: end;
-                spacing: 10px;
-
-                Button {
-                    text: "Cancel";
-                    btn_width: 80px;
-                    clicked => {
-                        debug("call to cancel_new_conversation");
-                        Chat.cancel_new_conversation();
-                        debug("show_new_conversation_dialog =", Chat.show_new_conversation_dialog);
+                single-input := LineEdit {
+                    placeholder-text: I18n.enter-username;
+                    font-size: 14px;
+                    accepted => {
+                        if (self.text != "") {
+                            Chat.add_user_to_new_conversation(self.text);
+                            Chat.confirm_new_conversation();
+                        }
                     }
                 }
 
-                Button {
-                    text: "Create";
-                    btn_width: 80px;
-                    enabled: username-input.text != "";
-                    clicked => {
-                        debug("call to confirm_new_conversation");
-                        Chat.confirm_new_conversation(username-input.text);
+                if Chat.new_conversation_error != "": Text {
+                    text: Chat.new_conversation_error;
+                    color: #cc3333;
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 10px;
+
+                    Button {
+                        text: I18n.cancel;
+                        btn_width: 80px;
+                        clicked => {
+                            Chat.cancel_new_conversation();
+                        }
+                    }
+
+                    Button {
+                        text: I18n.create;
+                        btn_width: 80px;
+                        enabled: single-input.text != "";
+                        clicked => {
+                            Chat.add_user_to_new_conversation(single-input.text);
+                            Chat.confirm_new_conversation();
+                        }
+                    }
+                }
+            }
+
+            // === Mode groupe : multi-user with add/remove ===
+            if Chat.new_conversation_is_group: VerticalLayout {
+                spacing: 12px;
+
+                HorizontalLayout {
+                    spacing: 8px;
+
+                    group-input := LineEdit {
+                        placeholder-text: I18n.enter-username;
+                        font-size: 14px;
+                        accepted => {
+                            if (self.text != "") {
+                                Chat.add_user_to_new_conversation(self.text);
+                                self.text = "";
+                            }
+                        }
+                    }
+
+                    Button {
+                        text: I18n.add;
+                        btn_width: 60px;
+                        enabled: group-input.text != "";
+                        clicked => {
+                            Chat.add_user_to_new_conversation(group-input.text);
+                            group-input.text = "";
+                        }
+                    }
+                }
+
+                // Added users list
+                if Chat.new_conversation_users.length > 0: Rectangle {
+                    background: Theme.background-light;
+                    border-radius: 8px;
+                    height: 70px;
+
+                    ScrollView {
+                        HorizontalLayout {
+                            padding: 8px;
+                            spacing: 6px;
+                            alignment: start;
+
+                            for user[index] in Chat.new_conversation_users: UserChip {
+                                username: user;
+                                index: index;
+                            }
+                        }
+                    }
+                }
+
+                if Chat.new_conversation_error != "": Text {
+                    text: Chat.new_conversation_error;
+                    color: #cc3333;
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 10px;
+
+                    Button {
+                        text: I18n.cancel;
+                        btn_width: 80px;
+                        clicked => {
+                            Chat.cancel_new_conversation();
+                        }
+                    }
+
+                    Button {
+                        text: I18n.create;
+                        btn_width: 80px;
+                        enabled: Chat.new_conversation_users.length >= 2;
+                        clicked => {
+                            Chat.confirm_new_conversation();
+                        }
                     }
                 }
             }

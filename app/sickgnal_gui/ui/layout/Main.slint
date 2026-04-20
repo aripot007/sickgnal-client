@@ -2,13 +2,12 @@ import { VerticalBox, HorizontalBox, Button } from "std-widgets.slint";
 import { ThemeSwitcher } from "../components/ThemeSwitcher.slint";
 import { Theme } from "../theme.slint";
 import { ConversationList } from "../components/ConversationList.slint";
-import { ConfigLayout } from "Configuration.slint";
 import { ConversationLayout } from "Conversation.slint";
 import { ImageButton } from "../components/ImageButton.slint";
+import { Auth } from "Log.slint";
+import { I18n } from "../models/I18n.slint";
 
 export component MainLayout inherits HorizontalBox {
-    in-out property <string> current_page: "chat";
-
     Rectangle {
         height: 100%;
         width: 20%;
@@ -17,33 +16,67 @@ export component MainLayout inherits HorizontalBox {
         VerticalBox {
             HorizontalLayout {
                 alignment: space-between;
+                spacing: 4px;
+
                 ThemeSwitcher { }
 
-                ImageButton {
-                    image: root.current_page == "settings" ? @image-url("../assets/conversation.png") : @image-url("../assets/settings.png");
-                    clicked => {
-                        root.current_page = root.current_page == "settings" ? "chat" : "settings";
+                // Language toggle FR/EN
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 6px;
+                    background: lang-touch.has-hover ? Theme.surface-hover : transparent;
+
+                    lang-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            I18n.is-french = !I18n.is-french;
+                        }
+                    }
+
+                    Text {
+                        text: I18n.is-french ? "FR" : "EN";
+                        font-size: 12px;
+                        font-weight: 700;
+                        color: Theme.text-main;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
+                // Logout button
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 6px;
+                    background: logout-touch.has-hover ? #ff444430 : transparent;
+
+                    logout-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            Auth.logout();
+                        }
+                    }
+
+                    Text {
+                        text: "⏻";
+                        font-size: 18px;
+                        color: logout-touch.has-hover ? #ff4444 : Theme.text-muted;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
                     }
                 }
             }
 
-            if root.current_page == "chat": ConversationList { }
-            if root.current_page == "settings": HorizontalBox {
-                padding: 0;
-                padding-top: 12px;
-                Text {
-                    text: "Paramètres";
-                    font-size: 18px;
-                    font-weight: 700;
-                    color: Theme.text-main;
-                    horizontal-alignment: left;
-                }
-            }
+            ConversationList { }
         }
     }
 
     Rectangle {
-        if (root.current_page == "chat"): ConversationLayout { }
-        if (root.current_page == "settings"): ConfigLayout { }
+        ConversationLayout { }
     }
 }

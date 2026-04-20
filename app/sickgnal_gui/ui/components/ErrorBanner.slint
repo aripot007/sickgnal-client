@@ -1,10 +1,11 @@
 import { HorizontalBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Status } from "../models/Status.slint";
+import { I18n } from "../models/I18n.slint";
 
 export component ErrorBanner inherits Rectangle {
     width: 100%;
-    height: 60px;
+    min-height: 60px;
     background: Status.is-fatal ? #cc3333 : #cc7700;
     border-radius: 0;
 
@@ -19,7 +20,7 @@ export component ErrorBanner inherits Rectangle {
             font-size: 14px;
             font-weight: 500;
             vertical-alignment: center;
-            overflow: elide;
+            wrap: word-wrap;
         }
 
         Rectangle {
@@ -35,7 +36,7 @@ export component ErrorBanner inherits Rectangle {
             }
 
             Text {
-                text: Status.is-fatal ? "Quit" : "Close";
+                text: Status.is-fatal ? I18n.quit : I18n.close;
                 color: white;
                 font-size: 13px;
                 font-weight: 600;

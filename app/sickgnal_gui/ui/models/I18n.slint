@@ -1,0 +1,71 @@
+export global I18n {
+    in-out property <bool> is-french: true;
+
+    // ── Profile Select ────────────────────────────────────────────────
+    out property <string> who-is-using: is-french ? "Qui utilise Sickgnal ?" : "Who's using Sickgnal?";
+    out property <string> new-account: is-french ? "Nouveau compte" : "New Account";
+    out property <string> enter-password-for: is-french ? "Mot de passe pour " : "Enter password for ";
+    out property <string> select-profile-help: is-french ? "Sélectionnez un profil ou créez un nouveau compte." : "Select a profile to sign in, or create a new account.";
+
+    // ── Auth (Log) ────────────────────────────────────────────────────
+    out property <string> user-found-prefix: is-french ? "Utilisateur trouvé : '" : "User found: '";
+    out property <string> user-found-suffix: is-french ? "'. Connectez-vous !" : "'. Sign in!";
+    out property <string> incorrect-password: is-french ? "Mot de passe incorrect" : "Incorrect password";
+    out property <string> sign-in: is-french ? "Connexion" : "Sign In";
+    out property <string> no-account-found: is-french ? "Aucun compte trouvé. Inscrivez-vous !" : "No account found. Sign up!";
+    out property <string> username-placeholder: is-french ? "Nom d'utilisateur" : "Username";
+    out property <string> password-placeholder: is-french ? "Mot de passe" : "Password";
+    out property <string> confirm-password-placeholder: is-french ? "Confirmer le mot de passe" : "Confirm password";
+    out property <string> username-exists: is-french ? "Cet utilisateur existe déjà !" : "This username already exists!";
+    out property <string> passwords-dont-match: is-french ? "Les mots de passe ne correspondent pas" : "Passwords don't match";
+    out property <string> create-account: is-french ? "Créer mon compte" : "Create account";
+
+    // ── Conversation List ─────────────────────────────────────────────
+    out property <string> conversations: is-french ? "Conversations" : "Conversations";
+    out property <string> loading-conversations: is-french ? "Chargement..." : "Loading conversations...";
+    out property <string> no-conversations: is-french ? "Aucune conversation" : "No conversations yet";
+    out property <string> no-conversations-hint: is-french ? "Démarrez une conversation\navec le bouton + ci-dessus" : "Start a new conversation\nwith the + button above";
+
+    // ── Conversation ──────────────────────────────────────────────────
+    out property <string> select-conversation: is-french ? "Sélectionnez une conversation" : "Select a conversation";
+    out property <string> is-typing-suffix: is-french ? " est en train d'écrire..." : " is typing...";
+    out property <string> replying-to: is-french ? "Réponse à :" : "Replying to:";
+    out property <string> write-message: is-french ? "Écrire un message..." : "Write a message...";
+    out property <string> edit-message-placeholder: is-french ? "Modifier le message..." : "Edit message...";
+    out property <string> type-reply: is-french ? "Écrivez votre réponse..." : "Type your reply...";
+    out property <string> send: is-french ? "Envoyer" : "Send";
+    out property <string> save: is-french ? "Sauvegarder" : "Save";
+    out property <string> cancel: is-french ? "Annuler" : "Cancel";
+
+    // ── Conversation Settings ─────────────────────────────────────────
+    out property <string> conversation-info: is-french ? "Infos conversation" : "Conversation Info";
+    out property <string> name-label: is-french ? "Nom" : "Name";
+    out property <string> rename: is-french ? "Renommer" : "Rename";
+    out property <string> new-name-placeholder: is-french ? "Nouveau nom..." : "New name...";
+    out property <string> members-prefix: is-french ? "Membres (" : "Members (";
+    out property <string> fingerprint-prefix: is-french ? "Empreinte : " : "Fingerprint: ";
+    out property <string> add-member: is-french ? "Ajouter un membre" : "Add member";
+
+    // ── Dialogs ───────────────────────────────────────────────────────
+    out property <string> new-conversation: is-french ? "Nouvelle conversation" : "New Conversation";
+    out property <string> new-group: is-french ? "Nouveau groupe" : "New Group";
+    out property <string> enter-username: is-french ? "Nom d'utilisateur..." : "Enter username...";
+    out property <string> add: is-french ? "Ajouter" : "Add";
+    out property <string> create: is-french ? "Créer" : "Create";
+    out property <string> add-member-title: is-french ? "Ajouter un membre" : "Add Member";
+
+    // ── Message actions ───────────────────────────────────────────────
+    out property <string> reply: is-french ? "Répondre" : "Reply";
+    out property <string> edit: is-french ? "Modifier" : "Edit";
+    out property <string> delete: is-french ? "Supprimer" : "Delete";
+
+    // ── Error banner ──────────────────────────────────────────────────
+    out property <string> quit: is-french ? "Quitter" : "Quit";
+    out property <string> close: is-french ? "Fermer" : "Close";
+
+    // ── Navigation ────────────────────────────────────────────────────
+    out property <string> back: is-french ? "Retour" : "Back";
+
+    // ── Context menu ──────────────────────────────────────────────────
+    // (reuses rename, add-member, delete from above)
+}

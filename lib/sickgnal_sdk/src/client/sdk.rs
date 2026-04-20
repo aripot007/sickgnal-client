@@ -142,6 +142,29 @@ impl Sdk {
             .map_err(Error::from)
     }
 
+    /// Rename a conversation (set a custom title).
+    pub fn rename_conversation(
+        &mut self,
+        conversation_id: Uuid,
+        new_name: String,
+    ) -> Result<()> {
+        use sickgnal_core::chat::storage::ConversationInfo;
+        let custom_title = if new_name.is_empty() {
+            None
+        } else {
+            Some(new_name)
+        };
+        let info = ConversationInfo {
+            id: conversation_id,
+            custom_title,
+        };
+        self.storage
+            .lock()
+            .unwrap()
+            .update_conversation_info(&info)
+            .map_err(Error::from)
+    }
+
     /// Get a single conversation by ID.
     pub fn get_conversation(&self, conversation_id: Uuid) -> Result<Option<Conversation>> {
         self.storage

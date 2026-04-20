@@ -11,58 +11,84 @@ export component ConversationItem inherits Rectangle {
 
     callback clicked();
     callback delete_clicked();
+    callback right_clicked(/* x */ length, /* y */ length);
 
-    background: is_active ? Theme.background-dark : touch.has_hover ? Theme.background-light.darker(0.05) : Theme.background-light;
+    background: is_active ? Theme.background-dark : hover-area.has-hover ? Theme.background-light.darker(0.05) : Theme.background-light;
     border-radius: 8px;
-    touch := TouchArea {
-        clicked => {
-            root.clicked();
-        }
+
+    // Full-area hover detection (no click handling)
+    hover-area := TouchArea {
+        mouse-cursor: pointer;
     }
 
     if root.unread_count > 0: Rectangle {
         x: 10px;
-        y: 10px; 
+        y: 10px;
         width: 8px;
         height: 8px;
         background: Theme.primary;
         border-radius: self.width / 2;
     }
 
-    HorizontalBox {
-        VerticalBox {
-            alignment: start;
-            HorizontalBox {
+    HorizontalLayout {
+        padding: 0;
+        spacing: 0;
 
-                Text {
-                    text: root.name;
-                    font-size: 16px;
-                    font-weight: 600;
-                    color: Theme.text-main;
-                    horizontal-alignment: left;
+        // Clickable content area
+        Rectangle {
+            horizontal-stretch: 1;
+
+            content-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    root.clicked();
+                }
+                pointer-event(event) => {
+                    if (event.button == PointerEventButton.right && event.kind == PointerEventKind.up) {
+                        root.right_clicked(content-touch.mouse-x + root.x, content-touch.mouse-y + root.y);
+                    }
                 }
             }
 
-            Text {
-                text: root.last_message;
-                font-size: 13px;
-                color: Theme.text-muted;
-                horizontal-alignment: left;
-                overflow: elide;
-            }
+            HorizontalBox {
+                VerticalBox {
+                    alignment: start;
+                    HorizontalBox {
+                        Text {
+                            text: root.name;
+                            font-size: 16px;
+                            font-weight: 600;
+                            color: Theme.text-main;
+                            horizontal-alignment: left;
+                        }
+                    }
 
-            Text {
-                text: root.last_message_time;
-                font-size: 11px;
-                color: Theme.text-muted;
-                horizontal-alignment: left;
+                    Text {
+                        text: root.last_message;
+                        font-size: 13px;
+                        color: Theme.text-muted;
+                        horizontal-alignment: left;
+                        overflow: elide;
+                    }
+
+                    Text {
+                        text: root.last_message_time;
+                        font-size: 11px;
+                        color: Theme.text-muted;
+                        horizontal-alignment: left;
+                    }
+                }
             }
         }
 
-        if touch.has_hover: Rectangle {
+        // Delete button - only visible on hover, separate TouchArea
+        if hover-area.has-hover: Rectangle {
+            width: 36px;
             border-radius: Theme.border-radius;
-            background: delete_touch.has_hover ? #ff4444 : transparent;
-            delete_touch := TouchArea {
+            background: delete-touch.has-hover ? #ff4444 : transparent;
+
+            delete-touch := TouchArea {
+                mouse-cursor: pointer;
                 clicked => {
                     root.delete_clicked();
                 }
@@ -70,7 +96,7 @@ export component ConversationItem inherits Rectangle {
 
             Text {
                 text: "x";
-                color: white;
+                color: delete-touch.has-hover ? white : Theme.text-muted;
                 font-size: 18px;
                 horizontal-alignment: center;
                 vertical-alignment: center;

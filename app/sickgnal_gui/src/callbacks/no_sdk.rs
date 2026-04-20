@@ -1,13 +1,14 @@
 //! Callbacks qui ne nécessitent jamais le SDK.
 //! Enregistrés une seule fois au démarrage — définitifs.
 
-use crate::{AppWindow, Chat, Status};
-use slint::ComponentHandle;
+use crate::{AppWindow, Auth, Chat, Status};
+use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 pub fn setup_callbacks_no_sdk(ui: &AppWindow) {
     setup_status_callbacks(ui);
     setup_dialog_callbacks(ui);
     setup_edit_reply_callbacks(ui);
+    setup_logout_callback(ui);
 }
 
 // ── Bannière d'erreur ─────────────────────────────────────────────────────────
@@ -45,7 +46,61 @@ fn setup_dialog_callbacks(ui: &AppWindow) {
             let Some(ui) = ui_weak.upgrade() else { return };
             ui.global::<Chat>().set_show_new_conversation_dialog(false);
             ui.global::<Chat>().set_new_conversation_error("".into());
+            ui.global::<Chat>().set_new_conversation_is_group(false);
+            ui.global::<Chat>()
+                .set_new_conversation_users(ModelRc::new(VecModel::<slint::SharedString>::default()));
         });
+    }
+
+    // Nouvelle conversation — ajouter un user à la liste
+    {
+        let ui_weak = ui.as_weak();
+        ui.global::<Chat>()
+            .on_add_user_to_new_conversation(move |username| {
+                let Some(ui) = ui_weak.upgrade() else { return };
+                let users = ui.global::<Chat>().get_new_conversation_users();
+                // Check for duplicates
+                for i in 0..users.row_count() {
+                    if let Some(existing) = users.row_data(i) {
+                        if existing == username {
+                            ui.global::<Chat>().set_new_conversation_error(
+                                "User already added".into(),
+                            );
+                            return;
+                        }
+                    }
+                }
+                ui.global::<Chat>().set_new_conversation_error("".into());
+                if let Some(model) =
+                    users.as_any().downcast_ref::<VecModel<slint::SharedString>>()
+                {
+                    model.push(username);
+                } else {
+                    let mut vec: Vec<slint::SharedString> = (0..users.row_count())
+                        .filter_map(|i| users.row_data(i))
+                        .collect();
+                    vec.push(username);
+                    ui.global::<Chat>()
+                        .set_new_conversation_users(ModelRc::new(VecModel::from(vec)));
+                }
+            });
+    }
+
+    // Nouvelle conversation — retirer un user de la liste
+    {
+        let ui_weak = ui.as_weak();
+        ui.global::<Chat>()
+            .on_remove_user_from_new_conversation(move |index| {
+                let Some(ui) = ui_weak.upgrade() else { return };
+                let users = ui.global::<Chat>().get_new_conversation_users();
+                if let Some(model) =
+                    users.as_any().downcast_ref::<VecModel<slint::SharedString>>()
+                {
+                    if (index as usize) < model.row_count() {
+                        model.remove(index as usize);
+                    }
+                }
+            });
     }
 
     // Ajouter un membre — ouvrir le dialogue
@@ -141,4 +196,32 @@ fn setup_edit_reply_callbacks(ui: &AppWindow) {
             ui.global::<Chat>().set_reply_to_preview("".into());
         });
     }
+}
+
+// ── Déconnexion ───────────────────────────────────────────────────────────────
+
+fn setup_logout_callback(ui: &AppWindow) {
+    let ui_weak = ui.as_weak();
+    ui.global::<Auth>().on_logout(move || {
+        let Some(ui) = ui_weak.upgrade() else { return };
+        // Reset auth state → back to login screen
+        ui.global::<Auth>().set_is_logged_in(false);
+        ui.global::<Auth>().set_username("".into());
+
+        // Clear chat state
+        ui.global::<Chat>().set_chats(ModelRc::new(VecModel::<crate::Conversation>::default()));
+        ui.global::<Chat>().set_active_chat_id(-1);
+        ui.global::<Chat>().set_is_loading(true);
+        ui.global::<Chat>().set_show_conversation_settings(false);
+        ui.global::<Chat>().set_show_new_conversation_dialog(false);
+        ui.global::<Chat>().set_show_add_member_dialog(false);
+        ui.global::<Chat>().set_is_editing(false);
+        ui.global::<Chat>().set_is_replying(false);
+
+        // Show profile select again
+        ui.global::<crate::ProfileSelect>().set_show_profile_select(true);
+        ui.global::<crate::ProfileSelect>().set_password_mode(false);
+        ui.global::<crate::ProfileSelect>().set_selected_profile(-1);
+        ui.global::<crate::ProfileSelect>().set_profile_error("".into());
+    });
 }

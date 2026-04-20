@@ -148,25 +148,66 @@ fn setup_conversation_callbacks(
         let ui_weak = ui_weak.clone();
         let rt = rt.clone();
         ui.global::<Chat>()
-            .on_confirm_new_conversation(move |username| {
+            .on_confirm_new_conversation(move || {
                 let mut sdk = sdk.clone();
                 let conv_ids = conv_ids.clone();
                 let ui_weak = ui_weak.clone();
-                let username = username.to_string();
+
+                // Read the usernames list from the UI property
+                let usernames: Vec<String> = {
+                    let Some(ui) = ui_weak.upgrade() else { return };
+                    let users = ui.global::<Chat>().get_new_conversation_users();
+                    (0..users.row_count())
+                        .filter_map(|i| users.row_data(i).map(|s| s.to_string()))
+                        .collect()
+                };
+
+                if usernames.is_empty() {
+                    let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                        ui.global::<Chat>().set_new_conversation_error(
+                            "Add at least one user".into(),
+                        );
+                    });
+                    return;
+                }
+
                 rt.spawn(async move {
-                    let profile = match sdk.get_profile_by_username(username).await {
-                        Ok(p) => p,
-                        Err(e) => {
+                    // Resolve all usernames to UUIDs
+                    let mut peer_ids = Vec::new();
+                    for username in &usernames {
+                        let profile = match sdk.get_profile_by_username(username.clone()).await {
+                            Ok(p) => p,
+                            Err(e) => {
+                                let err_msg =
+                                    format!("User not found: '{}': {e}", username);
+                                let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                                    ui.global::<Chat>()
+                                        .set_new_conversation_error(err_msg.into());
+                                });
+                                return;
+                            }
+                        };
+
+                        if profile.id == my_id {
                             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                                 ui.global::<Chat>().set_new_conversation_error(
-                                    format!("User not found: {e}").into(),
+                                    "Cannot create a conversation with yourself".into(),
                                 );
                             });
                             return;
                         }
+
+                        peer_ids.push(profile.id);
+                    }
+
+                    // Create conversation: 1 peer = 1:1, 2+ peers = group
+                    let conv = if peer_ids.len() == 1 {
+                        sdk.start_conversation(peer_ids[0], None).await
+                    } else {
+                        sdk.start_group_conversation(peer_ids, None).await
                     };
 
-                    let conv = match sdk.start_conversation(profile.id, None).await {
+                    let conv = match conv {
                         Ok(c) => c,
                         Err(e) => {
                             let _ = ui_weak.upgrade_in_event_loop(move |ui| {
@@ -198,6 +239,10 @@ fn setup_conversation_callbacks(
                         ui.global::<Chat>().set_active_chat_id(new_index as i32);
                         ui.global::<Chat>().set_show_new_conversation_dialog(false);
                         ui.global::<Chat>().set_new_conversation_error("".into());
+                        ui.global::<Chat>().set_new_conversation_is_group(false);
+                        ui.global::<Chat>().set_new_conversation_users(
+                            slint::ModelRc::new(slint::VecModel::<slint::SharedString>::default()),
+                        );
                     });
                 });
             });
@@ -236,6 +281,48 @@ fn setup_conversation_callbacks(
             ui.global::<Chat>()
                 .set_current_peers(ModelRc::new(VecModel::from(peers_data)));
             ui.global::<Chat>().set_show_conversation_settings(true);
+        });
+    }
+
+    // rename_conversation — replaces the stub from no_sdk
+    {
+        let mut sdk = sdk.clone();
+        let conv_ids = conv_ids.clone();
+        let ui_weak = ui_weak.clone();
+        ui.global::<Chat>().on_rename_conversation(move |new_name| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let active = ui.global::<Chat>().get_active_chat_id();
+
+            let ids = conv_ids.lock().unwrap();
+            let Some(&conv_uuid) = ids.get(active as usize) else {
+                return;
+            };
+            drop(ids);
+
+            let name_str = new_name.to_string();
+            if let Err(e) = sdk.rename_conversation(conv_uuid, name_str.clone()) {
+                error!("Failed to rename conversation: {e}");
+                show_error(&ui, &format!("Failed to rename: {e}"));
+                return;
+            }
+
+            // Update the conversation name in the UI model
+            let display_name = if name_str.is_empty() {
+                // Recompute default title from peers
+                if let Ok(Some(conv)) = sdk.get_conversation(conv_uuid) {
+                    conv.title
+                } else {
+                    name_str
+                }
+            } else {
+                name_str
+            };
+
+            let chats = ui.global::<Chat>().get_chats();
+            if let Some(mut conv) = chats.row_data(active as usize) {
+                conv.name = display_name.into();
+                chats.set_row_data(active as usize, conv);
+            }
         });
     }
 }
@@ -459,9 +546,44 @@ fn setup_member_callbacks(
 
             match sdk.add_peer_to_conversation(conv_uuid, profile.id).await {
                 Ok(()) => {
+                    // Refresh the peers list in the UI
+                    let peers_data: Vec<PeerData> =
+                        if let Ok(Some(full_conv)) = sdk.get_conversation(conv_uuid) {
+                            full_conv
+                                .peers
+                                .iter()
+                                .map(|p| PeerData {
+                                    id: p.id.to_string()[..8].into(),
+                                    name: p.name().into(),
+                                    fingerprint: p.format_fingerprint().into(),
+                                })
+                                .collect()
+                        } else {
+                            vec![]
+                        };
+
+                    // Also update the conversation title in case it changed
+                    let new_title = sdk
+                        .get_conversation(conv_uuid)
+                        .ok()
+                        .flatten()
+                        .map(|c| c.title);
+
                     let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                         ui.global::<Chat>().set_show_add_member_dialog(false);
                         ui.global::<Chat>().set_add_member_error("".into());
+                        ui.global::<Chat>()
+                            .set_current_peers(ModelRc::new(VecModel::from(peers_data)));
+
+                        // Update conversation name in the list
+                        if let Some(title) = new_title {
+                            let active = ui.global::<Chat>().get_active_chat_id();
+                            let chats = ui.global::<Chat>().get_chats();
+                            if let Some(mut conv) = chats.row_data(active as usize) {
+                                conv.name = title.into();
+                                chats.set_row_data(active as usize, conv);
+                            }
+                        }
                     });
                 }
                 Err(e) => {

@@ -147,13 +147,25 @@ pub fn handle_sdk_event(
 
         ChatEvent::TypingIndicator {
             conversation_id,
-            peer_id: _,
+            peer_id,
         } => {
+            // Resolve the peer's display name
+            let peer_name: String = if let Ok(Some(conv)) = sdk.get_conversation(conversation_id) {
+                conv.peers
+                    .iter()
+                    .find(|p| p.id == peer_id)
+                    .map(|p| p.name())
+                    .unwrap_or_else(|| format!("Peer#{}", &peer_id.to_string()[..8]))
+            } else {
+                format!("Peer#{}", &peer_id.to_string()[..8])
+            };
+
             let chats = ui.global::<Chat>().get_chats();
             for i in 0..chats.row_count() {
                 if let Some(mut conv) = chats.row_data(i) {
                     if conv.id == conversation_id.to_string().as_str() {
                         conv.is_typing = true;
+                        conv.typing_user_name = peer_name.into();
                         chats.set_row_data(i, conv);
                         break;
                     }

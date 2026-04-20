@@ -66,6 +66,7 @@ pub fn entry_to_slint(entry: &ConversationEntry, _my_id: Uuid) -> Conversation {
             .into(),
         unread_count: entry.unread_messages_count as i32,
         is_typing: false,
+        typing_user_name: "".into(),
         messages: ModelRc::default(),
     }
 }

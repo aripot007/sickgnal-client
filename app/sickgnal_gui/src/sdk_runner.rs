@@ -82,6 +82,7 @@ pub fn spawn_sdk(
                     convos.iter().map(|e| entry_to_slint(e, my_id)).collect();
                 let model = VecModel::from(slint_convos);
                 ui.global::<Chat>().set_chats(ModelRc::new(model));
+                ui.global::<Chat>().set_is_loading(false);
             });
         }
 
