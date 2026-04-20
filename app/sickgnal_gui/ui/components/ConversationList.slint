@@ -147,9 +147,9 @@ export component ConversationList inherits Rectangle {
             }
         }
 
-        Rectangle {
-            x: Chat.context_menu_x;
-            y: Chat.context_menu_y;
+        Rectangle {    
+            x: min(Chat.context_menu_x, parent.width - self.width - 4px);
+            y: min(Chat.context_menu_y, parent.height - self.height - 4px);
             width: 160px;
             height: 108px;
             background: Theme.surface;
