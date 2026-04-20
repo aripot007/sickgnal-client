@@ -69,6 +69,7 @@ fn setup_conversation_callbacks(
         let mut sdk = sdk.clone();
         let conv_ids = conv_ids.clone();
         let ui_weak = ui_weak.clone();
+        let rt = rt.clone();
         ui.global::<Chat>().on_switch_conversation(move |index| {
             let Some(ui) = ui_weak.upgrade() else { return };
             ui.global::<Chat>().set_active_chat_id(index);
@@ -87,11 +88,33 @@ fn setup_conversation_callbacks(
                     vec![]
                 }
             };
-            msgs.reverse(); // SQL renvoie DESC, on réordonne en chronologique
+            msgs.reverse();
+
+            let mut username_cache: std::collections::HashMap<Uuid, String> =
+                std::collections::HashMap::new();
 
             let slint_msgs: Vec<crate::MessageData> = msgs
                 .iter()
-                .map(|m| message_to_slint_with_context(m, my_id, &msgs))
+                .map(|m| {
+                    let mut slint_msg = message_to_slint_with_context(m, my_id, &msgs);
+
+                    // ✅ Résoudre le sender_name avec cache + block_on
+                    let sender_name = if let Some(name) = username_cache.get(&m.sender_id) {
+                        name.clone()
+                    } else {
+                        let name = rt.block_on(async {
+                            match sdk.get_profile_by_id(m.sender_id).await {
+                                Ok(profile) => profile.username.clone(),
+                                Err(_) => String::from("Unknown"),
+                            }
+                        });
+                        username_cache.insert(m.sender_id, name.clone());
+                        name
+                    };
+                    slint_msg.sender_name = sender_name.into();
+
+                    slint_msg
+                })
                 .collect();
 
             let chats = ui.global::<Chat>().get_chats();
@@ -100,9 +123,17 @@ fn setup_conversation_callbacks(
                 if let Some(last_msg) = msgs.last() {
                     let _ = sdk.mark_as_read(conv_uuid, last_msg.id);
                 }
+
                 conv.unread_count = 0;
                 chats.set_row_data(index as usize, conv);
             }
+
+            let mut rt_sdk = sdk.clone();
+            rt.spawn(async move {
+                if let Err(e) = rt_sdk.mark_conversation_as_read(conv_uuid).await {
+                    tracing::error!("Failed to mark conversation as read: {e}");
+                }
+            });
         });
     }
 
@@ -419,12 +450,23 @@ fn setup_message_callbacks(
             rt.spawn(async move {
                 match sdk.send_message(conv_uuid, text, reply_uuid).await {
                     Ok(msg) => {
+                        // ✅ Tout l'async AVANT upgrade_in_event_loop
+                        let sender_name = match sdk.get_profile_by_id(msg.sender_id).await {
+                            Ok(profile) => profile.username.clone(),
+                            Err(_) => String::new(),
+                        };
+
                         let reply_preview = reply_preview_text;
+                        let my_id = msg.sender_id;
+
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                            // ✅ Ici c'est synchrone, pas de .await
                             let active = ui.global::<Chat>().get_active_chat_id();
                             let chats = ui.global::<Chat>().get_chats();
                             if let Some(mut conv) = chats.row_data(active as usize) {
-                                let mut slint_msg = message_to_slint(&msg, msg.sender_id);
+                                let mut slint_msg = message_to_slint(&msg, my_id);
+                                slint_msg.sender_name = sender_name.into();
+
                                 if !reply_preview.is_empty() {
                                     slint_msg.reply_to_text = reply_preview.into();
                                 }
@@ -657,30 +699,34 @@ fn setup_typing_callback(
     rt: Arc<tokio::runtime::Runtime>,
     conv_ids: Arc<Mutex<Vec<Uuid>>>,
 ) {
-    let last_typing: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
     ui.global::<Chat>().on_typing(move || {
-        let now = Instant::now();
-        let mut last = last_typing.lock().unwrap();
-        let should_send = last
-            .map(|t| now.duration_since(t).as_secs() >= 3)
-            .unwrap_or(true);
+        let Some(ui) = ui_weak.upgrade() else { return };
+        let active = ui.global::<Chat>().get_active_chat_id();
+        let ids = conv_ids.lock().unwrap();
+        let Some(&conv_uuid) = ids.get(active as usize) else {
+            return;
+        };
+        drop(ids);
 
-        if should_send {
-            *last = Some(now);
-            drop(last);
+        let mut sdk = sdk.clone();
+        rt.spawn(async move {
+            let _ = sdk.send_typing_indicator(conv_uuid).await;
+        });
+    });
 
-            let Some(ui) = ui_weak.upgrade() else { return };
-            let active = ui.global::<Chat>().get_active_chat_id();
-            let ids = conv_ids.lock().unwrap();
-            let Some(&conv_uuid) = ids.get(active as usize) else {
-                return;
-            };
-            drop(ids);
-
-            let mut sdk = sdk.clone();
-            rt.spawn(async move {
-                let _ = sdk.send_typing_indicator(conv_uuid).await;
-            });
+    ui.global::<Chat>().on_clear_typing({
+        let ui_handle = ui.as_weak();
+        move || {
+            let ui = ui_handle.unwrap();
+            let chats = ui.global::<Chat>().get_chats();
+            for i in 0..chats.row_count() {
+                if let Some(mut conv) = chats.row_data(i) {
+                    if conv.is_typing {
+                        conv.is_typing = false;
+                        chats.set_row_data(i, conv);
+                    }
+                }
+            }
         }
     });
 }

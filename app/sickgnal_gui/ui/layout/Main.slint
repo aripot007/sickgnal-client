@@ -110,6 +110,12 @@ export component MainLayout inherits HorizontalBox {
 
     Rectangle {
         background: Theme.background-dark;
-        ConversationLayout { }
+
+        conversation := ConversationLayout { }
+
+    }
+
+    public function restart-typing-timer() {
+        conversation.restart-typing-timer();
     }
 }
