@@ -5,6 +5,9 @@ edition = "2024"
 publish.workspace = true
 license.workspace = true
 
+[target.'cfg(target_os = "android")'.dependencies]
+webpki-roots = "1.0.7"
+
 [dependencies]
 sickgnal_core = { path = "../sickgnal_core" }
 sickgnal_insecure_tls = { path = "../sickgnal_insecure_tls" }

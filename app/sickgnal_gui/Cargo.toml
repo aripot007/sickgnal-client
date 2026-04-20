@@ -28,6 +28,9 @@ required-features = ["desktop"]
 min_sdk_version = 33      # minimum Android version your app supports
 target_sdk_version = 33   # what you're building against
 
+[[package.metadata.android.uses_permission]]
+name = "android.permission.INTERNET"
+
 [package.metadata.android.signing.release]
 path = "/home/aristide/.android/debug.keystore"
 keystore_password = "android"

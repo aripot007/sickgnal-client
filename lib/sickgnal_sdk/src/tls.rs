@@ -153,7 +153,6 @@ pub(crate) async fn connect_transport(
 /// Build a `RootCertStore` from system certs + optional custom CA.
 fn build_root_store(custom_ca: &Option<PathBuf>) -> Result<RootCertStore, std::io::Error> {
     let mut root_store = RootCertStore::empty();
-
     let native_certs = rustls_native_certs::load_native_certs();
     root_store.add_parsable_certificates(native_certs.certs);
 
@@ -170,6 +169,11 @@ fn build_root_store(custom_ca: &Option<PathBuf>) -> Result<RootCertStore, std::i
                 format!("Failed to add custom CA: {e}"),
             )
         })?;
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     }
 
     Ok(root_store)

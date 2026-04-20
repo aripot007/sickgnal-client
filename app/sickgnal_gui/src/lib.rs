@@ -15,9 +15,15 @@ fn android_main(app: slint::android::AndroidApp) {
     use std::path::PathBuf;
     use std::sync::Arc;
 
+    let base_dir: PathBuf = app
+        .internal_data_path()
+        .expect("Impossible d'accéder au stockage interne")
+        .join("sickgnal");
+
+    std::fs::create_dir_all(&base_dir).expect("Impossible de créer le répertoire de stockage");
+
     slint::android::init(app).unwrap();
 
-    let base_dir: PathBuf = "storage".into();
     tracing_subscriber::fmt::init();
 
     let rt = Arc::new(tokio::runtime::Runtime::new().expect("Failed to create tokio runtime"));
