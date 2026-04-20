@@ -1,8 +1,11 @@
 /target
-storage/
+/app/test_tls/storage
+/app/sickgnal_gui/storage
+/app/sickgnal_tui/storage
 tui_storage
 *.db
 *.db-shm
 *.db-wal
 log.txt
 storage.salt
+.vscode/
