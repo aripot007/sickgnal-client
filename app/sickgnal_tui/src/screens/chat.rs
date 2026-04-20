@@ -2,8 +2,8 @@ use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    text::{Line, Span, Text},
+    widgets::{Block, Borders, Paragraph, Wrap},
 };
 
 use crate::app::App;
@@ -74,7 +74,7 @@ fn sender_name(peers: &[sickgnal_core::e2e::peer::Peer], sender_id: Uuid) -> Str
         .unwrap_or_else(|| sender_id.to_string()[..8].to_string())
 }
 
-pub fn draw(f: &mut Frame, app: &App) {
+pub fn draw(f: &mut Frame, app: &mut App) {
     let area = f.area();
 
     // Check for active typing indicator
@@ -176,8 +176,15 @@ pub fn draw(f: &mut Frame, app: &App) {
     // ── Messages ──────────────────────────────────────────────────────
     let messages_area = centered_rect(chunks[1], 40);
     let chat_width = messages_area.width as usize;
+    let visible_height = messages_area.height;
+
+    // Update messages_area_height for key handler to use
+    app.messages_area_height = visible_height;
 
     if app.messages.is_empty() {
+        app.total_visual_lines = 0;
+        app.message_line_offsets.clear();
+
         let empty = Paragraph::new(Line::from(vec![Span::styled(
             "No messages yet. Type something below.",
             Style::default().fg(Color::DarkGray),
@@ -187,10 +194,14 @@ pub fn draw(f: &mut Frame, app: &App) {
     } else {
         let my_id = app.my_user_id;
 
-        // Build message items — each message may span multiple visual lines
-        let mut items: Vec<ListItem> = Vec::new();
+        // Build all visual lines and track per-message line offsets
+        let mut all_lines: Vec<Line> = Vec::new();
+        let mut message_line_offsets: Vec<u16> = Vec::new();
 
         for (idx, msg) in app.messages.iter().enumerate() {
+            // Record the starting visual line for this message
+            message_line_offsets.push(all_lines.len() as u16);
+
             let is_mine = my_id.is_some_and(|id| id == msg.sender_id);
             let is_selected = app.selected_message == Some(idx);
             let time = msg.issued_at.format("%H:%M").to_string();
@@ -230,12 +241,10 @@ pub fn draw(f: &mut Frame, app: &App) {
                 style
             };
 
-            let mut lines: Vec<Line> = Vec::new();
-
             // ── Sender name for group conversations ──
             if is_group && !is_mine {
                 let name = sender_name(peers, msg.sender_id);
-                lines.push(Line::from(vec![
+                all_lines.push(Line::from(vec![
                     Span::styled(marker, marker_style),
                     Span::styled(
                         name,
@@ -269,7 +278,7 @@ pub fn draw(f: &mut Frame, app: &App) {
                     } else {
                         String::new()
                     };
-                    lines.push(Line::from(vec![
+                    all_lines.push(Line::from(vec![
                         Span::styled(marker, marker_style),
                         Span::styled(padding, Style::default()),
                         Span::styled(
@@ -280,7 +289,7 @@ pub fn draw(f: &mut Frame, app: &App) {
                         ),
                     ]));
                 } else {
-                    lines.push(Line::from(vec![
+                    all_lines.push(Line::from(vec![
                         Span::styled(marker, marker_style),
                         Span::styled(
                             format!("│ {reply_preview}"),
@@ -316,7 +325,7 @@ pub fn draw(f: &mut Frame, app: &App) {
                         } else {
                             String::new()
                         };
-                        lines.push(Line::from(vec![
+                        all_lines.push(Line::from(vec![
                             Span::styled(marker, marker_style),
                             Span::styled(padding, apply_bg(Style::default())),
                             Span::styled(
@@ -339,7 +348,7 @@ pub fn draw(f: &mut Frame, app: &App) {
                         } else {
                             String::new()
                         };
-                        lines.push(Line::from(vec![
+                        all_lines.push(Line::from(vec![
                             Span::styled(" ", marker_style),
                             Span::styled(padding, apply_bg(Style::default())),
                             Span::styled(
@@ -349,7 +358,7 @@ pub fn draw(f: &mut Frame, app: &App) {
                         ]));
                     }
                 } else if is_last_line {
-                    lines.push(Line::from(vec![
+                    all_lines.push(Line::from(vec![
                         Span::styled(if line_idx == 0 { marker } else { " " }, marker_style),
                         Span::styled(
                             line_text.clone(),
@@ -361,7 +370,7 @@ pub fn draw(f: &mut Frame, app: &App) {
                         ),
                     ]));
                 } else {
-                    lines.push(Line::from(vec![
+                    all_lines.push(Line::from(vec![
                         Span::styled(if line_idx == 0 { marker } else { " " }, marker_style),
                         Span::styled(
                             line_text.clone(),
@@ -370,33 +379,38 @@ pub fn draw(f: &mut Frame, app: &App) {
                     ]));
                 }
             }
-
-            items.push(ListItem::new(lines));
         }
 
-        // Apply scroll: in selection mode, center on selected message;
-        // otherwise show from the bottom with scroll offset.
-        let visible_height = messages_area.height as usize;
-        let total = items.len();
+        let total_lines = all_lines.len() as u16;
 
-        let (start, end) = if let Some(sel) = app.selected_message {
+        // Update app state for key handler and auto-scroll
+        app.total_visual_lines = total_lines;
+        app.message_line_offsets = message_line_offsets;
+
+        let max_offset = total_lines.saturating_sub(visible_height);
+
+        // Handle scroll positioning
+        if let Some(sel) = app.selected_message {
+            // In selection mode: center viewport on selected message
+            let sel_start_line = app
+                .message_line_offsets
+                .get(sel)
+                .copied()
+                .unwrap_or(0);
             let half = visible_height / 2;
-            let center_start = sel.saturating_sub(half);
-            let center_end = (center_start + visible_height).min(total);
-            let center_start = center_end.saturating_sub(visible_height);
-            (center_start, center_end)
-        } else {
-            let offset = app.scroll_offset as usize;
-            let end = total.saturating_sub(offset);
-            let start = end.saturating_sub(visible_height);
-            (start, end)
-        };
+            let target = sel_start_line.saturating_sub(half);
+            app.scroll_offset = target.min(max_offset);
+        } else if app.scroll_pinned_to_bottom {
+            app.scroll_offset = max_offset;
+        }
 
-        let visible_items: Vec<ListItem> =
-            items.into_iter().skip(start).take(end - start).collect();
+        // Clamp scroll_offset to valid range
+        app.scroll_offset = app.scroll_offset.min(max_offset);
 
-        let list = List::new(visible_items);
-        f.render_widget(list, messages_area);
+        // Render messages using Paragraph with scroll
+        let text = Text::from(all_lines);
+        let paragraph = Paragraph::new(text).scroll((app.scroll_offset, 0));
+        f.render_widget(paragraph, messages_area);
     }
 
     // Typing indicator
@@ -455,7 +469,7 @@ pub fn draw(f: &mut Frame, app: &App) {
                 "> ",
                 String::new(),
                 0,
-                " r: reply | e: edit | d: delete | Esc: cancel | ↑↓: nav ",
+                " r: reply | e: edit | d: delete | Esc: cancel | ↑↓: nav | PgUp/PgDn ",
                 Color::Cyan,
             )
         } else if app.reply_to_message.is_some() {
@@ -471,7 +485,7 @@ pub fn draw(f: &mut Frame, app: &App) {
                 "> ",
                 app.message_input.clone(),
                 app.input_cursor,
-                " Esc: back | Enter: send | ↑: select | F3: info | ←→: move ",
+                " Esc: back | Enter: send | ↑: select | PgUp/PgDn: scroll | F3: info ",
                 Color::Cyan,
             )
         };

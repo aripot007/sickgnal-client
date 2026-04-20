@@ -134,7 +134,11 @@ pub struct App {
     pub messages: Vec<Message>,
     pub message_input: String,
     pub input_cursor: usize, // byte offset into message_input
-    pub scroll_offset: u16,
+    pub scroll_offset: u16,  // visual line offset from top (used by Paragraph::scroll)
+    pub scroll_pinned_to_bottom: bool, // if true, draw() will snap scroll to bottom
+    pub messages_area_height: u16,     // visible height in lines, updated by draw()
+    pub total_visual_lines: u16,       // total wrapped lines, updated by draw()
+    pub message_line_offsets: Vec<u16>, // start visual line of each message, updated by draw()
     pub my_user_id: Option<Uuid>,
 
     // Message selection / editing / deletion
@@ -227,6 +231,10 @@ impl App {
             message_input: String::new(),
             input_cursor: 0,
             scroll_offset: 0,
+            scroll_pinned_to_bottom: true,
+            messages_area_height: 0,
+            total_visual_lines: 0,
+            message_line_offsets: Vec::new(),
             my_user_id: None,
 
             selected_message: None,
@@ -793,7 +801,7 @@ impl App {
                     }
 
                     self.input_clear();
-                    self.scroll_offset = 0;
+                    self.scroll_pinned_to_bottom = true;
                     self.selected_message = None;
                     self.screen = Screen::Chat;
                 }
@@ -868,7 +876,7 @@ impl App {
                             self.current_conversation = Some(conv_id);
                             self.messages.clear();
                             self.input_clear();
-                            self.scroll_offset = 0;
+                            self.scroll_pinned_to_bottom = true;
                             self.screen = Screen::Chat;
                         }
                         Err(e) => {
@@ -947,7 +955,7 @@ impl App {
                             self.current_conversation = Some(conv_id);
                             self.messages.clear();
                             self.input_clear();
-                            self.scroll_offset = 0;
+                            self.scroll_pinned_to_bottom = true;
                             self.screen = Screen::Chat;
                         }
                         Err(e) => {
@@ -1040,8 +1048,9 @@ impl App {
                     if sel + 1 < self.messages.len() {
                         self.selected_message = Some(sel + 1);
                     } else {
-                        // Past the last message → exit selection mode
+                        // Past the last message → exit selection mode, snap to bottom
                         self.selected_message = None;
+                        self.scroll_pinned_to_bottom = true;
                     }
                 }
                 KeyCode::Esc => {
@@ -1085,6 +1094,19 @@ impl App {
                     self.selected_message = None;
                     self.input_insert(c);
                 }
+                KeyCode::PageUp => {
+                    let jump = 5.min(sel);
+                    self.selected_message = Some(sel - jump);
+                }
+                KeyCode::PageDown => {
+                    let jump = 5;
+                    let new_sel = sel + jump;
+                    if new_sel < self.messages.len() {
+                        self.selected_message = Some(new_sel);
+                    } else {
+                        self.selected_message = Some(self.messages.len().saturating_sub(1));
+                    }
+                }
                 _ => {}
             }
             return;
@@ -1127,7 +1149,7 @@ impl App {
                             Ok(msg) => {
                                 self.messages.push(msg);
                                 self.input_clear();
-                                self.scroll_offset = 0;
+                                self.scroll_pinned_to_bottom = true;
                             }
                             Err(e) => {
                                 error!("Failed to send message: {e}");
@@ -1158,10 +1180,24 @@ impl App {
                 // Enter message selection mode at the last message
                 if !self.messages.is_empty() {
                     self.selected_message = Some(self.messages.len() - 1);
+                    self.scroll_pinned_to_bottom = false;
                 }
             }
             KeyCode::Down => {
                 // No-op in input mode (already at bottom)
+            }
+            KeyCode::PageUp => {
+                let page = self.messages_area_height.max(1);
+                self.scroll_offset = self.scroll_offset.saturating_sub(page);
+                self.scroll_pinned_to_bottom = false;
+            }
+            KeyCode::PageDown => {
+                let page = self.messages_area_height.max(1);
+                let max_offset = self.total_visual_lines.saturating_sub(self.messages_area_height);
+                self.scroll_offset = (self.scroll_offset + page).min(max_offset);
+                if self.scroll_offset >= max_offset {
+                    self.scroll_pinned_to_bottom = true;
+                }
             }
             _ => {}
         }
