@@ -37,6 +37,9 @@ export component AddMemberDialog inherits Rectangle {
 
             username-input := ChatInput {
                 placeholder-text: I18n.enter-username;
+                send => {
+                    Chat.confirm_add_member(username-input.text);
+                }
             }
 
             if Chat.add_member_error != "": Text {

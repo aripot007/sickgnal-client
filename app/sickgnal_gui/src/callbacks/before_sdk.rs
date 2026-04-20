@@ -3,7 +3,7 @@
 //! Ces handlers seront écrasés par setup_callbacks_after_sdk() une fois connecté.
 
 use crate::{AppWindow, Chat};
-use slint::ComponentHandle;
+use slint::{ComponentHandle, ModelRc, VecModel};
 
 pub fn setup_callbacks_before_sdk(ui: &AppWindow) {
     // confirm_new_conversation — stub : SDK pas encore prêt
@@ -24,5 +24,17 @@ pub fn setup_callbacks_before_sdk(ui: &AppWindow) {
             ui.global::<Chat>()
                 .set_add_member_error("Connexion en cours, veuillez patienter...".into());
         });
+    }
+
+    {
+        let ui_weak = ui.as_weak();
+        ui.global::<Chat>()
+            .on_clear_new_conversation_users(move || {
+                let Some(ui) = ui_weak.upgrade() else { return };
+                ui.global::<Chat>()
+                    .set_new_conversation_users(ModelRc::new(
+                        VecModel::<slint::SharedString>::default(),
+                    ));
+            });
     }
 }

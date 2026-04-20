@@ -94,8 +94,13 @@ export component NewConversationDialog inherits Rectangle {
 
                 single-input := ChatInput {
                     placeholder-text: I18n.enter-username;
+                    edited => {
+                        Chat.new_conversation_error = "";
+                    }
                     send => {
                         if (self.text != "") {
+                            Chat.new_conversation_error = "";
+                            Chat.clear_new_conversation_users();
                             Chat.add_user_to_new_conversation(self.text);
                             Chat.confirm_new_conversation();
                         }
@@ -127,6 +132,8 @@ export component NewConversationDialog inherits Rectangle {
                         btn_width: 80px;
                         enabled: single-input.text != "";
                         clicked => {
+                            Chat.new_conversation_error = "";
+                            Chat.clear_new_conversation_users();
                             Chat.add_user_to_new_conversation(single-input.text);
                             Chat.confirm_new_conversation();
                         }
