@@ -28,53 +28,76 @@ pub fn handle_sdk_event(
             conversation_id,
             msg,
         } => {
-            let chats = ui.global::<Chat>().get_chats();
-            let active = ui.global::<Chat>().get_active_chat_id();
+            // ✅ Cloner AVANT le spawn
+            let mut sdk_for_profile = sdk.clone();
+            let sdk_for_read = sdk.clone();
+            let rt_inner = rt.clone();
+            let ui_weak = ui.as_weak();
+            let my_id = my_id;
+            let sender_id = msg.sender_id;
 
-            for i in 0..chats.row_count() {
-                if let Some(mut conv) = chats.row_data(i) {
-                    if conv.id == conversation_id.to_string().as_str() {
-                        let msg_id = msg.id;
+            rt.spawn(async move {
+                // Récupérer le nom de l'expéditeur (async)
+                let sender_name = match sdk_for_profile.get_profile_by_id(sender_id).await {
+                    Ok(profile) => profile.username.clone(),
+                    Err(_) => String::from("Unknown"),
+                };
 
-                        // ✅ Résoudre reply_to_text depuis les messages existants
-                        let reply_to_text: String = if let Some(reply_id) = msg.reply_to_id {
-                            let reply_id_str = reply_id.to_string();
-                            let messages = &conv.messages;
-                            let mut found = String::new();
-                            for j in 0..messages.row_count() {
-                                if let Some(existing_msg) = messages.row_data(j) {
-                                    if existing_msg.id == reply_id_str.as_str() {
-                                        found = existing_msg.text.to_string();
-                                        break;
+                let _ = ui_weak.upgrade_in_event_loop(move |ui| {
+                    let chats = ui.global::<Chat>().get_chats();
+                    let active = ui.global::<Chat>().get_active_chat_id();
+
+                    for i in 0..chats.row_count() {
+                        if let Some(mut conv) = chats.row_data(i) {
+                            if conv.id == conversation_id.to_string().as_str() {
+                                let msg_id = msg.id;
+
+                                // Résoudre reply_to_text
+                                let reply_to_text: String = if let Some(reply_id) = msg.reply_to_id
+                                {
+                                    let reply_id_str = reply_id.to_string();
+                                    let messages = &conv.messages;
+                                    let mut found = String::new();
+                                    for j in 0..messages.row_count() {
+                                        if let Some(existing_msg) = messages.row_data(j) {
+                                            if existing_msg.id == reply_id_str.as_str() {
+                                                found = existing_msg.text.to_string();
+                                                break;
+                                            }
+                                        }
                                     }
+                                    found
+                                } else {
+                                    String::new()
+                                };
+
+                                // ✅ Construire le message avec sender_name
+                                let mut slint_msg = message_to_slint(&msg, my_id);
+                                slint_msg.reply_to_text = reply_to_text.into();
+                                slint_msg.sender_name = sender_name.into();
+
+                                append_message_to_conv(&mut conv, slint_msg);
+                                conv.last_message = msg.content.clone().into();
+                                conv.last_message_time =
+                                    msg.issued_at.format("%H:%M").to_string().into();
+
+                                if i as i32 == active {
+                                    // ✅ Utiliser les clones dédiés
+                                    let mut sdk_read = sdk_for_read.clone();
+                                    rt_inner.spawn(async move {
+                                        let _ =
+                                            sdk_read.mark_as_read(conversation_id, msg_id).await;
+                                    });
+                                } else {
+                                    conv.unread_count += 1;
                                 }
+                                chats.set_row_data(i, conv);
+                                break;
                             }
-                            found
-                        } else {
-                            String::new()
-                        };
-
-                        // ✅ Construire le MessageData avec le reply_to_text résolu
-                        let mut slint_msg = message_to_slint(&msg, my_id);
-                        slint_msg.reply_to_text = reply_to_text.into();
-
-                        append_message_to_conv(&mut conv, slint_msg);
-                        conv.last_message = msg.content.clone().into();
-                        conv.last_message_time = msg.issued_at.format("%H:%M").to_string().into();
-
-                        if i as i32 == active {
-                            let mut sdk = sdk.clone();
-                            rt.spawn(async move {
-                                let _ = sdk.mark_as_read(conversation_id, msg_id).await;
-                            });
-                        } else {
-                            conv.unread_count += 1;
                         }
-                        chats.set_row_data(i, conv);
-                        break;
                     }
-                }
-            }
+                });
+            });
         }
 
         ChatEvent::MessageStatusUpdated {

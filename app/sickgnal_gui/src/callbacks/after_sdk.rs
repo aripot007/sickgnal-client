@@ -419,12 +419,22 @@ fn setup_message_callbacks(
             rt.spawn(async move {
                 match sdk.send_message(conv_uuid, text, reply_uuid).await {
                     Ok(msg) => {
+                        // Récupérer le username de l'expéditeur
+                        let sender_name = match sdk.get_profile_by_id(msg.sender_id).await {
+                            Ok(profile) => profile.username.clone(),
+                            Err(_) => String::new(),
+                        };
+
                         let reply_preview = reply_preview_text;
                         let _ = ui_weak.upgrade_in_event_loop(move |ui| {
                             let active = ui.global::<Chat>().get_active_chat_id();
                             let chats = ui.global::<Chat>().get_chats();
                             if let Some(mut conv) = chats.row_data(active as usize) {
                                 let mut slint_msg = message_to_slint(&msg, msg.sender_id);
+
+                                // Ajouter le nom de l'expéditeur
+                                slint_msg.sender_name = sender_name.into();
+
                                 if !reply_preview.is_empty() {
                                     slint_msg.reply_to_text = reply_preview.into();
                                 }

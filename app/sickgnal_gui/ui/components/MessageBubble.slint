@@ -8,6 +8,8 @@ component BubbleBase inherits HorizontalLayout {
     in property <string> time;
     in property <string> status;
     in property <string> reply_to_text;
+    in property <string> sender_name;
+    in property <bool> show_sender;
     in property <LayoutAlignment> bubble-alignment;
     in property <length> pad-left;
     in property <length> pad-right;
@@ -28,12 +30,9 @@ component BubbleBase inherits HorizontalLayout {
         border-bottom-right-radius: root.radius-right;
         border-bottom-left-radius: root.radius-left;
 
-        // Hover + right-click area covering the bubble background
-        // Rendered first (lowest Z), so the menu button on top can receive clicks
         bubble-hover := TouchArea {
-            mouse-cursor: default;
             pointer-event(event) => {
-                if (event.button == PointerEventButton.right && event.kind == PointerEventKind.down) {
+                if (event.button == PointerEventButton.right && event.kind == PointerEventKind.up) {
                     root.menu-requested(
                         self.absolute-position.x + self.mouse-x,
                         self.absolute-position.y + self.mouse-y
@@ -43,37 +42,48 @@ component BubbleBase inherits HorizontalLayout {
         }
 
         VerticalLayout {
-            padding: 10px;
+            padding: 8px;
+            padding-left: 12px;
+            padding-right: 12px;
             spacing: 4px;
 
-            // Quoted reply block
+            // === NOM DE L'EXPÉDITEUR ===
+            if root.show_sender && root.sender_name != "": Text {
+                text: root.sender_name;
+                font-size: 12px;
+                font-weight: 700;
+                color: Theme.primary;
+                horizontal-alignment: left;
+            }
+
+            // Reply preview
             if root.reply_to_text != "": Rectangle {
-                background: Theme.background-dark;
-                border-radius: 6px;
-                border-color: Theme.primary;
+                background: root.bg-color.darker(0.1);
+                border-radius: 4px;
+                height: reply-text.preferred-height + 8px;
 
                 HorizontalLayout {
-                    padding: 6px;
+                    padding: 4px;
                     padding-left: 8px;
                     spacing: 6px;
 
                     Rectangle {
-                        width: 3px;
-                        background: Theme.primary;
+                        width: 2px;
+                        background: root.text-color.with-alpha(0.5);
                         border-radius: 1px;
                     }
 
-                    Text {
+                    reply-text := Text {
                         text: root.reply_to_text;
-                        color: root.text-color;
-                        opacity: 0.7;
                         font-size: 12px;
-                        wrap: word-wrap;
+                        color: root.text-color.with-alpha(0.7);
                         overflow: elide;
+                        vertical-alignment: center;
                     }
                 }
             }
 
+            // Message text
             Text {
                 text: root.text;
                 color: root.text-color;
@@ -81,6 +91,7 @@ component BubbleBase inherits HorizontalLayout {
                 wrap: word-wrap;
             }
 
+            // Time + status
             HorizontalLayout {
                 alignment: end;
                 spacing: 8px;
@@ -99,7 +110,7 @@ component BubbleBase inherits HorizontalLayout {
             }
         }
 
-        // Menu button — top-right, rendered LAST (highest Z) so it gets clicks
+        // Menu button
         Rectangle {
             x: parent.width - self.width - 4px;
             y: 4px;
@@ -107,7 +118,7 @@ component BubbleBase inherits HorizontalLayout {
             height: 26px;
             border-radius: 13px;
             background: menu-btn-touch.has-hover ? #00000035 :
-                         bubble-hover.has-hover ? #00000018 : transparent;
+                bubble-hover.has-hover ? #00000018 : transparent;
             opacity: bubble-hover.has-hover || menu-btn-touch.has-hover ? 1.0 : 0.0;
 
             menu-btn-touch := TouchArea {
@@ -139,6 +150,7 @@ component LMessageBubble inherits BubbleBase {
     text-color: Theme.on-surface;
     radius-left: 0px;
     radius-right: Theme.border-radius;
+    show_sender: true;
 }
 
 component RMessageBubble inherits BubbleBase {
@@ -149,6 +161,7 @@ component RMessageBubble inherits BubbleBase {
     text-color: Theme.on-primary;
     radius-left: Theme.border-radius;
     radius-right: 0px;
+    show_sender: false;
 }
 
 export component MessageBubble inherits Rectangle {
@@ -158,6 +171,7 @@ export component MessageBubble inherits Rectangle {
     in property <string> status;
     in property <bool> is-me;
     in property <string> reply_to_text;
+    in property <string> sender_name;
 
     function open-menu(abs-x: length, abs-y: length) {
         Chat.message_menu_id = root.id;
@@ -174,6 +188,7 @@ export component MessageBubble inherits Rectangle {
             time: root.time;
             status: root.status;
             reply_to_text: root.reply_to_text;
+            sender_name: root.sender_name;
             menu-requested(x, y) => {
                 root.open-menu(x, y);
             }
@@ -183,6 +198,7 @@ export component MessageBubble inherits Rectangle {
             time: root.time;
             status: root.status;
             reply_to_text: root.reply_to_text;
+            sender_name: root.sender_name;
             menu-requested(x, y) => {
                 root.open-menu(x, y);
             }
