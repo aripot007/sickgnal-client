@@ -66,6 +66,9 @@ export global Chat {
 
     // Typing indicator
     callback typing();
+    
+    callback clear-typing();
+    callback restart-typing-timer();
 
     // Reply state
     in-out property <bool> is_replying: false;

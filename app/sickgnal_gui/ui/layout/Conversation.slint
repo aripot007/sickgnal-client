@@ -15,7 +15,6 @@ import { ImageButton } from "../components/ImageButton.slint";
 
 export component ConversationLayout inherits VerticalBox {
     private property <bool> show-typing: false;
-    private property <bool> raw-typing: Chat.get-current-conversation().is-typing;
     private property <int> active-id: Chat.active_chat_id;
     private property <int> msg-count: Chat.get-current-conversation().messages.length;
     private property <bool> is-at-bottom: true;
@@ -28,28 +27,25 @@ export component ConversationLayout inherits VerticalBox {
     // === Timers ===
 
     typing-timer := Timer {
-        interval: 1s;
+        interval: 2s;
         running: false;
         triggered => {
-            raw-typing = false;
-            root.show-typing = false;
             self.running = false;
+            root.show-typing = false;
+            Chat.clear-typing();
         }
     }
 
     // === Réactions aux changements ===
 
-    changed raw-typing => {
-        if (root.raw-typing) {
-            root.show-typing = true;
-            typing-timer.running = false;
-            typing-timer.running = true;
-        }
+    public function restart-typing-timer() {
+        root.show-typing = true;
+        typing-timer.running = false;
+        typing-timer.running = true;
     }
 
     changed active-id => {
         root.show-typing = false;
-        typing-timer.running = false;
         root.is-at-bottom = true;
         Chat.new_messages_count = 0;
         root.unread-start-index = Chat.get-current-conversation().messages.length;

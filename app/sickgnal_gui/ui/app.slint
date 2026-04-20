@@ -32,11 +32,15 @@ export { I18n } from "models/I18n.slint";
 export component AppWindow inherits Window {
 
     callback exit();
+    public function restart-typing-timer() {
+        mainLayout.restart-typing-timer();
+    }
     
     title: "Sickgnal";
     min-width: 800px;
     min-height: 500px;
     background: Theme.background-dark;
+    
 
     HorizontalLayout {
         alignment: center;
@@ -58,8 +62,11 @@ export component AppWindow inherits Window {
 
         }
     }
-    
-    if (Auth.is-logged-in): MainLayout { }
+
+    mainLayout := MainLayout {
+        visible: Auth.is-logged-in;
+    }
+
 
     // Language toggle (visible on all screens, top-right corner)
     if (!Auth.is-logged-in): Rectangle {

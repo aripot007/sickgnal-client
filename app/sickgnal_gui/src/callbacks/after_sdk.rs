@@ -706,4 +706,20 @@ fn setup_typing_callback(
             let _ = sdk.send_typing_indicator(conv_uuid).await;
         });
     });
+
+    ui.global::<Chat>().on_clear_typing({
+        let ui_handle = ui.as_weak();
+        move || {
+            let ui = ui_handle.unwrap();
+            let chats = ui.global::<Chat>().get_chats();
+            for i in 0..chats.row_count() {
+                if let Some(mut conv) = chats.row_data(i) {
+                    if conv.is_typing {
+                        conv.is_typing = false;
+                        chats.set_row_data(i, conv);
+                    }
+                }
+            }
+        }
+    });
 }
