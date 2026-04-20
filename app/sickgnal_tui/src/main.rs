@@ -40,7 +40,7 @@ struct Args {
     log: Option<PathBuf>,
 
     /// Server address (host:port)
-    #[arg(long, default_value = "127.0.0.1:8080")]
+    #[arg(long, default_value = "sickgnal.bapttf.com:443")]
     server: String,
 
     /// TLS implementation to use

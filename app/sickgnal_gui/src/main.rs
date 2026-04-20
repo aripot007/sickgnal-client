@@ -32,7 +32,7 @@ struct Args {
     data_dir: PathBuf,
 
     /// Server address (host:port)
-    #[arg(long, default_value = "127.0.0.1:8080")]
+    #[arg(long, default_value = "sickgnal.bapttf.com")]
     server: String,
 
     /// TLS implementation to use
