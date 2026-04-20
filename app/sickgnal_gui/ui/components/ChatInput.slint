@@ -5,6 +5,7 @@ import {
 } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { I18n } from "../models/I18n.slint";
+import { Chat } from "../models/Chat.slint";
 
 export component ChatInput inherits Rectangle {
     in-out property <string> text <=> input.text;
@@ -52,6 +53,7 @@ export component ChatInput inherits Rectangle {
                     if (input.preferred-height + 16px > scroll.height) {
                         scroll.viewport-y = -(input.preferred-height + 16px - scroll.height);
                     }
+                    Chat.typing();
                 }
 
                 key-pressed(event) => {
