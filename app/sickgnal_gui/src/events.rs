@@ -211,6 +211,10 @@ pub fn handle_sdk_event(
                         conv.is_typing = true;
                         conv.typing_user_name = peer_name.into();
                         chats.set_row_data(i, conv);
+
+                        // Call the exposed function to restart the timer
+                        ui.invoke_restart_typing_timer();
+
                         break;
                     }
                 }
