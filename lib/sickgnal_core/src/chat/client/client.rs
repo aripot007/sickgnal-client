@@ -13,10 +13,10 @@ use crate::{
         storage::{ConversationInfo, Message, MessageStatus, SharedStorageBackend, StorageBackend},
     },
     e2e::{
+        self,
         client::{ChatMessageSender, client_handle::ClientHandle},
         message::UserProfile,
         message_stream::E2EMessageStream,
-        peer::Peer,
     },
 };
 
@@ -534,7 +534,7 @@ async fn handle_data_message<S: StorageBackend>(
 /// Handle a control message in a known conversation
 async fn handle_control_message<S: StorageBackend>(
     storage: &mut S,
-    _e2e_client: &mut impl ChatMessageSender,
+    e2e_client: &mut impl ChatMessageSender,
     account_id: Uuid,
     event_tx: &mpsc::Sender<ChatEvent>,
     sender_id: Uuid,
@@ -565,14 +565,13 @@ async fn handle_control_message<S: StorageBackend>(
                 return Ok(());
             };
 
-            // Add the peer if necessary
-            if storage.peer(&id)?.is_none() {
-                let peer = Peer {
-                    id,
-                    username: None,
-                    fingerprint: None,
-                };
-                storage.save_peer(&peer)?;
+            // Get the user profile or fetch it from the server to resolve the name
+            match e2e_client.get_profile_by_id(id).await {
+                Ok(_) => (),
+                Err(e2e::client::Error::UserNotFound) => {
+                    warn!(peer=?sender_id, conv=?conversation_id, peer_to_add=?id, "discarding AddPeerToConv with non-existing peer")
+                }
+                Err(err) => return Err(err.into()),
             }
 
             let added = storage.add_peer_to_conversation(&conversation_id, &id)?;
