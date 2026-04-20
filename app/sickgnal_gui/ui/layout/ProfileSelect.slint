@@ -1,9 +1,10 @@
-import { VerticalBox, HorizontalBox, LineEdit } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { ProfileSelect, ProfileData } from "../models/Profile.slint";
 import { Button } from "../components/Button.slint";
 import { Auth } from "Log.slint";
 import { I18n } from "../models/I18n.slint";
+import { ChatInput } from "../components/ChatInput.slint";
 
 component ProfileCard inherits Rectangle {
     in property <string> username;
@@ -134,12 +135,12 @@ export component ProfileSelectLayout inherits VerticalBox {
                 alignment: center;
                 spacing: 10px;
 
-                passwd-input := LineEdit {
+                passwd-input := ChatInput {
                     placeholder-text: I18n.password-placeholder;
                     input-type: password;
                     width: 250px;
                     enabled: !ProfileSelect.is_loading;
-                    accepted => {
+                    send => {
                         ProfileSelect.submit_password(self.text);
                     }
                 }

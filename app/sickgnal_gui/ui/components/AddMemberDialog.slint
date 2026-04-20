@@ -1,13 +1,11 @@
-import { LineEdit } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Chat } from "../models/Chat.slint";
 import { Button } from "Button.slint";
 import { I18n } from "../models/I18n.slint";
+import { ChatInput } from "ChatInput.slint";
 
 export component AddMemberDialog inherits Rectangle {
     // Full-screen semi-transparent backdrop
-    width: 100%;
-    height: 100%;
     background: #00000060;
 
     // Block clicks from reaching content behind
@@ -34,11 +32,11 @@ export component AddMemberDialog inherits Rectangle {
                 font-weight: 700;
                 color: Theme.text-main;
                 horizontal-alignment: center;
+                vertical-alignment: center;
             }
 
-            username-input := LineEdit {
+            username-input := ChatInput {
                 placeholder-text: I18n.enter-username;
-                font-size: 14px;
             }
 
             if Chat.add_member_error != "": Text {
@@ -50,7 +48,7 @@ export component AddMemberDialog inherits Rectangle {
 
             HorizontalLayout {
                 alignment: end;
-                spacing: 10px;
+                spacing: 15px;
 
                 Button {
                     text: I18n.cancel;

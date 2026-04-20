@@ -3,9 +3,9 @@ import { ThemeSwitcher } from "../components/ThemeSwitcher.slint";
 import { Theme } from "../theme.slint";
 import { ConversationList } from "../components/ConversationList.slint";
 import { ConversationLayout } from "Conversation.slint";
-import { ImageButton } from "../components/ImageButton.slint";
 import { Auth } from "Log.slint";
 import { I18n } from "../models/I18n.slint";
+import { ProfileSelect } from "../models/Profile.slint";
 
 export component MainLayout inherits HorizontalBox {
     Rectangle {
@@ -15,32 +15,37 @@ export component MainLayout inherits HorizontalBox {
         background: Theme.background-light;
         VerticalBox {
             HorizontalLayout {
-                alignment: space-between;
-                spacing: 4px;
+                height: 30px;
+                
+                spacing: 5px;
 
-                ThemeSwitcher { }
+                VerticalLayout {
+                    alignment: center;
+                    ThemeSwitcher { }
+                }
 
                 // Language toggle FR/EN
-                Rectangle {
-                    width: 32px;
-                    height: 32px;
-                    border-radius: 6px;
-                    background: lang-touch.has-hover ? Theme.surface-hover : transparent;
 
-                    lang-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => {
-                            I18n.is-french = !I18n.is-french;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        background: lang-touch.has-hover ? Theme.surface-hover : transparent;
+
+                        lang-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                I18n.is-french = !I18n.is-french;
+                            }
                         }
-                    }
 
-                    Text {
-                        text: I18n.is-french ? "FR" : "EN";
-                        font-size: 12px;
-                        font-weight: 700;
-                        color: Theme.text-main;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                        Text {
+                            text: I18n.is-french ? "FR" : "EN";
+                            font-size: 20px;
+                            font-weight: 700;
+                            color: Theme.text-main;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
                     }
                 }
 
@@ -48,26 +53,53 @@ export component MainLayout inherits HorizontalBox {
                     horizontal-stretch: 1;
                 }
 
-                // Logout button
+                Text {
+                    text: ProfileSelect.profiles[ProfileSelect.selected_profile].name;
+                    visible: ProfileSelect.selected_profile != -1;
+                    overflow: elide;
+                    font-size: 20px;
+                    min-width: 0; 
+                    font-weight: 700;
+                    color: Theme.text-main;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
                 Rectangle {
-                    width: 32px;
-                    height: 32px;
-                    border-radius: 6px;
-                    background: logout-touch.has-hover ? #ff444430 : transparent;
+                    horizontal-stretch: 1;
+                }
 
-                    logout-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => {
-                            Auth.logout();
+                // Logout button
+
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 32px;
+                        height: 32px;
+                        border-radius: 6px;
+                        
+                        // Fond : Très léger au repos (15% d'opacité), Rouge pur au survol
+                        background: logout-touch.has-hover ? #ff0000 : #ff000022;
+
+                        logout-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                Auth.logout();
+                            }
                         }
-                    }
 
-                    Text {
-                        text: "⏻";
-                        font-size: 18px;
-                        color: logout-touch.has-hover ? #ff4444 : Theme.text-muted;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                        Text {
+                            text: "⏻";
+                            font-size: 18px;
+                            // Icône : Rouge au repos, Blanc au survol pour contraster avec le fond rouge
+                            color: logout-touch.has-hover ? white : #ff0000;
+                            
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        
+                        // Optionnel : Ajoute une transition douce pour l'effet "hover"
+                        animate background { duration: 150ms; }
                     }
                 }
             }
@@ -77,6 +109,7 @@ export component MainLayout inherits HorizontalBox {
     }
 
     Rectangle {
+        background: Theme.background-dark;
         ConversationLayout { }
     }
 }

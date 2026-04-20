@@ -13,8 +13,12 @@ export component ConversationItem inherits Rectangle {
     callback delete_clicked();
     callback right_clicked(/* x */ length, /* y */ length);
 
+    drop-shadow-blur: 6px;
+    drop-shadow-color: #00000020;
     background: is_active ? Theme.background-dark : hover-area.has-hover ? Theme.background-light.darker(0.05) : Theme.background-light;
     border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.border;
 
     // Full-area hover detection (no click handling)
     hover-area := TouchArea {

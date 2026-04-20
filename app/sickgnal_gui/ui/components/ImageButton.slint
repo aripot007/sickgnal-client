@@ -10,7 +10,7 @@ export component ImageButton inherits Rectangle {
 
     width: 32px;
     height: 32px;
-    background: add_touch.has_hover ?  Theme.background-light.brighter(100%) : Theme.background-light;
+    background: add_touch.has_hover ? Theme.surface-hover : transparent;
 
     add_touch := TouchArea {
         clicked => { root.clicked(); }

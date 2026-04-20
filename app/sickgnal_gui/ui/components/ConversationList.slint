@@ -4,6 +4,7 @@ import { ConversationItem } from "../components/ConversationItem.slint";
 import { Chat } from "../models/Chat.slint";
 import { ImageButton } from "ImageButton.slint";
 import { I18n } from "../models/I18n.slint";
+import { NewConvOrGroupDialog } from "../components/NewConvOrGroupDialog.slint";
 
 component ContextMenuItem inherits Rectangle {
     in property <string> label;
@@ -61,43 +62,7 @@ export component ConversationList inherits Rectangle {
             ImageButton {
                 image: @image-url("../assets/add.png");
                 clicked => {
-                    Chat.show_new_conv_menu = !Chat.show_new_conv_menu;
-                }
-            }
-        }
-
-        // Sub-menu for new conversation type
-        if Chat.show_new_conv_menu: Rectangle {
-            height: 76px;
-            background: Theme.surface;
-            border-radius: 8px;
-            border-width: 1px;
-            border-color: Theme.border;
-            drop-shadow-blur: 6px;
-            drop-shadow-color: #00000020;
-
-            VerticalLayout {
-                padding: 4px;
-                spacing: 2px;
-
-                ContextMenuItem {
-                    icon: "💬";
-                    label: I18n.new-conversation;
-                    clicked => {
-                        Chat.show_new_conv_menu = false;
-                        Chat.new_conversation_is_group = false;
-                        Chat.show_new_conversation_dialog = true;
-                    }
-                }
-
-                ContextMenuItem {
-                    icon: "👥";
-                    label: I18n.new-group;
-                    clicked => {
-                        Chat.show_new_conv_menu = false;
-                        Chat.new_conversation_is_group = true;
-                        Chat.show_new_conversation_dialog = true;
-                    }
+                    Chat.show_new_conv_or_group_dialog = !Chat.show_new_conv_or_group_dialog;
                 }
             }
         }

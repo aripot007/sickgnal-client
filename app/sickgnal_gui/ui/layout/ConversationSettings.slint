@@ -2,13 +2,13 @@ import {
     VerticalBox,
     HorizontalBox,
     ScrollView,
-    LineEdit,
 } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Chat } from "../models/Chat.slint";
 import { PeerData } from "../models/Peer.slint";
 import { Button } from "../components/Button.slint";
 import { I18n } from "../models/I18n.slint";
+import { ChatInput } from "../components/ChatInput.slint";
 
 component PeerItem inherits Rectangle {
     in property <string> peer_name;
@@ -104,25 +104,28 @@ export component ConversationSettings inherits VerticalBox {
             spacing: 10px;
             alignment: start;
 
-            Rectangle {
-                width: 32px;
-                height: 32px;
-                border-radius: 6px;
-                background: back-touch.has-hover ? Theme.surface-hover : transparent;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 6px;
+                    background: back-touch.has-hover ? Theme.surface-hover : transparent;
 
-                back-touch := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => {
-                        Chat.close_conversation_settings();
+                    back-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            Chat.close_conversation_settings();
+                        }
                     }
-                }
 
-                Text {
-                    text: "←";
-                    font-size: 18px;
-                    color: Theme.text-main;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                    Text {
+                        text: "←";
+                        font-size: 18px;
+                        color: Theme.text-main;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
                 }
             }
 
@@ -188,11 +191,10 @@ export component ConversationSettings inherits VerticalBox {
                     if root.is-renaming: HorizontalLayout {
                         spacing: 8px;
 
-                        rename-input := LineEdit {
+                        rename-input := ChatInput {
                             text: root.rename-value;
                             placeholder-text: I18n.new-name-placeholder;
-                            font-size: 14px;
-                            accepted => {
+                            send => {
                                 Chat.rename_conversation(self.text);
                                 root.is-renaming = false;
                             }

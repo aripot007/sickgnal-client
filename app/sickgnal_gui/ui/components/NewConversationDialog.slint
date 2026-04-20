@@ -1,8 +1,10 @@
-import { LineEdit, ScrollView } from "std-widgets.slint";
+
 import { Theme } from "../theme.slint";
 import { Chat } from "../models/Chat.slint";
 import { Button } from "Button.slint";
 import { I18n } from "../models/I18n.slint";
+import { ChatInput } from "ChatInput.slint";
+import { ScrollView } from "std-widgets.slint";
 
 component UserChip inherits Rectangle {
     in property <string> username;
@@ -26,34 +28,35 @@ component UserChip inherits Rectangle {
             vertical-alignment: center;
         }
 
-        Rectangle {
-            width: 22px;
-            height: 22px;
-            border-radius: 11px;
-            background: remove-touch.has-hover ? #ffffff40 : transparent;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 22px;
+                height: 22px;
+                border-radius: 11px;
+                background: remove-touch.has-hover ? #ffffff40 : transparent;
 
-            remove-touch := TouchArea {
-                mouse-cursor: pointer;
-                clicked => {
-                    Chat.remove_user_from_new_conversation(root.index);
+                remove-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        Chat.remove_user_from_new_conversation(root.index);
+                    }
+                }
+
+                Text {
+                    text: "x";
+                    font-size: 12px;
+                    color: Theme.on-primary;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
                 }
             }
-
-            Text {
-                text: "x";
-                font-size: 12px;
-                color: Theme.on-primary;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
+        
         }
     }
 }
 
 export component NewConversationDialog inherits Rectangle {
-    // Full-screen semi-transparent backdrop
-    width: 100%;
-    height: 100%;
     background: #00000060;
 
     // Block clicks from reaching content behind
@@ -82,16 +85,16 @@ export component NewConversationDialog inherits Rectangle {
                 font-weight: 700;
                 color: Theme.text-main;
                 horizontal-alignment: center;
+                vertical-alignment: center;
             }
 
             // === Mode 1:1 : single username input ===
             if !Chat.new_conversation_is_group: VerticalLayout {
                 spacing: 12px;
 
-                single-input := LineEdit {
+                single-input := ChatInput {
                     placeholder-text: I18n.enter-username;
-                    font-size: 14px;
-                    accepted => {
+                    send => {
                         if (self.text != "") {
                             Chat.add_user_to_new_conversation(self.text);
                             Chat.confirm_new_conversation();
@@ -138,10 +141,9 @@ export component NewConversationDialog inherits Rectangle {
                 HorizontalLayout {
                     spacing: 8px;
 
-                    group-input := LineEdit {
+                    group-input := ChatInput {
                         placeholder-text: I18n.enter-username;
-                        font-size: 14px;
-                        accepted => {
+                        send => {
                             if (self.text != "") {
                                 Chat.add_user_to_new_conversation(self.text);
                                 self.text = "";
@@ -196,6 +198,7 @@ export component NewConversationDialog inherits Rectangle {
                         text: I18n.cancel;
                         btn_width: 80px;
                         clicked => {
+                            debug("call cancel_new_conversation");
                             Chat.cancel_new_conversation();
                         }
                     }
@@ -205,6 +208,7 @@ export component NewConversationDialog inherits Rectangle {
                         btn_width: 80px;
                         enabled: Chat.new_conversation_users.length >= 2;
                         clicked => {
+                            debug("call confirm_new_conversation");
                             Chat.confirm_new_conversation();
                         }
                     }

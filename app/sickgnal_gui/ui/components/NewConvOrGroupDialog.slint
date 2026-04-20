@@ -1,0 +1,105 @@
+
+import { Theme } from "../theme.slint";
+import { Chat } from "../models/Chat.slint";
+import { Button } from "Button.slint";
+import { I18n } from "../models/I18n.slint";
+import { ChatInput } from "ChatInput.slint";
+
+component ContextMenuItem inherits Rectangle {
+    in property <string> label;
+    in property <string> icon;
+    in property <bool> is-destructive: false;
+
+    callback clicked();
+
+    height: 40px;
+    border-radius: 6px;
+    border-color: Theme.on-background;
+    background: item-touch.has-hover ? Theme.surface-hover : transparent;
+
+    item-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+
+        Text {
+            text: root.icon;
+            font-size: 18px;
+            color: root.is-destructive ? #cc3333 : Theme.text-main;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.label;
+            font-size: 18px;
+            color: root.is-destructive ? #cc3333 : Theme.text-main;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component NewConvOrGroupDialog inherits Rectangle {
+    // Full-screen semi-transparent backdrop
+    background: #00000060;
+    border-radius: 12px;
+    drop-shadow-blur: 20px;
+    width: 400px;
+    height: 200px;
+    drop-shadow-color: #00000040;
+
+    // Block clicks from reaching content behind
+    TouchArea {}
+
+    // Centered card
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: Theme.surface;
+
+        VerticalLayout {
+            padding: 20px;
+            spacing: 15px;
+            alignment: center;
+
+            ContextMenuItem {
+                icon: "💬";
+                label: I18n.new-conversation;
+                clicked => {
+                    Chat.show_new_conv_or_group_dialog = false;
+                    Chat.show_new_conv_menu = false;
+                    Chat.new_conversation_is_group = false;
+                    Chat.show_new_conversation_dialog = true;
+                }
+            }
+
+            ContextMenuItem {
+                icon: "👥";
+                label: I18n.new-group;
+                clicked => {
+                    Chat.show_new_conv_or_group_dialog = false;
+                    Chat.show_new_conv_menu = false;
+                    Chat.new_conversation_is_group = true;
+                    Chat.show_new_conversation_dialog = true;
+                }
+            }
+            
+            HorizontalLayout {
+                alignment: end;
+                spacing: 20px;
+
+                Button {
+                    text: I18n.cancel;
+                    btn_width: 80px;
+                    clicked => {
+                        Chat.show_new_conversation_dialog = false;
+                    }
+                }
+            }
+        }
+    }
+}

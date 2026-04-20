@@ -1,5 +1,9 @@
+import { Palette } from "std-widgets.slint";
+
 export global Theme {
-    in-out property <bool> is-dark: true;
+    in-out property <bool> is-dark: Palette.color-scheme == ColorScheme.dark;
+
+    //in-out property <bool> is-dark: true;
 
     property <color> blue: #0A84FF;
     property <color> purple: #5856D6; 
@@ -29,10 +33,10 @@ export global Theme {
     
     in property <color> surface:       is-dark ? #2C2C2E : white;
     in property <color> on-surface:    is-dark ? white : #000000;
-    in property <color> surface-hover: is-dark ? root.surface.brighter(10%) : root.surface.darker(5%);
+    in property <color> surface-hover: is-dark ? root.surface.brighter(20%) : root.surface.darker(10%);
 
     in property <color> text-main:  root.on-surface;
-    in property <color> text-muted: is-dark ? #8E8E93 : #636366;
+    in property <color> text-muted: is-dark ? #a9a9b1 : #3e3e41;
     in property <color> text-link:       root.primary;
     in property <color> text-link-hover: root.primary-hover;
     in property <color> text-interactive:       is-dark ? #EBEBF5.darker(10%) : #3C3C43.brighter(10%);

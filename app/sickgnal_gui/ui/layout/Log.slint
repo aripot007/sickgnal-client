@@ -1,6 +1,7 @@
-import { VerticalBox, LineEdit, Button } from "std-widgets.slint";
+import { VerticalBox, Button } from "std-widgets.slint";
 import { I18n } from "../models/I18n.slint";
 import { Theme } from "../theme.slint";
+import { ChatInput } from "../components/ChatInput.slint";
 
 export global Auth {
     in-out property <string> username: "";
@@ -32,12 +33,12 @@ component SignIn inherits VerticalBox {
         }
     }
 
-    passwd := LineEdit {
+    passwd := ChatInput {
         placeholder-text: I18n.password-placeholder;
         enabled: !Auth.incorrect-password;
         input-type: password;
         height: 30px;
-        accepted => { Auth.sign-in(self.text) }
+        send => { Auth.sign-in(self.text) }
     }
 
     if (Auth.incorrect-password) : Text {
@@ -83,25 +84,25 @@ component SignUp inherits VerticalBox {
         horizontal-alignment: center;
     }
 
-    user := LineEdit {
+    user := ChatInput {
         placeholder-text: I18n.username-placeholder;
         enabled: !Auth.already-existing-username && !Auth.different-password;
         height: 35px;
     }
 
-    passwd := LineEdit {
+    passwd := ChatInput {
         placeholder-text: I18n.password-placeholder;
         input-type: password;
         enabled: !Auth.already-existing-username && !Auth.different-password;
         height: 35px;
     }
 
-    confirm-password := LineEdit {
+    confirm-password := ChatInput {
         placeholder-text: I18n.confirm-password-placeholder;
         input-type: password;
         enabled: !Auth.already-existing-username && !Auth.different-password;
         height: 35px;
-        accepted => { Auth.sign-up(user.text, passwd.text, self.text) }
+        send => { Auth.sign-up(user.text, passwd.text, self.text) }
     }
 
     // --- AFFICHAGE DES ERREURS ---
