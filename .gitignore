@@ -9,3 +9,4 @@ tui_storage
 log.txt
 storage.salt
 .vscode/
+storage/

@@ -196,7 +196,6 @@ export component MessageBubble inherits Rectangle {
         if (!root.is-me): LMessageBubble {
             text: root.text;
             time: root.time;
-            status: root.status;
             reply_to_text: root.reply_to_text;
             sender_name: root.sender_name;
             menu-requested(x, y) => {
