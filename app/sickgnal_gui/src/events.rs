@@ -35,13 +35,34 @@ pub fn handle_sdk_event(
                 if let Some(mut conv) = chats.row_data(i) {
                     if conv.id == conversation_id.to_string().as_str() {
                         let msg_id = msg.id;
-                        let slint_msg = message_to_slint(&msg, my_id);
+
+                        // ✅ Résoudre reply_to_text depuis les messages existants
+                        let reply_to_text: String = if let Some(reply_id) = msg.reply_to_id {
+                            let reply_id_str = reply_id.to_string();
+                            let messages = &conv.messages;
+                            let mut found = String::new();
+                            for j in 0..messages.row_count() {
+                                if let Some(existing_msg) = messages.row_data(j) {
+                                    if existing_msg.id == reply_id_str.as_str() {
+                                        found = existing_msg.text.to_string();
+                                        break;
+                                    }
+                                }
+                            }
+                            found
+                        } else {
+                            String::new()
+                        };
+
+                        // ✅ Construire le MessageData avec le reply_to_text résolu
+                        let mut slint_msg = message_to_slint(&msg, my_id);
+                        slint_msg.reply_to_text = reply_to_text.into();
+
                         append_message_to_conv(&mut conv, slint_msg);
                         conv.last_message = msg.content.clone().into();
                         conv.last_message_time = msg.issued_at.format("%H:%M").to_string().into();
 
                         if i as i32 == active {
-                            // Conversation ouverte — marquer comme lu immédiatement
                             let mut sdk = sdk.clone();
                             rt.spawn(async move {
                                 let _ = sdk.mark_as_read(conversation_id, msg_id).await;
@@ -164,6 +185,9 @@ pub fn handle_sdk_event(
             for i in 0..chats.row_count() {
                 if let Some(mut conv) = chats.row_data(i) {
                     if conv.id == conversation_id.to_string().as_str() {
+                        conv.is_typing = false;
+                        chats.set_row_data(i, conv.clone());
+
                         conv.is_typing = true;
                         conv.typing_user_name = peer_name.into();
                         chats.set_row_data(i, conv);

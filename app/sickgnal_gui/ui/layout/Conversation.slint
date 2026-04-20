@@ -11,6 +11,7 @@ import { Button } from "../components/Button.slint";
 import { ConversationSettings } from "ConversationSettings.slint";
 import { I18n } from "../models/I18n.slint";
 import { ChatInput } from "../components/ChatInput.slint";
+import { ImageButton } from "../components/ImageButton.slint";
 
 export component ConversationLayout inherits VerticalBox {
     private property <bool> show-typing: false;
@@ -49,13 +50,13 @@ export component ConversationLayout inherits VerticalBox {
         height: 50px;
         background: Theme.background-light;
         border-color: Theme.background-dark;
-
-        HorizontalLayout {
+        
+        if Chat.has-active-conversation() :  HorizontalLayout {
             padding-left: 15px;
             padding-right: 10px;
 
             // Condition and VerticalLayout added here
-            if Chat.has-active-conversation(): VerticalLayout {
+            VerticalLayout {
                 alignment: center; 
 
                 Text {
@@ -71,23 +72,15 @@ export component ConversationLayout inherits VerticalBox {
             Rectangle { }
 
             // Info icon
-            if Chat.has-active-conversation(): VerticalLayout {
+            VerticalLayout {
                 alignment: center; 
 
-                info-touch := TouchArea {
-                    mouse-cursor: pointer;
+                ImageButton {
+                    image: @image-url("../assets/info.png");
                     clicked => {
                         debug("appui sur open_conversation_settings");
                         Chat.open_conversation_settings();
                     }
-                }
-
-                Text {
-                    text: "ⓘ";
-                    font-size: 18px;
-                    color: Theme.primary-hover;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
                 }
             }
         }
