@@ -5,6 +5,39 @@ edition = "2024"
 publish.workspace = true
 license.workspace = true
 
+[features]
+default = ["desktop"]
+desktop = [
+    "slint/backend-winit",
+    "slint/renderer-femtovg",
+]
+android = [
+    "slint/backend-android-activity-06",
+]
+
+[lib]
+name = "sickgnal_gui"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "sickgnal_gui"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[package.metadata.android]
+min_sdk_version = 33      # minimum Android version your app supports
+target_sdk_version = 33   # what you're building against
+
+[package.metadata.android.signing.release]
+path = "/home/aristide/.android/debug.keystore"
+keystore_password = "android"
+alias = "androiddebugkey"
+key_password = "android"
+[package.metadata.android.sdk]
+min_sdk_version = 33
+target_sdk_version = 33
+compile_sdk_version = 33
+
 [dependencies]
 sickgnal_sdk = { path = "../../lib/sickgnal_sdk", version = "0.1.0" }
 sickgnal_core = { path = "../../lib/sickgnal_core", version = "0.1.0" }

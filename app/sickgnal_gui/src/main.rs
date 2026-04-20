@@ -5,13 +5,8 @@ use clap::{Parser, ValueEnum};
 use sickgnal_sdk::TlsConfig;
 use sickgnal_sdk::account::ProfileManager;
 
-slint::include_modules!();
-
-mod callbacks;
-mod converters;
-mod events;
-mod sdk_runner;
-mod ui_helpers;
+// Import everything from the lib
+use sickgnal_gui::*;
 
 /// TLS implementation to use for the server connection.
 #[derive(Debug, Clone, Copy, ValueEnum)]
