@@ -2,6 +2,9 @@ export global I18n {
     in-out property <bool> is-french: true;
 
     // ── Profile Select ────────────────────────────────────────────────
+    out property <string> new-message-singular: is-french ? "nouveau message ↓" : "new message ↓";
+    out property <string> new-messages-plural: is-french ? "nouveaux messages ↓" : "new messages ↓";
+    // ── Profile Select ────────────────────────────────────────────────
     out property <string> who-is-using: is-french ? "Qui utilise Sickgnal ?" : "Who's using Sickgnal?";
     out property <string> new-account: is-french ? "Nouveau compte" : "New Account";
     out property <string> enter-password-for: is-french ? "Mot de passe pour " : "Enter password for ";

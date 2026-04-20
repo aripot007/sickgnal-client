@@ -26,12 +26,21 @@ export component ConversationItem inherits Rectangle {
     }
 
     if root.unread_count > 0: Rectangle {
-        x: 10px;
-        y: 10px;
-        width: 8px;
-        height: 8px;
+        x: parent.width - self.width - 20px;
+        y: 20px;
+        width: max(25px, unread-text.preferred-width + 12px);
+        height: 25px;
+        border-radius: 12px;
         background: Theme.primary;
-        border-radius: self.width / 2;
+
+        unread-text := Text {
+            text: root.unread_count >= 10 ? "9+" : root.unread_count;
+            font-size: 11px;
+            font-weight: 700;
+            color: Theme.on-primary;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
     }
 
     HorizontalLayout {
@@ -82,28 +91,6 @@ export component ConversationItem inherits Rectangle {
                         horizontal-alignment: left;
                     }
                 }
-            }
-        }
-
-        // Delete button - only visible on hover, separate TouchArea
-        if hover-area.has-hover: Rectangle {
-            width: 36px;
-            border-radius: Theme.border-radius;
-            background: delete-touch.has-hover ? #ff4444 : transparent;
-
-            delete-touch := TouchArea {
-                mouse-cursor: pointer;
-                clicked => {
-                    root.delete_clicked();
-                }
-            }
-
-            Text {
-                text: "x";
-                color: delete-touch.has-hover ? white : Theme.text-muted;
-                font-size: 18px;
-                horizontal-alignment: center;
-                vertical-alignment: center;
             }
         }
     }

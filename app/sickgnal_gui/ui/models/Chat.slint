@@ -6,6 +6,10 @@ export global Chat {
     in-out property <int> active_chat_id: -1;
     in-out property <bool> is_loading: true;
 
+    // Auto-scroll
+    in-out property <int> new_messages_count: 0;
+    in-out property <bool> should_scroll_to_bottom: false;
+
     // Editing state
     in-out property <bool> is_editing: false;
     in-out property <string> editing_message_id: "";
