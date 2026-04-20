@@ -90,7 +90,6 @@ fn setup_conversation_callbacks(
             };
             msgs.reverse();
 
-            // ✅ Cache des usernames
             let mut username_cache: std::collections::HashMap<Uuid, String> =
                 std::collections::HashMap::new();
 
@@ -124,9 +123,17 @@ fn setup_conversation_callbacks(
                 if let Some(last_msg) = msgs.last() {
                     let _ = sdk.mark_as_read(conv_uuid, last_msg.id);
                 }
+
                 conv.unread_count = 0;
                 chats.set_row_data(index as usize, conv);
             }
+
+            let mut rt_sdk = sdk.clone();
+            rt.spawn(async move {
+                if let Err(e) = rt_sdk.mark_conversation_as_read(conv_uuid).await {
+                    tracing::error!("Failed to mark conversation as read: {e}");
+                }
+            });
         });
     }
 

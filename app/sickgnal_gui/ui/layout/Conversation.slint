@@ -27,7 +27,7 @@ export component ConversationLayout inherits VerticalBox {
     // === Timers ===
 
     typing-timer := Timer {
-        interval: 2s;
+        interval: 4s;
         running: false;
         triggered => {
             self.running = false;
@@ -336,6 +336,7 @@ export component ConversationLayout inherits VerticalBox {
 
                 input := ChatInput {
                     horizontal-stretch: 1;
+                    is-typing-call: true;
                     placeholder-text: Chat.active_chat_id < 0
                         ? I18n.select-conversation-to-write
                         : Chat.is_editing
