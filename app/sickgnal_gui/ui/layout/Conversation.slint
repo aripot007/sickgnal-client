@@ -28,9 +28,10 @@ export component ConversationLayout inherits VerticalBox {
     // === Timers ===
 
     typing-timer := Timer {
-        interval: 5s;
+        interval: 1s;
         running: false;
         triggered => {
+            raw-typing = false;
             root.show-typing = false;
             self.running = false;
         }
