@@ -5,7 +5,6 @@ import {
 } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Chat } from "../models/Chat.slint";
-import { PeerData } from "../models/Peer.slint";
 import { Button } from "../components/Button.slint";
 import { I18n } from "../models/I18n.slint";
 import { ChatInput } from "../components/ChatInput.slint";
@@ -13,7 +12,8 @@ import { ChatInput } from "../components/ChatInput.slint";
 component PeerItem inherits Rectangle {
     in property <string> peer_name;
     in property <string> peer_id;
-    in property <string> peer_fingerprint;
+    in property <string> peer_fingerprint;   
+    in property <string> peer_initial; 
 
     private property <bool> show_fp: false;
 
@@ -43,10 +43,7 @@ component PeerItem inherits Rectangle {
                 background: Theme.primary;
 
                 Text {
-                    text: {
-                        // First letter of name
-                        root.peer_name != "" ? root.peer_name : "?"
-                    }
+                    text: root.peer_initial;
                     font-size: 13px;
                     font-weight: 600;
                     color: Theme.on-primary;
@@ -245,6 +242,7 @@ export component ConversationSettings inherits VerticalBox {
                         peer_name: peer.name;
                         peer_id: peer.id;
                         peer_fingerprint: peer.fingerprint;
+                        peer_initial: peer.initial;
                     }
 
                     // Add member button

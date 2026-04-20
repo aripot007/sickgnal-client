@@ -246,6 +246,18 @@ fn setup_conversation_callbacks(
         });
     }
 
+    {
+        let ui_weak = ui.as_weak();
+        ui.global::<Chat>()
+            .on_clear_new_conversation_users(move || {
+                let Some(ui) = ui_weak.upgrade() else { return };
+                ui.global::<Chat>()
+                    .set_new_conversation_users(ModelRc::new(
+                        VecModel::<slint::SharedString>::default(),
+                    ));
+            });
+    }
+
     // open_conversation_settings
     {
         let sdk = sdk.clone();
@@ -261,7 +273,30 @@ fn setup_conversation_callbacks(
             };
             drop(ids);
 
-            let peers_data: Vec<PeerData> =
+            let user_profile = rt
+                .block_on(sdk.clone().get_profile_by_id(sdk.user_id()))
+                .ok();
+
+            let user_fingerprint = sdk
+                .get_peer_fingerprint(sdk.user_id())
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+
+            let user_as_peer = user_profile.map(|profile| PeerData {
+                id: profile.id.to_string()[..8].to_string().into(),
+                name: format!("{} (You)", profile.username).into(),
+                fingerprint: user_fingerprint.into(),
+                initial: profile
+                    .username
+                    .chars()
+                    .next()
+                    .map(|c| c.to_uppercase().to_string())
+                    .unwrap_or_else(|| "?".to_string())
+                    .into(),
+            });
+
+            let mut peers_data: Vec<PeerData> =
                 if let Ok(Some(full_conv)) = sdk.get_conversation(conv_uuid) {
                     full_conv
                         .peers
@@ -270,11 +305,22 @@ fn setup_conversation_callbacks(
                             id: p.id.to_string()[..8].into(),
                             name: p.name().into(),
                             fingerprint: p.format_fingerprint().into(),
+                            initial: p
+                                .name()
+                                .chars()
+                                .next()
+                                .map(|c| c.to_uppercase().to_string())
+                                .unwrap_or_else(|| "?".to_string())
+                                .into(),
                         })
                         .collect()
                 } else {
                     vec![]
                 };
+
+            if let Some(me) = user_as_peer {
+                peers_data.insert(0, me);
+            }
 
             ui.global::<Chat>()
                 .set_current_peers(ModelRc::new(VecModel::from(peers_data)));
@@ -554,6 +600,13 @@ fn setup_member_callbacks(
                                     id: p.id.to_string()[..8].into(),
                                     name: p.name().into(),
                                     fingerprint: p.format_fingerprint().into(),
+                                    initial: p
+                                        .name()
+                                        .chars()
+                                        .next()
+                                        .map(|c| c.to_uppercase().to_string())
+                                        .unwrap_or_else(|| "?".to_string())
+                                        .into(),
                                 })
                                 .collect()
                         } else {

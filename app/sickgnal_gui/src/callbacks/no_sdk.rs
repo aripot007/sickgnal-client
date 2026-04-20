@@ -5,10 +5,17 @@ use crate::{AppWindow, Auth, Chat, Status};
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 pub fn setup_callbacks_no_sdk(ui: &AppWindow) {
+    setup_exit_callbacks(ui);
     setup_status_callbacks(ui);
     setup_dialog_callbacks(ui);
     setup_edit_reply_callbacks(ui);
     setup_logout_callback(ui);
+}
+
+fn setup_exit_callbacks(ui: &AppWindow) {
+    ui.on_exit(|| {
+        let _ = slint::quit_event_loop();
+    });
 }
 
 // ── Bannière d'erreur ─────────────────────────────────────────────────────────

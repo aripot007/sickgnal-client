@@ -195,20 +195,55 @@ pub fn handle_sdk_event(
                     }
                 }
 
-                // Met à jour current_peers si les paramètres de conversation sont ouverts
+                let user_profile = rt
+                    .block_on(sdk.clone().get_profile_by_id(sdk.user_id()))
+                    .ok();
+
+                let user_fingerprint = sdk
+                    .get_peer_fingerprint(sdk.user_id())
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default();
+
+                let user_as_peer = user_profile.map(|profile| PeerData {
+                    id: profile.id.to_string()[..8].to_string().into(),
+                    name: format!("{} (You)", profile.username).into(),
+                    fingerprint: user_fingerprint.into(),
+                    initial: profile
+                        .username
+                        .chars()
+                        .next()
+                        .map(|c| c.to_uppercase().to_string())
+                        .unwrap_or_else(|| "?".to_string())
+                        .into(),
+                });
+
+                // Met à jour current_peers
                 let active = ui.global::<Chat>().get_active_chat_id();
                 let ids = conv_ids.lock().unwrap();
                 if let Some(&active_uuid) = ids.get(active as usize) {
                     if active_uuid == conversation_id {
-                        let peers_data: Vec<PeerData> = conv
+                        let mut peers_data: Vec<PeerData> = conv
                             .peers
                             .iter()
                             .map(|p| PeerData {
                                 id: p.id.to_string()[..8].to_string().into(),
                                 name: p.name().into(),
                                 fingerprint: p.format_fingerprint().into(),
+                                initial: p
+                                    .name()
+                                    .chars()
+                                    .next()
+                                    .map(|c| c.to_uppercase().to_string())
+                                    .unwrap_or_else(|| "?".to_string())
+                                    .into(),
                             })
                             .collect();
+
+                        if let Some(me) = user_as_peer {
+                            peers_data.insert(0, me);
+                        }
+
                         ui.global::<Chat>()
                             .set_current_peers(ModelRc::new(VecModel::from(peers_data)));
                     }
