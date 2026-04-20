@@ -143,11 +143,7 @@ impl Sdk {
     }
 
     /// Rename a conversation (set a custom title).
-    pub fn rename_conversation(
-        &mut self,
-        conversation_id: Uuid,
-        new_name: String,
-    ) -> Result<()> {
+    pub fn rename_conversation(&mut self, conversation_id: Uuid, new_name: String) -> Result<()> {
         use sickgnal_core::chat::storage::ConversationInfo;
         let custom_title = if new_name.is_empty() {
             None

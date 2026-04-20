@@ -5,10 +5,17 @@ use crate::{AppWindow, Auth, Chat, Status};
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 pub fn setup_callbacks_no_sdk(ui: &AppWindow) {
+    setup_exit_callbacks(ui);
     setup_status_callbacks(ui);
     setup_dialog_callbacks(ui);
     setup_edit_reply_callbacks(ui);
     setup_logout_callback(ui);
+}
+
+fn setup_exit_callbacks(ui: &AppWindow) {
+    ui.on_exit(|| {
+        let _ = slint::quit_event_loop();
+    });
 }
 
 // ── Bannière d'erreur ─────────────────────────────────────────────────────────
@@ -48,7 +55,9 @@ fn setup_dialog_callbacks(ui: &AppWindow) {
             ui.global::<Chat>().set_new_conversation_error("".into());
             ui.global::<Chat>().set_new_conversation_is_group(false);
             ui.global::<Chat>()
-                .set_new_conversation_users(ModelRc::new(VecModel::<slint::SharedString>::default()));
+                .set_new_conversation_users(ModelRc::new(
+                    VecModel::<slint::SharedString>::default(),
+                ));
         });
     }
 
@@ -63,16 +72,16 @@ fn setup_dialog_callbacks(ui: &AppWindow) {
                 for i in 0..users.row_count() {
                     if let Some(existing) = users.row_data(i) {
                         if existing == username {
-                            ui.global::<Chat>().set_new_conversation_error(
-                                "User already added".into(),
-                            );
+                            ui.global::<Chat>()
+                                .set_new_conversation_error("User already added".into());
                             return;
                         }
                     }
                 }
                 ui.global::<Chat>().set_new_conversation_error("".into());
-                if let Some(model) =
-                    users.as_any().downcast_ref::<VecModel<slint::SharedString>>()
+                if let Some(model) = users
+                    .as_any()
+                    .downcast_ref::<VecModel<slint::SharedString>>()
                 {
                     model.push(username);
                 } else {
@@ -93,8 +102,9 @@ fn setup_dialog_callbacks(ui: &AppWindow) {
             .on_remove_user_from_new_conversation(move |index| {
                 let Some(ui) = ui_weak.upgrade() else { return };
                 let users = ui.global::<Chat>().get_new_conversation_users();
-                if let Some(model) =
-                    users.as_any().downcast_ref::<VecModel<slint::SharedString>>()
+                if let Some(model) = users
+                    .as_any()
+                    .downcast_ref::<VecModel<slint::SharedString>>()
                 {
                     if (index as usize) < model.row_count() {
                         model.remove(index as usize);
@@ -209,7 +219,8 @@ fn setup_logout_callback(ui: &AppWindow) {
         ui.global::<Auth>().set_username("".into());
 
         // Clear chat state
-        ui.global::<Chat>().set_chats(ModelRc::new(VecModel::<crate::Conversation>::default()));
+        ui.global::<Chat>()
+            .set_chats(ModelRc::new(VecModel::<crate::Conversation>::default()));
         ui.global::<Chat>().set_active_chat_id(-1);
         ui.global::<Chat>().set_is_loading(true);
         ui.global::<Chat>().set_show_conversation_settings(false);
@@ -219,9 +230,11 @@ fn setup_logout_callback(ui: &AppWindow) {
         ui.global::<Chat>().set_is_replying(false);
 
         // Show profile select again
-        ui.global::<crate::ProfileSelect>().set_show_profile_select(true);
+        ui.global::<crate::ProfileSelect>()
+            .set_show_profile_select(true);
         ui.global::<crate::ProfileSelect>().set_password_mode(false);
         ui.global::<crate::ProfileSelect>().set_selected_profile(-1);
-        ui.global::<crate::ProfileSelect>().set_profile_error("".into());
+        ui.global::<crate::ProfileSelect>()
+            .set_profile_error("".into());
     });
 }

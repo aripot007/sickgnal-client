@@ -30,6 +30,9 @@ export { ProfileSelect, ProfileData } from "models/Profile.slint";
 export { I18n } from "models/I18n.slint";
 
 export component AppWindow inherits Window {
+
+    callback exit();
+    
     title: "Sickgnal";
     min-width: 800px;
     min-height: 500px;
@@ -124,7 +127,7 @@ export component AppWindow inherits Window {
                     logout-touch := TouchArea {
                         mouse-cursor: pointer;
                         clicked => {
-                            Auth.logout();
+                           root.exit();
                         }
                     }
 
