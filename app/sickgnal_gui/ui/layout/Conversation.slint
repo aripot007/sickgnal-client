@@ -15,12 +15,17 @@ import { ImageButton } from "../components/ImageButton.slint";
 
 export component ConversationLayout inherits VerticalBox {
     private property <bool> show-typing: false;
-    
     private property <bool> raw-typing: Chat.get-current-conversation().is-typing;
     private property <int> active-id: Chat.active_chat_id;
+    private property <int> msg-count: Chat.get-current-conversation().messages.length;
+    private property <bool> is-at-bottom: true;
+    private property <int> unread-start-index: Chat.get-current-conversation().messages.length;
+    private property <length> scroll-threshold: 5px;
 
     padding: 0;
     spacing: 0;
+
+    // === Timers ===
 
     typing-timer := Timer {
         interval: 5s;
@@ -31,13 +36,8 @@ export component ConversationLayout inherits VerticalBox {
         }
     }
 
-    // Reset on conversation switch
-    changed active-id => {
-        root.show-typing = false;
-        typing-timer.running = false;
-    }
+    // === Réactions aux changements ===
 
-    // React to typing indicator changes
     changed raw-typing => {
         if (root.raw-typing) {
             root.show-typing = true;
@@ -46,19 +46,46 @@ export component ConversationLayout inherits VerticalBox {
         }
     }
 
+    changed active-id => {
+        root.show-typing = false;
+        typing-timer.running = false;
+        root.is-at-bottom = true;
+        Chat.new_messages_count = 0;
+        root.unread-start-index = Chat.get-current-conversation().messages.length;
+    }
+
+    changed msg-count => {
+        if (root.msg-count > 0) {
+            // Expéditeur (moi) → toujours marqué comme lu
+            if (Chat.get-current-conversation().messages[root.msg-count - 1].is_me) {
+                Chat.new_messages_count = 0;
+                root.unread-start-index = root.msg-count;
+            }
+            // Destinataire en bas → marqué comme lu
+            else if (root.is-at-bottom) {
+                Chat.new_messages_count = 0;
+                root.unread-start-index = root.msg-count;
+            }
+            // Destinataire PAS en bas → notification
+            else {
+                Chat.new_messages_count = root.msg-count - root.unread-start-index;
+            }
+        }
+    }
+
+    // === HEADER ===
     Rectangle {
         height: 50px;
         background: Theme.background-light;
         border-color: Theme.background-dark;
-        
-        if Chat.has-active-conversation() :  HorizontalLayout {
+
+        if Chat.has-active-conversation(): HorizontalLayout {
             padding-left: 15px;
             padding-right: 10px;
 
-            // Condition and VerticalLayout added here
             VerticalLayout {
-                alignment: center; 
-
+                alignment: center;
+                horizontal-stretch: 1;
                 Text {
                     text: Chat.current.name;
                     font-size: 18px;
@@ -68,17 +95,13 @@ export component ConversationLayout inherits VerticalBox {
                 }
             }
 
-            // Spacer to push the info icon to the far right
             Rectangle { }
 
-            // Info icon
             VerticalLayout {
-                alignment: center; 
-
+                alignment: center;
                 ImageButton {
                     image: @image-url("../assets/info.png");
                     clicked => {
-                        debug("appui sur open_conversation_settings");
                         Chat.open_conversation_settings();
                     }
                 }
@@ -86,160 +109,285 @@ export component ConversationLayout inherits VerticalBox {
         }
     }
 
-    // Conversation settings view (replaces messages when open)
+    // === Paramètres de conversation ===
     if Chat.show_conversation_settings: ConversationSettings { }
 
-    // Messages view (hidden when settings is open)
-    if !Chat.show_conversation_settings: ScrollView {
-        VerticalBox {
-            padding: 15px;
-            alignment: start;
-            spacing: 10px;
-            if !Chat.has-active-conversation() : Rectangle {
+    // === Zone de messages ===
+    if !Chat.show_conversation_settings: VerticalLayout {
+        vertical-stretch: 1;
+
+        Rectangle {
+            vertical-stretch: 1;
+            background: Theme.background-dark;
+
+            messages-scroll := Flickable {
+                x: 0;
+                y: 0;
+                width: parent.width;
+                height: parent.height;
+
                 VerticalBox {
-                    alignment: center;
-                    Text {
-                        text: I18n.select-conversation;
-                        font-size: 16px;
-                        color: Theme.text-muted;
-                        horizontal-alignment: center;
+                    padding: 15px;
+                    alignment: start;
+                    spacing: 10px;
+
+                    if !Chat.has-active-conversation(): Rectangle {
+                        VerticalBox {
+                            alignment: center;
+                            Text {
+                                text: I18n.select-conversation;
+                                font-size: 16px;
+                                color: Theme.text-muted;
+                                horizontal-alignment: center;
+                            }
+                        }
                     }
-                }
-            }
-            for msg in Chat.get-current-conversation().messages: MessageBubble {
-                id: msg.id;
-                text: msg.text;
-                time: msg.time;
-                status: msg.status;
-                is-me: msg.is_me;
-                reply_to_text: msg.reply_to_text;
-            }
-        }
-    }
 
-    if root.show-typing && !Chat.show_conversation_settings: HorizontalBox {
-        alignment: start;
-        spacing: 6px;
-        padding: 2px;
-        Text {
-            text: Chat.get-current-conversation().typing-user-name + I18n.is-typing-suffix;
-            font-size: 13px;
-            color: Theme.text-muted;
-            vertical-alignment: center;
-        }
-    }
+                    for msg[index] in Chat.get-current-conversation().messages: VerticalLayout {
+                        spacing: 0px;
 
-    // Reply bar (shown above input when replying)
-    if Chat.is_replying && !Chat.show_conversation_settings: Rectangle {
-        height: 40px;
-        background: Theme.surface;
-        border-color: Theme.background-dark;
+                        // === TRAIT SÉPARATEUR "Nouveaux messages" ===
+                        if Chat.new_messages_count > 0 && index == root.unread-start-index: Rectangle {
+                            height: 28px;
+                            HorizontalLayout {
+                                alignment: center;
+                                spacing: 10px;
+                                padding-left: 10px;
+                                padding-right: 10px;
 
-        HorizontalLayout {
-            padding: 8px;
-            padding-left: 15px;
-            spacing: 8px;
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    height: 1px;
+                                    background: Theme.primary;
+                                }
 
-            Rectangle {
-                width: 3px;
-                background: Theme.primary;
-                border-radius: 1px;
-            }
+                                Text {
+                                    text: Chat.new_messages_count == 1
+                                        ? "1 " + I18n.new-message-singular
+                                        : Chat.new_messages_count + " " + I18n.new-messages-plural;
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    color: Theme.primary;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
 
-            VerticalLayout {
-                alignment: center;
-                Text {
-                    text: I18n.replying-to;
-                    font-size: 11px;
-                    font-weight: 600;
-                    color: Theme.primary;
-                }
-                Text {
-                    text: Chat.reply_to_preview;
-                    font-size: 12px;
-                    color: Theme.text-muted;
-                    overflow: elide;
-                }
-            }
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    height: 1px;
+                                    background: Theme.primary;
+                                }
+                            }
+                        }
 
-            Rectangle { }
-
-            Rectangle {
-                width: 28px;
-                height: 28px;
-                border-radius: 14px;
-                background: cancel-reply-touch.has-hover ? Theme.surface-hover : transparent;
-
-                cancel-reply-touch := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => {
-                        Chat.cancel_reply();
-                    }
-                }
-
-                Text {
-                    text: "✕";
-                    font-size: 14px;
-                    color: Theme.text-muted;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-            }
-        }
-    }
-
-    if !Chat.show_conversation_settings: Rectangle {
-        background: Theme.background-light;
-        border-color: Theme.background-dark;
-        HorizontalLayout {
-            padding: 10px;
-            spacing: 10px;
-
-            input := ChatInput {
-                horizontal-stretch: 1;
-                placeholder-text: Chat.active_chat_id < 0 ? I18n.select-conversation-to-write: Chat.is_editing ? I18n.edit-message-placeholder : Chat.is_replying ? I18n.type-reply : I18n.write-message;
-                text: Chat.editing_text;
-                enabled: Chat.active_chat_id >= 0;
-                edited => {
-                    Chat.typing();
-                }
-                send => {
-                    if (input.text != "") {
-                        if (Chat.is_editing) {
-                            Chat.edit_message(Chat.editing_message_id, input.text);
-                            input.text = "";
-                        } else {
-                            Chat.send_message(input.text);
-                            input.text = "";
+                        MessageBubble {
+                            id: msg.id;
+                            text: msg.text;
+                            time: msg.time;
+                            status: msg.status;
+                            is-me: msg.is_me;
+                            reply_to_text: msg.reply_to_text;
                         }
                     }
                 }
             }
 
-            VerticalLayout {
-                alignment: end;
+            // === BOUTON OVERLAY "Nouveaux messages" ===
+            if Chat.new_messages_count > 0 && !root.is-at-bottom: Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: parent.height - self.height - 12px;
+                width: 240px;
+                height: 40px;
+                border-radius: 20px;
+                background: Theme.primary;
+                drop-shadow-blur: 8px;
+                drop-shadow-color: #00000030;
+
+                TouchArea {
+                    mouse-cursor: pointer;
+                }
+
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 6px;
+                    padding-left: 14px;
+                    padding-right: 14px;
+
+                    Text {
+                        text: "↓";
+                        font-size: 16px;
+                        color: Theme.on-primary;
+                        vertical-alignment: center;
+                    }
+
+                    Text {
+                        text: Chat.new_messages_count == 1
+                            ? "1 " + I18n.new-message-singular
+                            : Chat.new_messages_count + " " + I18n.new-messages-plural;
+                        font-size: 13px;
+                        font-weight: 600;
+                        color: Theme.on-primary;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // === TIMER CHECK POSITION ===
+        scroll-check-timer := Timer {
+            interval: 150ms;
+            running: true;
+            triggered => {
+                if (messages-scroll.viewport-height > messages-scroll.height) {
+                    root.is-at-bottom =
+                        (messages-scroll.viewport-height + messages-scroll.viewport-y - messages-scroll.height)
+                        <= root.scroll-threshold;
+                } else {
+                    root.is-at-bottom = true;
+                }
+
+                // Quand l'utilisateur scrolle manuellement en bas → marquer lu
+                if (root.is-at-bottom && Chat.new_messages_count > 0) {
+                    Chat.new_messages_count = 0;
+                    root.unread-start-index = root.msg-count;
+                }
+            }
+        }
+
+        // === Indicateur "est en train d'écrire..." ===
+        if root.show-typing && !Chat.show_conversation_settings: HorizontalBox {
+            alignment: start;
+            spacing: 6px;
+            padding: 2px;
+            Text {
+                text: Chat.get-current-conversation().typing-user-name + I18n.is-typing-suffix;
+                font-size: 13px;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+            }
+        }
+
+        // === Reply bar ===
+        if Chat.is_replying && !Chat.show_conversation_settings: Rectangle {
+            height: 40px;
+            background: Theme.surface;
+            border-color: Theme.background-dark;
+
+            HorizontalLayout {
+                padding: 8px;
+                padding-left: 15px;
                 spacing: 8px;
 
-                if Chat.is_editing: Button {
-                    text: I18n.cancel;
-                    btn_width: 60px;
-                    clicked => {
-                        Chat.cancel_edit();
-                        input.text = "";
+                Rectangle {
+                    width: 3px;
+                    background: Theme.primary;
+                    border-radius: 1px;
+                }
+
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: I18n.replying-to;
+                        font-size: 11px;
+                        font-weight: 600;
+                        color: Theme.primary;
+                    }
+                    Text {
+                        text: Chat.reply_to_preview;
+                        font-size: 12px;
+                        color: Theme.text-muted;
+                        overflow: elide;
                     }
                 }
 
-                Button {
-                    text: Chat.is_editing ? I18n.save : I18n.send;
-                    enabled: Chat.active_chat_id >= 0 && input.text != "";
-                    btn_width: 70px;
-                    clicked => {
-                        if (Chat.is_editing) {
-                            Chat.edit_message(Chat.editing_message_id, input.text);
+                Rectangle { }
+
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    border-radius: 14px;
+                    background: cancel-reply-touch.has-hover ? Theme.surface-hover : transparent;
+
+                    cancel-reply-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            Chat.cancel_reply();
+                        }
+                    }
+
+                    Text {
+                        text: "✕";
+                        font-size: 14px;
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // === Barre de saisie ===
+        if !Chat.show_conversation_settings: Rectangle {
+            background: Theme.background-light;
+            border-color: Theme.background-dark;
+
+            HorizontalLayout {
+                padding: 10px;
+                spacing: 10px;
+
+                input := ChatInput {
+                    horizontal-stretch: 1;
+                    placeholder-text: Chat.active_chat_id < 0
+                        ? I18n.select-conversation-to-write
+                        : Chat.is_editing
+                            ? I18n.edit-message-placeholder
+                            : Chat.is_replying
+                                ? I18n.type-reply
+                                : I18n.write-message;
+                    text: Chat.editing_text;
+                    enabled: Chat.active_chat_id >= 0;
+                    edited => {
+                        Chat.typing();
+                    }
+                    send => {
+                        if (input.text != "") {
+                            if (Chat.is_editing) {
+                                Chat.edit_message(Chat.editing_message_id, input.text);
+                                input.text = "";
+                            } else {
+                                Chat.send_message(input.text);
+                                input.text = "";
+                            }
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    alignment: end;
+                    spacing: 8px;
+
+                    if Chat.is_editing: Button {
+                        text: I18n.cancel;
+                        btn_width: 60px;
+                        clicked => {
+                            Chat.cancel_edit();
                             input.text = "";
-                        } else {
-                            Chat.send_message(input.text);
-                            input.text = "";
+                        }
+                    }
+
+                    Button {
+                        text: Chat.is_editing ? I18n.save : I18n.send;
+                        enabled: Chat.active_chat_id >= 0 && input.text != "";
+                        btn_width: 70px;
+                        clicked => {
+                            if (Chat.is_editing) {
+                                Chat.edit_message(Chat.editing_message_id, input.text);
+                                input.text = "";
+                            } else {
+                                Chat.send_message(input.text);
+                                input.text = "";
+                            }
                         }
                     }
                 }
