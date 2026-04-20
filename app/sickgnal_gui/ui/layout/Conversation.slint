@@ -32,35 +32,40 @@ component ChatInput inherits Rectangle {
 
     scroll := ScrollView {
         x: 10px;
-        y: 8px;
+        y: 0;
         width: parent.width - 20px;
-        height: parent.height - 16px;
-        viewport-height: input.preferred-height;
+        height: parent.height;
+        viewport-height: max(input.preferred-height + 16px, parent.height);
 
-        input := TextInput {
-            // Reserve 12px for the scrollbar track
-            width: scroll.width - 12px;
-            single-line: false;
-            wrap: word-wrap;
-            font-size: 14px;
-            color: root.enabled ? Theme.text-main : Theme.text-muted;
-            enabled: root.enabled;
+        VerticalLayout {
+            alignment: center;
+            padding-top: 8px;
+            padding-bottom: 8px;
 
-            edited => {
-                root.edited();
-                // Auto-scroll to bottom when content overflows
-                if (input.preferred-height > scroll.height) {
-                    scroll.viewport-y = -(input.preferred-height - scroll.height);
+            input := TextInput {
+                width: scroll.width - 12px;
+                single-line: false;
+                wrap: word-wrap;
+                font-size: 14px;
+                color: root.enabled ? Theme.text-main : Theme.text-muted;
+                enabled: root.enabled;
+
+                edited => {
+                    root.edited();
+                    // Auto-scroll to bottom when content overflows
+                    if (input.preferred-height + 16px > scroll.height) {
+                        scroll.viewport-y = -(input.preferred-height + 16px - scroll.height);
+                    }
                 }
-            }
 
-            key-pressed(event) => {
-                // Enter without Shift => send
-                if (event.text == "\n" && !event.modifiers.shift) {
-                    root.send();
-                    return accept;
+                key-pressed(event) => {
+                    // Enter without Shift => send
+                    if (event.text == "\n" && !event.modifiers.shift) {
+                        root.send();
+                        return accept;
+                    }
+                    return reject;
                 }
-                return reject;
             }
         }
     }
