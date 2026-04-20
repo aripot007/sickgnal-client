@@ -2,7 +2,7 @@ use std::future::Future;
 
 use chrono::{DateTime, Utc};
 use tokio::sync::mpsc;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, trace, trace_span, warn};
 use uuid::Uuid;
 
 use crate::{
@@ -16,6 +16,7 @@ use crate::{
         client::{ChatMessageSender, client_handle::ClientHandle},
         message::UserProfile,
         message_stream::E2EMessageStream,
+        peer::Peer,
     },
 };
 
@@ -67,6 +68,10 @@ where
         let mut last_error = None;
 
         while let Some(msg) = iter.next().await? {
+            let process_span = trace_span!("process_chat_msg", msg = ?msg);
+
+            let _enter = process_span.enter();
+
             if let Err(err) =
                 handle_incomming_message(&mut storage, iter.e2e_client, account_id, &event_tx, msg)
                     .await
@@ -350,6 +355,8 @@ async fn handle_incomming_message<S: StorageBackend>(
         kind,
     } = msg;
 
+    trace!("started handling message");
+
     if !storage.conversation_exists(&conversation_id)? {
         // We are probably opening a new conversation
         return handle_new_conversation(
@@ -415,6 +422,8 @@ async fn handle_new_conversation<S: StorageBackend>(
     conversation_id: Uuid,
     msg: ChatMessageKind,
 ) -> Result<()> {
+    trace!(peer = ?sender_id, conv = ?conversation_id, msg = ?msg, "new conversation");
+
     let (initial_msg, other_peers) = match msg {
         ChatMessageKind::Ctrl(ControlMessage::OpenConv {
             initial_message,
@@ -492,6 +501,8 @@ async fn handle_data_message<S: StorageBackend>(
     conversation_id: Uuid,
     content: ContentMessage,
 ) -> Result<()> {
+    trace!(peer = ?sender_id, conv = ?conversation_id, content = ?content, "new data message");
+
     let mut msg = Message::from_content_message(sender_id, conversation_id, issued_at, content);
 
     let msg_id = msg.id;
@@ -531,6 +542,8 @@ async fn handle_control_message<S: StorageBackend>(
     conversation_id: Uuid,
     ctrl_msg: ControlMessage,
 ) -> Result<()> {
+    trace!(peer = ?sender_id, conv = ?conversation_id, ctrl_msg = ?ctrl_msg, "new control message");
+
     match ctrl_msg {
         ControlMessage::OpenConv { .. } => {
             warn!(
@@ -551,6 +564,16 @@ async fn handle_control_message<S: StorageBackend>(
                 );
                 return Ok(());
             };
+
+            // Add the peer if necessary
+            if storage.peer(&id)?.is_none() {
+                let peer = Peer {
+                    id,
+                    username: None,
+                    fingerprint: None,
+                };
+                storage.save_peer(&peer)?;
+            }
 
             let added = storage.add_peer_to_conversation(&conversation_id, &id)?;
 
