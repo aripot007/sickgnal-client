@@ -1,0 +1,7 @@
+[target.aarch64-linux-android]
+ar = "/home/aristide/Android/Sdk/ndk/latest/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+linker = "/home/aristide/Android/Sdk/ndk/latest/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android33-clang"
+
+[env]
+OPENSSL_STATIC = "1"
+OPENSSL_VENDOR = "1"
